@@ -161,18 +161,26 @@ validate_uv() {
     
     if ! check_command "uv" "uv package manager"; then
         echo "    Installing uv..."
+        # Try official installer first
         if curl -LsSf https://astral.sh/uv/install.sh | sh 2>/dev/null; then
             export PATH="$HOME/.local/bin:$PATH"
-            pass "uv installed successfully"
+            pass "uv installed successfully (via installer)"
+        # Fall back to pip if curl fails (e.g., no internet access)
+        elif pip install uv --quiet 2>/dev/null || python3 -m pip install uv --quiet 2>/dev/null; then
+            export PATH="$HOME/.local/bin:$PATH"
+            pass "uv installed successfully (via pip)"
         else
             fail "Failed to install uv"
             return 1
         fi
     fi
     
+    # Ensure uv is in PATH for subsequent commands
+    export PATH="$HOME/.local/bin:$PATH"
+    
     # Try to sync dependencies
     cd "$PROJECT_ROOT"
-    if uv sync --quiet 2>/dev/null; then
+    if command -v uv &> /dev/null && uv sync --quiet 2>/dev/null; then
         pass "uv sync successful"
     else
         # Fall back to pip if uv has issues
