@@ -121,7 +121,7 @@
 # base WxPython classes.
 #
 # The players are started by instantiating the class exported by
-# their modules (e.g. pycdg.cdgPlayer()). They can then be
+# their modules (e.g. cdg.cdgPlayer()). They can then be
 # controlled by calling their methods (Play(), Close() etc). The
 # player modules do not take over the main loop, so the GUI is still
 # usable while the songs are playing, allowing the user to
@@ -149,14 +149,14 @@ import types
 import cPickle
 import wx
 
-import performer_prompt as PerformerPrompt
-import pycdg
-import pykdb
-import pykversion
-import pympg
-from pykconstants import *
-from pykenv import env
-from pykmanager import manager
+from pykaraoke.core import performer_prompt as PerformerPrompt
+from pykaraoke.players import cdg
+from pykaraoke.core import database
+from pykaraoke.config import version as pykversion
+from pykaraoke.players import mpg
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
+from pykaraoke.core.manager import manager
 
 # Constants
 PLAY_COL_TITLE = "Title"
@@ -165,15 +165,15 @@ PLAY_COL_FILENAME = "Filename"
 PLAY_COL_PERFORMER = "Performer"
 
 
-class wxAppYielder(pykdb.AppYielder):
+class wxAppYielder(database.AppYielder):
     def Yield(self):
         wx.GetApp().Yield()
 
 
 # Popup busy window with cancel button
-class wxBusyCancelDialog(wx.ProgressDialog, pykdb.BusyCancelDialog):
+class wxBusyCancelDialog(wx.ProgressDialog, database.BusyCancelDialog):
     def __init__(self, parent, title):
-        pykdb.BusyCancelDialog.__init__(self)
+        database.BusyCancelDialog.__init__(self)
         wx.ProgressDialog.__init__(
             self, title, title, style=wx.PD_APP_MODAL | wx.PD_CAN_ABORT | wx.PD_AUTO_HIDE
         )
@@ -397,7 +397,7 @@ class DatabaseSetupWindow(wx.Frame):
         # scanning.  This way, if the user cancels out halfway
         # through, we can abandon it instead of being stuck with a
         # halfway-scanned database.
-        songDb = pykdb.SongDB()
+        songDb = database.SongDB()
         songDb.Settings = self.KaraokeMgr.SongDB.Settings
         cancelled = songDb.BuildSearchDatabase(
             wxAppYielder(), wxBusyCancelDialog(self.KaraokeMgr.Frame, "Searching")
@@ -407,7 +407,7 @@ class DatabaseSetupWindow(wx.Frame):
             # effective one.
 
             self.KaraokeMgr.SongDB = songDb
-            pykdb.globalSongDB = songDb
+            database.globalSongDB = songDb
             self.ScanNeeded = False
             self.SaveNeeded = True
 
@@ -763,7 +763,7 @@ class ConfigWindow(wx.Frame):
         self.CdgUseCCheckBox = wx.CheckBox(panel, -1, "Use optimised (C-based) implementation")
         self.CdgUseCCheckBox.SetValue(settings.CdgUseC)
         # Check that the C implementation is available.
-        if not pycdg.aux_c:
+        if not cdg.aux_c:
             self.CdgUseCCheckBox.SetValue(False)
             self.CdgUseCCheckBox.Enable(False)
         cdgsizer.Add(self.CdgUseCCheckBox, flag=wx.LEFT | wx.RIGHT | wx.TOP, border=10)
@@ -835,7 +835,7 @@ class ConfigWindow(wx.Frame):
 
         self.MpgNativeCheckBox = wx.CheckBox(panel, -1, "Use native viewer for mpg files")
         self.MpgNativeCheckBox.SetValue(settings.MpgNative)
-        if not pympg.movie:
+        if not mpg.movie:
             self.MpgNativeCheckBox.SetValue(False)
             self.MpgNativeCheckBox.Enable(False)
 
@@ -875,7 +875,7 @@ class ConfigWindow(wx.Frame):
             return
 
         font = dlg.GetFontData().GetChosenFont()
-        self.KarFont = pykdb.FontData(
+        self.KarFont = database.FontData(
             font.GetFaceName(),
             font.GetPointSize(),
             (font.GetWeight() == wx.FONTWEIGHT_BOLD),
@@ -918,7 +918,7 @@ class ConfigWindow(wx.Frame):
             # case, just store the basename.
             filename = basename
 
-        self.KarFont = pykdb.FontData(filename)
+        self.KarFont = database.FontData(filename)
 
         self.KarFontLabel.SetLabel(self.KarFont.getDescription())
 
@@ -1175,7 +1175,7 @@ class ConfigWindow(wx.Frame):
         # scanning.  This way, if the user cancels out halfway
         # through, we can abandon it instead of being stuck with a
         # halfway-scanned database.
-        songDb = pykdb.SongDB()
+        songDb = database.SongDB()
         songDb.Settings = self.KaraokeMgr.SongDB.Settings
         cancelled = songDb.BuildSearchDatabase(
             wxAppYielder(), wxBusyCancelDialog(self.KaraokeMgr.Frame, "Re-Scanning Database")
@@ -1185,7 +1185,7 @@ class ConfigWindow(wx.Frame):
             # effective one.
 
             self.KaraokeMgr.SongDB = songDb
-            pykdb.globalSongDB = songDb
+            database.globalSongDB = songDb
             self.KaraokeMgr.SongDB.SaveDatabase()
             return True
         else:
@@ -1731,7 +1731,7 @@ class FileTree(wx.Panel):
             filename = self.FileTree.GetItemText(selected_node)
             fullpath = self.GetFullPathForNode(selected_node)
 
-            song = pykdb.SongStruct(fullpath, settings, filename)
+            song = database.SongStruct(fullpath, settings, filename)
             songs.append(song)
 
         return songs
@@ -1768,7 +1768,7 @@ class FileTree(wx.Panel):
             if self.KaraokeMgr.SongDB.IsExtensionValid(ext) and os.path.isfile(full_path):
                 # Create a SongStruct because that's what karaoke mgr wants
                 settings = self.KaraokeMgr.SongDB.Settings
-                song = pykdb.SongStruct(full_path, settings, filename)
+                song = database.SongStruct(full_path, settings, filename)
                 self.KaraokeMgr.PlayWithoutPlaylist(song)
 
     # Handle a right-click on an item (show a popup)
@@ -1794,7 +1794,7 @@ class FileTree(wx.Panel):
         if self.KaraokeMgr.SongDB.IsExtensionValid(ext) and os.path.isfile(self.PopupFullPath):
             # Create a SongStruct because that's what karaoke mgr wants
             settings = self.KaraokeMgr.SongDB.Settings
-            song = pykdb.SongStruct(self.PopupFullPath, settings, self.PopupFilename)
+            song = database.SongStruct(self.PopupFullPath, settings, self.PopupFilename)
             # Now respond to the menu choice
             if event.GetId() == self.menuPlayId:
                 self.KaraokeMgr.PlayWithoutPlaylist(song)
@@ -3852,7 +3852,7 @@ class PyKaraokeEvent(wx.PyEvent):
 # Main manager class, starts the window and handles the playlist and players
 class PyKaraokeManager:
     def __init__(self, gui=True):
-        self.SongDB = pykdb.globalSongDB
+        self.SongDB = database.globalSongDB
         self.gui = True
         self.SongDB.LoadSettings(None)
 

@@ -37,15 +37,15 @@ import sys
 repo_root = os.environ['REPO_ROOT']
 sys.path.insert(0, repo_root)
 
-import pykdb
+from pykaraoke.core import database
 
-class DummyYielder(pykdb.AppYielder):
+class DummyYielder(database.AppYielder):
     def Yield(self):
         return None
 
-class DummyBusy(pykdb.BusyCancelDialog):
+class DummyBusy(database.BusyCancelDialog):
     def __init__(self):
-        pykdb.BusyCancelDialog.__init__(self)
+        database.BusyCancelDialog.__init__(self)
     def Show(self):
         return None
     def SetProgress(self, label, progress):
@@ -53,7 +53,7 @@ class DummyBusy(pykdb.BusyCancelDialog):
     def Destroy(self):
         return None
 
-song_db = pykdb.SongDB()
+song_db = database.SongDB()
 
 song_db.Settings.FolderList = [os.environ['SONGS_DIR']]
 # Keep the scan small and deterministic for tests

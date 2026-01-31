@@ -55,10 +55,10 @@
 # You can also incorporate a CDG player in your own projects by
 # importing this module. The class cdgPlayer is exported by the
 # module. You can import and start it as follows:
-#   import pycdg
-#   player = pycdg.cdgPlayer("/songs/theboxer.cdg")
+#   from pykaraoke.players import cdg
+#   player = cdg.cdgPlayer("/songs/theboxer.cdg")
 #   player.Play()
-# If you do this, you must also arrange to call pycdg.manager.Poll()
+# If you do this, you must also arrange to call manager.Poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #
@@ -176,9 +176,9 @@ import sys
 
 import pygame
 
-from pykconstants import *
-from pykmanager import manager
-from pykplayer import pykPlayer
+from pykaraoke.config.constants import *
+from pykaraoke.core.manager import manager
+from pykaraoke.core.player import pykPlayer
 
 # Import the optimised C version if available, or fall back to Python
 try:
@@ -187,7 +187,7 @@ except ImportError:
     aux_c = None
 
 try:
-    import pycdgAux as aux_python
+    from pykaraoke.players import cdg_aux as aux_python
 except ImportError:
     aux_python = None
 

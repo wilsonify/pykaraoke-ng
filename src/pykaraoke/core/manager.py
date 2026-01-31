@@ -25,9 +25,9 @@ import sys
 
 import pygame
 
-import pykversion
-from pykconstants import *
-from pykenv import env
+from pykaraoke.config import version as pykversion
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
 
 # Python 2.3 and newer ship with optparse; older Python releases need "Optik"
 # installed (optik.sourceforge.net)

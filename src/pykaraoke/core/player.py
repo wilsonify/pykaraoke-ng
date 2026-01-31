@@ -26,20 +26,20 @@ import types
 
 import pygame
 
-from pykconstants import *
-from pykenv import env
-from pykmanager import manager
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
+from pykaraoke.core.manager import manager
 
 
 class pykPlayer:
     def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None, windowTitle=None):
-        """The first parameter, song, may be either a pykdb.SongStruct
+        """The first parameter, song, may be either a database.SongStruct
         instance, or it may be a filename."""
 
         if songDb is None:
-            import pykdb
+            from pykaraoke.core import database
 
-            songDb = pykdb.globalSongDB
+            songDb = database.globalSongDB
             songDb.LoadSettings(None)
         self.songDb = songDb
 

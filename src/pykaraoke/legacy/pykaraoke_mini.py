@@ -79,12 +79,12 @@ import sys
 
 import pygame
 
-import pykdb
-import pykversion
-from pykconstants import *
-from pykenv import env
-from pykmanager import manager
-from pykplayer import pykPlayer
+from pykaraoke.core import database
+from pykaraoke.config import version as pykversion
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
+from pykaraoke.core.manager import manager
+from pykaraoke.core.player import pykPlayer
 
 
 # We inherit from pykPlayer here, not because we need to play a song
@@ -426,7 +426,7 @@ class App(pykPlayer):
 
         if manager.options.scan:
             # Re-scan the files.
-            self.songDb.BuildSearchDatabase(pykdb.AppYielder(), MiniBusyCancelDialog(self))
+            self.songDb.BuildSearchDatabase(database.AppYielder(), MiniBusyCancelDialog(self))
             needsSave = True
         else:
             # Read the existing database.
@@ -514,7 +514,7 @@ class App(pykPlayer):
                     filename = line.split("\t", 1)[0]
 
                     # Look up the song in the database.
-                    song = pykdb.SongStruct(filename, self.songDb.Settings, "", "", filename)
+                    song = database.SongStruct(filename, self.songDb.Settings, "", "", filename)
                     found = False
                     row = bisect.bisect_left(self.songDb.SongList, song)
                     if row != len(self.songDb.SongList):
@@ -767,7 +767,7 @@ class App(pykPlayer):
         searchString.  Assumes the FileList has previously been sorted
         by a call to SelectSort()."""
 
-        ss = pykdb.SongStruct(
+        ss = database.SongStruct(
             searchString, self.songDb.Settings, searchString, searchString, searchString
         )
         self.currentRow = bisect.bisect_left(self.songDb.SongList, ss)
@@ -1126,9 +1126,9 @@ class App(pykPlayer):
         self.screenDirty = True
 
 
-class MiniBusyCancelDialog(pykdb.BusyCancelDialog):
+class MiniBusyCancelDialog(database.BusyCancelDialog):
     def __init__(self, app):
-        pykdb.BusyCancelDialog.__init__(self)
+        database.BusyCancelDialog.__init__(self)
         self.app = app
 
     def SetProgress(self, label, progress):

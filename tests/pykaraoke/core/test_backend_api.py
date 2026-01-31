@@ -18,35 +18,35 @@ class TestBackendAPI:
     def test_import_backend(self):
         """Test that backend module can be imported"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend
 
-            assert hasattr(pykbackend, "PyKaraokeBackend")
-            assert hasattr(pykbackend, "BackendState")
+            assert hasattr(backend, "PyKaraokeBackend")
+            assert hasattr(backend, "BackendState")
         except ImportError as e:
             pytest.skip(f"Backend module not importable: {e}")
 
     def test_backend_initialization(self):
         """Test backend can be initialized"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
-            assert backend is not None
-            assert backend.state == pykbackend.BackendState.IDLE
-            assert backend.playlist == []
-            assert backend.playlist_index == -1
+            backend_instance = backend_module.PyKaraokeBackend()
+            assert backend_instance is not None
+            assert backend_instance.state == backend_module.BackendState.IDLE
+            assert backend_instance.playlist == []
+            assert backend_instance.playlist_index == -1
         except Exception as e:
             pytest.skip(f"Backend initialization failed: {e}")
 
     def test_get_state_command(self):
         """Test get_state command returns valid state"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
+            backend_instance = backend_module.PyKaraokeBackend()
 
             command = {"action": "get_state", "params": {}}
-            response = backend.handle_command(command)
+            response = backend_instance.handle_command(command)
 
             assert response["status"] == "ok"
             assert "data" in response
@@ -59,12 +59,12 @@ class TestBackendAPI:
     def test_unknown_command(self):
         """Test handling of unknown commands"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
+            backend_instance = backend_module.PyKaraokeBackend()
 
             command = {"action": "invalid_action", "params": {}}
-            response = backend.handle_command(command)
+            response = backend_instance.handle_command(command)
 
             assert response["status"] == "error"
             assert "message" in response
@@ -74,38 +74,38 @@ class TestBackendAPI:
     def test_volume_command(self):
         """Test volume control command"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
+            backend_instance = backend_module.PyKaraokeBackend()
 
             # Set volume to 0.5
             command = {"action": "set_volume", "params": {"volume": 0.5}}
-            response = backend.handle_command(command)
+            response = backend_instance.handle_command(command)
 
             assert response["status"] == "ok"
-            assert backend.volume == 0.5
+            assert backend_instance.volume == 0.5
 
             # Set volume to invalid value (should clamp)
             command = {"action": "set_volume", "params": {"volume": 1.5}}
-            response = backend.handle_command(command)
+            response = backend_instance.handle_command(command)
 
             assert response["status"] == "ok"
-            assert backend.volume == 1.0  # Clamped to max
+            assert backend_instance.volume == 1.0  # Clamped to max
         except Exception as e:
             pytest.skip(f"Backend test failed: {e}")
 
     def test_playlist_operations(self):
         """Test playlist management commands"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
+            backend_instance = backend_module.PyKaraokeBackend()
 
             # Clear playlist
             command = {"action": "clear_playlist", "params": {}}
-            response = backend.handle_command(command)
+            response = backend_instance.handle_command(command)
             assert response["status"] == "ok"
-            assert len(backend.playlist) == 0
+            assert len(backend_instance.playlist) == 0
 
             # Note: Adding to playlist would require valid song files
             # So we just test the clear operation
@@ -115,11 +115,11 @@ class TestBackendAPI:
     def test_state_serialization(self):
         """Test that state can be serialized to JSON"""
         try:
-            import pykbackend
+            from pykaraoke.core import backend as backend_module
 
-            backend = pykbackend.PyKaraokeBackend()
+            backend_instance = backend_module.PyKaraokeBackend()
 
-            state = backend.get_state()
+            state = backend_instance.get_state()
 
             # Should be JSON serializable
             json_str = json.dumps(state)

@@ -30,13 +30,13 @@ from typing import Any
 # Note: These imports may fail in Python 3 due to legacy Python 2 syntax
 # This is expected and will be addressed separately
 try:
-    import pycdg
-    import pykar
-    import pykdb
-    import pympg
-    from pykconstants import *
-    from pykmanager import manager
-    from pykplayer import pykPlayer
+    from pykaraoke.players import cdg
+    from pykaraoke.players import kar
+    from pykaraoke.core import database
+    from pykaraoke.players import mpg
+    from pykaraoke.config.constants import *
+    from pykaraoke.core.manager import manager
+    from pykaraoke.core.player import pykPlayer
 
     IMPORTS_AVAILABLE = True
 except (ImportError, SyntaxError) as e:
@@ -83,10 +83,10 @@ class PyKaraokeBackend:
 
         self.state = BackendState.IDLE
         self.current_player: Any | None = None  # pykPlayer when available
-        self.current_song: Any | None = None  # pykdb.SongStruct when available
-        self.playlist: list[Any] = []  # List[pykdb.SongStruct] when available
+        self.current_song: Any | None = None  # database.SongStruct when available
+        self.playlist: list[Any] = []  # List[database.SongStruct] when available
         self.playlist_index: int = -1
-        self.song_db: Any | None = None  # pykdb.SongDatabase when available
+        self.song_db: Any | None = None  # database.SongDatabase when available
         self.volume: float = 0.75
         self.position_ms: int = 0
         self.duration_ms: int = 0
@@ -103,7 +103,7 @@ class PyKaraokeBackend:
     def _init_database(self):
         """Initialize the song database"""
         try:
-            self.song_db = pykdb.globalSongDB
+            self.song_db = database.globalSongDB
             self.song_db.LoadSettings(None)
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:

@@ -24,10 +24,10 @@ import threading
 
 import pygame
 
-from pykconstants import *
-from pykenv import env
-from pykmanager import manager
-from pykplayer import pykPlayer
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
+from pykaraoke.core.manager import manager
+from pykaraoke.core.player import pykPlayer
 
 # OVERVIEW
 #
@@ -63,10 +63,10 @@ from pykplayer import pykPlayer
 # You can also incorporate a MPG player in your own projects by
 # importing this module. The class mpgPlayer is exported by the
 # module. You can import and start it as follows:
-#   import pympg
-#   player = pympg.mpgPlayer("/songs/theboxer.mpg")
+#   from pykaraoke.players import mpg
+#   player = mpg.mpgPlayer("/songs/theboxer.mpg")
 #   player.Play()
-# If you do this, you must also arrange to call pympg.manager.Poll()
+# If you do this, you must also arrange to call manager.Poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #

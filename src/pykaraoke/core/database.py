@@ -33,11 +33,11 @@ import cPickle
 import pygame
 from cStringIO import StringIO
 
-import pycdg
-import pykar
-import pympg
-from pykconstants import *
-from pykenv import env
+from pykaraoke.players import cdg
+from pykaraoke.players import kar
+from pykaraoke.players import mpg
+from pykaraoke.config.constants import *
+from pykaraoke.config.environment import env
 
 try:
     from hashlib import md5
@@ -370,16 +370,16 @@ class SongStruct:
         constructor = None
 
         if self.Type == self.T_CDG:
-            constructor = pycdg.cdgPlayer
+            constructor = cdg.cdgPlayer
         elif self.Type == self.T_KAR:
-            constructor = pykar.midPlayer
+            constructor = kar.midPlayer
         elif self.Type == self.T_MPG:
-            if self.MpgType == "mpg" and settings.MpgNative and pympg.movie:
+            if self.MpgType == "mpg" and settings.MpgNative and mpg.movie:
                 # Mpg files can be played internally.
-                constructor = pympg.mpgPlayer
+                constructor = mpg.mpgPlayer
             else:
                 # Other kinds of movies require an external player.
-                constructor = pympg.externalPlayer
+                constructor = mpg.externalPlayer
         else:
             ext = os.path.splitext(self.DisplayFilename)[1]
             errorNotifyCallback("Unsupported file format " + ext)
