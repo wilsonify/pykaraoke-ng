@@ -106,7 +106,7 @@ class PyKaraokeBackend:
             self.song_db = pykdb.globalSongDB
             self.song_db.LoadSettings(None)
             logger.info("Song database loaded")
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"Failed to initialize database: {e}")
             self.error_message = str(e)
 
@@ -120,7 +120,7 @@ class PyKaraokeBackend:
         if self.event_callback:
             try:
                 self.event_callback(event)
-            except Exception as e:
+            except (TypeError, ValueError, RuntimeError) as e:
                 logger.error(f"Error emitting event: {e}")
 
     def _emit_state_change(self):
@@ -321,7 +321,7 @@ class PyKaraokeBackend:
             self._emit_state_change()
             return {"status": "ok"}
 
-        except Exception as e:
+        except (RuntimeError, OSError, ValueError) as e:
             logger.error(f"Playback error: {e}")
             self.state = BackendState.ERROR
             self.error_message = str(e)
@@ -361,7 +361,7 @@ class PyKaraokeBackend:
             self.current_song = self.song_db.makeSongStruct(filepath)
             self._emit_state_change()
             return {"status": "ok"}
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_add_to_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -377,7 +377,7 @@ class PyKaraokeBackend:
                 "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
             )
             return {"status": "ok"}
-        except Exception as e:
+        except (ValueError, IndexError, AttributeError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_remove_from_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -413,7 +413,7 @@ class PyKaraokeBackend:
                 "status": "ok",
                 "data": {"results": [self._song_to_dict(song) for song in results]},
             }
-        except Exception as e:
+        except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_get_library(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -421,7 +421,7 @@ class PyKaraokeBackend:
         try:
             songs = self.song_db.SongList if hasattr(self.song_db, "SongList") else []
             return {"status": "ok", "data": {"songs": [self._song_to_dict(song) for song in songs]}}
-        except Exception as e:
+        except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_scan_library(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -432,7 +432,7 @@ class PyKaraokeBackend:
             self.song_db.BuildSearchDatabase()
             self._emit_event("library_scan_complete", {})
             return {"status": "ok", "message": "Scan started"}
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_add_folder(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -444,7 +444,7 @@ class PyKaraokeBackend:
         try:
             self.song_db.FolderAdd(folder)
             return {"status": "ok"}
-        except Exception as e:
+        except (OSError, ValueError, AttributeError) as e:
             return {"status": "error", "message": str(e)}
 
     # Settings handlers
@@ -517,7 +517,7 @@ def create_stdio_server(backend: PyKaraokeBackend):
                     "response": {"status": "error", "message": f"Invalid JSON: {e}"},
                 }
                 print(json.dumps(error_response), flush=True)
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 error_response = {
                     "type": "response",
                     "response": {"status": "error", "message": str(e)},

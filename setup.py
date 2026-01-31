@@ -225,7 +225,7 @@ if gotPy2exe:
                     import win32api
 
                     self.makensis = win32api.FindExecutable("makensis")
-                except Exception:
+                except (ImportError, AttributeError):
                     # Default path for makensis.  This is where it gets
                     # installed by default.
                     self.makensis = os.path.join(os.environ["ProgramFiles"], "NSIS\\makensis")

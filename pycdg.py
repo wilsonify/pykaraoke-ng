@@ -494,7 +494,7 @@ class cdgPlayer(pykPlayer):
         # Hopefully we have Mutagen available to pull out the song length
         try:
             import mutagen.mp3
-        except Exception:
+        except ImportError:
             print("Mutagen not available, will not be able to determine extra MP3 information.")
             self.soundLength = 0
             return None

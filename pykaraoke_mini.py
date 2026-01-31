@@ -167,7 +167,7 @@ class App(pykPlayer):
         splashFilename = os.path.join(manager.IconPath, "splash.png")
         try:
             splash = pygame.image.load(splashFilename)
-        except Exception:
+        except (pygame.error, FileNotFoundError):
             print("Unable to load splash image.")
             return
 
@@ -604,18 +604,18 @@ class App(pykPlayer):
         # Start playing.
         try:
             player.Play()
-        except Exception:
+        except (RuntimeError, OSError) as e:
             self.errorPopupCallback(
-                "Error starting player.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
+                "Error starting player.\n%s\n%s" % (type(e).__name__, str(e))
             )
             return
 
         # Go to sleep until the song is over.
         try:
             manager.WaitForPlayer()
-        except Exception:
+        except (RuntimeError, KeyboardInterrupt) as e:
             self.errorPopupCallback(
-                "Error while playing song.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
+                "Error while playing song.\n%s\n%s" % (type(e).__name__, str(e))
             )
             return
 

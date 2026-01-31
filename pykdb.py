@@ -198,7 +198,7 @@ class SongStruct:
                 self.Artist = self.ParseArtist(Filepath, settings)  # Artist for display
                 self.Disc = self.ParseDisc(Filepath, settings)  # Disc for display
                 self.Track = self.ParseTrack(Filepath, settings)  # Track for display
-            except Exception:
+            except (ValueError, KeyError, IndexError):
                 # Filename did not match requested scheme, set the title to the filepath
                 # so that the structure is still created, but without any additional info
                 # print "Filename format does not match requested scheme: %s" % Filepath
@@ -386,9 +386,9 @@ class SongStruct:
         # Try to open the song file.
         try:
             player = constructor(self, songDb, errorNotifyCallback, doneCallback)
-        except Exception:
+        except (RuntimeError, OSError, ImportError) as e:
             errorNotifyCallback(
-                "Error opening file.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
+                "Error opening file.\n%s\n%s" % (type(e).__name__, str(e))
             )
             return None
 
@@ -444,7 +444,7 @@ class SongStruct:
                 try:
                     data = zip.read(file)
                     songDatas.append(SongData(file, data))
-                except Exception:
+                except (KeyError, zipfile.BadZipFile):
                     print("Error in ZIP containing ")
         else:
             # A non-zipped file; this is an easy case.
@@ -651,7 +651,7 @@ class TitleStruct:
             # Open the file for reading.
             try:
                 catalogFile = open(catalogPathname)
-            except Exception:
+            except (OSError, IOError):
                 print("Could not open titles file %s" % (repr(catalogPathname)))
                 return
 
@@ -724,7 +724,7 @@ class TitleStruct:
             # Open the file for writing.
             try:
                 catalogFile = open(catalogPathname, "w")
-            except Exception:
+            except (OSError, IOError):
                 print("Could not rewrite titles file %s" % (repr(catalogPathname)))
                 return
 
@@ -1427,7 +1427,7 @@ class SongDB:
         # configured to do so. Function is recursive for subfolders.
         try:
             filedir_list = os.listdir(FolderToScan)
-        except Exception:
+        except (OSError, PermissionError):
             print("Couldn't scan %s" % (repr(FolderToScan)))
             return False
 
@@ -1577,7 +1577,7 @@ class SongDB:
                                     )
                     else:
                         print("Cannot parse ZIP file: " + repr(full_path))
-                except Exception:
+                except (zipfile.BadZipFile, OSError):
                     print("Error looking inside zip " + repr(full_path))
 
     # Add a folder to the database search list

@@ -3086,7 +3086,7 @@ class PrintSongListWindow(wx.Frame):
 
         try:
             fontSize = float(self.fontSize.GetValue())
-        except Exception:
+        except (ValueError, AttributeError):
             fontSize = 4
 
         printout = SongListPrintout(
