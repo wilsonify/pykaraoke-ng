@@ -259,7 +259,6 @@ class CdgPacketReader:
     # Memory preset (clear the viewable area + border)
     def __cdgMemoryPreset(self, packd):
         colour = packd.data[0] & 0x0F
-        _repeat = packd.data[1] & 0x0F
 
         # The "repeat" flag is nonzero if this is a repeat of a
         # previously-appearing preset command.  (Often a CDG will
