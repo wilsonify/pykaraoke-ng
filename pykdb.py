@@ -122,13 +122,13 @@ class SongData:
         # that means this file is a true file that exists on disk.  On
         # the other hand, if data is not None, then this is not a true
         # file, and data contains its contents.
-        self.trueFile = data == None
+        self.trueFile = data is None
 
     def GetData(self):
         """Returns the actual data of the file.  If the file has not
         yet been read, this will read it and return the data."""
 
-        if self.data != None:
+        if self.data is not None:
             # The file has already been read; return that data.
             return self.data
 
@@ -198,7 +198,7 @@ class SongStruct:
                 self.Artist = self.ParseArtist(Filepath, settings)  # Artist for display
                 self.Disc = self.ParseDisc(Filepath, settings)  # Disc for display
                 self.Track = self.ParseTrack(Filepath, settings)  # Track for display
-            except:
+            except Exception:
                 # Filename did not match requested scheme, set the title to the filepath
                 # so that the structure is still created, but without any additional info
                 # print "Filename format does not match requested scheme: %s" % Filepath
@@ -386,7 +386,7 @@ class SongStruct:
         # Try to open the song file.
         try:
             player = constructor(self, songDb, errorNotifyCallback, doneCallback)
-        except:
+        except Exception:
             errorNotifyCallback(
                 "Error opening file.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
             )
@@ -444,7 +444,7 @@ class SongStruct:
                 try:
                     data = zip.read(file)
                     songDatas.append(SongData(file, data))
-                except:
+                except Exception:
                     print("Error in ZIP containing ")
         else:
             # A non-zipped file; this is an easy case.
@@ -583,7 +583,7 @@ class TitleStruct:
         indicated db.  This is intended to be called during db
         scan."""
 
-        if self.ZipStoredName != None:
+        if self.ZipStoredName is not None:
             zip = songDb.GetZipFile(self.Filepath)
             unzipped_data = zip.read(self.ZipStoredName)
             sfile = StringIO(unzipped_data)
@@ -593,7 +593,7 @@ class TitleStruct:
 
     def rewrite(self, songDb):
         """Rewrites the titles.txt file with the current data."""
-        if self.ZipStoredName != None:
+        if self.ZipStoredName is not None:
             sfile = StringIO()
             self.__writeTitles(songDb, sfile, os.path.join(self.Filepath, self.ZipStoredName))
             unzipped_data = sfile.getvalue()
@@ -645,13 +645,13 @@ class TitleStruct:
 
     def __readTitles(self, songDb, catalogFile, catalogPathname):
         self.songs = []
-        dirname = os.path.split(catalogPathname)[0]
+        _dirname = os.path.split(catalogPathname)[0]
 
-        if catalogFile == None:
+        if catalogFile is None:
             # Open the file for reading.
             try:
                 catalogFile = open(catalogPathname)
-            except:
+            except Exception:
                 print("Could not open titles file %s" % (repr(catalogPathname)))
                 return
 
@@ -718,13 +718,13 @@ class TitleStruct:
         return filename
 
     def __writeTitles(self, songDb, catalogFile, catalogPathname):
-        dirname = os.path.split(catalogPathname)[0]
+        _dirname = os.path.split(catalogPathname)[0]
 
-        if catalogFile == None:
+        if catalogFile is None:
             # Open the file for writing.
             try:
                 catalogFile = open(catalogPathname, "w")
-            except:
+            except Exception:
                 print("Could not rewrite titles file %s" % (repr(catalogPathname)))
                 return
 
@@ -759,8 +759,8 @@ class FontData:
     pygame to reference a unique font on the system."""
 
     def __init__(self, name=None, size=None, bold=False, italic=False):
-        # name may be either a system font name (if size != None) or a
-        # filename (if size == None).
+        # name may be either a system font name (if size is not None) or a
+        # filename (if size is None).
         self.name = name
         self.size = size
         self.bold = bold
@@ -1042,7 +1042,7 @@ class SongDB:
                 import win32api
 
                 return os.path.join(win32api.GetTempPath(), "pykaraoke")
-            except:
+            except Exception:
                 pass
 
         # If we can't find a good temp directory, use our save directory.
@@ -1058,7 +1058,7 @@ class SongDB:
                 import wx
 
                 return wx.GetHomeDir()
-            except:
+            except Exception:
                 pass
 
             # Second attempt: look in $HOME
@@ -1179,7 +1179,7 @@ class SongDB:
 
                 try:
                     value = eval(value)
-                except:
+                except Exception:
                     # Ignore anything that isn't valid Python.
                     print("Invalid value for %s" % (key))
                     continue
@@ -1216,7 +1216,7 @@ class SongDB:
             loaddb = None
             try:
                 loaddb = cPickle.load(file)
-            except:
+            except Exception:
                 pass
             if getattr(loaddb, "Version", None) == DATABASE_VERSION:
                 self.FullSongList = loaddb.FullSongList
@@ -1418,7 +1418,7 @@ class SongDB:
         # configured to do so. Function is recursive for subfolders.
         try:
             filedir_list = os.listdir(FolderToScan)
-        except:
+        except Exception:
             print("Couldn't scan %s" % (repr(FolderToScan)))
             return False
 
@@ -1439,7 +1439,7 @@ class SongDB:
             # Build the full file path. Check file types match, as
             # os.listdir() can return non-unicode while the folder
             # is still unicode.
-            if type(FolderToScan) != type(item):
+            if not isinstance(FolderToScan, type(item)):
                 full_path = os.path.join(str(FolderToScan), str(item))
                 print("Folder %s and file %s do not match types" % (repr(FolderToScan), repr(item)))
             else:
@@ -1568,7 +1568,7 @@ class SongDB:
                                     )
                     else:
                         print("Cannot parse ZIP file: ")
-                except:
+                except Exception:
                     print("Error looking inside zip ")
 
     # Add a folder to the database search list
@@ -1665,7 +1665,7 @@ class SongDB:
                     full_path = os.path.join(self.TempDir, item)
                     try:
                         os.unlink(full_path)
-                    except:
+                    except Exception:
                         # The unlink can fail on Windows due to a bug in
                         # pygame.mixer.music which does not release the
                         # file handle until you load another music file.
@@ -1872,11 +1872,11 @@ class SongDB:
                 song_data = datas[0]
                 # If the data has already been read in, use it directly.
                 # Otherwise read the file off disk for temporary use.
-                if song_data.data != None:
+                if song_data.data is not None:
                     m.update(song_data.data)
                 else:
                     f = open(song_data.filename)
-                    if f != None:
+                    if f is not None:
                         while True:
                             data = f.read(64 * 1024)
                             if not data:
@@ -1892,7 +1892,7 @@ class SongDB:
         removeIndexes = {}
         for list in fileHashes.values():
             if len(list) > 1:
-                filenames = map(lambda i: self.FullSongList[i].DisplayFilename, list)
+                _filenames = map(lambda i: self.FullSongList[i].DisplayFilename, list)
                 print("Identical songs: %s")
                 for i in list[1:]:
                     extra = self.FullSongList[i]

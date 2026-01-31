@@ -225,7 +225,7 @@ if gotPy2exe:
                     import win32api
 
                     self.makensis = win32api.FindExecutable("makensis")
-                except:
+                except Exception:
                     # Default path for makensis.  This is where it gets
                     # installed by default.
                     self.makensis = os.path.join(os.environ["ProgramFiles"], "NSIS\\makensis")
@@ -269,7 +269,7 @@ if gotPy2exe:
                         pathname = os.path.join(root, name)
                         try:
                             os.remove(pathname)
-                        except:
+                        except OSError:
                             # Try to make it writable first, then remove it.
                             os.chmod(pathname, 0o666)
                             os.remove(pathname)

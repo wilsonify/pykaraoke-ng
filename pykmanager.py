@@ -33,7 +33,7 @@ from pykenv import env
 # installed (optik.sourceforge.net)
 try:
     import optparse
-except:
+except ImportError:
     import Optik as optparse
 
 if env == ENV_GP2X:
@@ -138,7 +138,7 @@ class pykManager:
 
     def GetFontScale(self):
         """Returns the current font scale."""
-        if self.fontScale == None:
+        if self.fontScale is None:
             self.fontScale = self.options.font_scale
         return self.fontScale
 
@@ -168,7 +168,7 @@ class pykManager:
         self.player = player
         self.player.State = STATE_NOT_PLAYING
 
-        if self.display != None and self.displayTitle == None:
+        if self.display is not None and self.displayTitle is None:
             try:
                 pygame.display.set_caption(player.WindowTitle)
             except UnicodeError:
@@ -180,11 +180,11 @@ class pykManager:
 
         self.getDisplayDefaults()
 
-        if displaySize == None:
+        if displaySize is None:
             displaySize = self.displaySize
-        if flags == None:
+        if flags is None:
             flags = self.displayFlags
-        if depth == None:
+        if depth is None:
             depth = self.displayDepth
 
         if self.options.dump:
@@ -207,15 +207,15 @@ class pykManager:
             )
             pygame.mouse.set_visible(self.mouseVisible)
 
-            if self.displayTitle != None:
+            if self.displayTitle is not None:
                 pygame.display.set_caption(self.displayTitle)
-            elif self.player != None:
+            elif self.player is not None:
                 try:
                     pygame.display.set_caption(self.player.WindowTitle)
                 except UnicodeError:
                     pygame.display.set_caption(self.player.WindowTitle.encode("UTF-8", "replace"))
 
-            if self.display == None or (self.displaySize, self.displayFlags, self.displayDepth) != (
+            if self.display is None or (self.displaySize, self.displayFlags, self.displayDepth) != (
                 displaySize,
                 flags,
                 depth,
@@ -253,13 +253,13 @@ class pykManager:
         # open.
         self.CloseCPUControl()
 
-        if frequency == None:
+        if frequency is None:
             frequency = self.settings.SampleRate
 
-        if size == None:
+        if size is None:
             size = -16
 
-        if channels == None:
+        if channels is None:
             channels = self.settings.NumChannels
 
         bufferMs = self.settings.BufferMs
@@ -566,8 +566,8 @@ class pykManager:
             self.settings.PlayerSize = (self.options.size_x, self.options.size_y)
         if (
             hasattr(self.options, "pos_x")
-            and self.options.pos_x != None
-            and self.options.pos_y != None
+            and self.options.pos_x is not None
+            and self.options.pos_y is not None
         ):
             self.settings.PlayerPosition = (self.options.pos_x, self.options.pos_y)
 

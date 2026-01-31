@@ -36,7 +36,7 @@ class pykPlayer:
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        if songDb == None:
+        if songDb is None:
             import pykdb
 
             songDb = pykdb.globalSongDB
@@ -45,7 +45,7 @@ class pykPlayer:
 
         # Set the global command-line options if they have not already
         # been set.
-        if manager.options == None:
+        if manager.options is None:
             parser = self.SetupOptions()
             (manager.options, args) = parser.parse_args()
             manager.ApplyOptions(self.songDb)
@@ -191,7 +191,7 @@ class pykPlayer:
         suitable for parsing the command line options to this
         application."""
 
-        if usage == None:
+        if usage is None:
             usage = "%prog [options] <Karaoke file>"
 
         return manager.SetupOptions(usage, self.songDb)
@@ -441,7 +441,7 @@ class pykPlayer:
         # If the caller gave us a callback, let them know we're finished
         if self.State != STATE_CLOSED:
             self.State = STATE_CLOSED
-            if self.SongFinishedCallback != None:
+            if self.SongFinishedCallback is not None:
                 self.SongFinishedCallback()
 
     def __defaultErrorPrint(self, ErrorString):

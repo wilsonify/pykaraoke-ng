@@ -146,7 +146,7 @@ class mpgPlayer(pykPlayer):
 
         # Open the Movie module
         filepath = self.SongDatas[0].GetFilepath()
-        if type(filepath) == unicode:
+        if isinstance(filepath, str):
             filepath = filepath.encode(sys.getfilesystemencoding())
         self.Movie = pygame.movie.Movie(filepath)
         self.Movie.set_display(

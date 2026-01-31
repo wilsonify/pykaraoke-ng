@@ -397,7 +397,7 @@ class Lyrics:
         # Also change the firstNoteClick to firstNoteMs, for each track.
         for track_desc in midifile.trackList:
             ts = MidiTimestamp(midifile)
-            if track_desc.FirstNoteClick != None:
+            if track_desc.FirstNoteClick is not None:
                 ts.advanceToClick(track_desc.FirstNoteClick)
                 track_desc.FirstNoteMs = ts.ms
                 if debug:
@@ -405,7 +405,7 @@ class Lyrics:
                         "T%s first note at %s clicks, %s ms"
                         % (track_desc.TrackNum, track_desc.FirstNoteClick, track_desc.FirstNoteMs)
                     )
-            if track_desc.LastNoteClick != None:
+            if track_desc.LastNoteClick is not None:
                 ts.advanceToClick(track_desc.LastNoteClick)
                 track_desc.LastNoteMs = ts.ms
 
@@ -646,11 +646,11 @@ def midiParseData(midiData, ErrorNotifyCallback, Encoding):
     earliestNoteMS = None
     lastNoteMS = None
     for track in midifile.trackList:
-        if track.FirstNoteMs != None:
-            if (track.FirstNoteMs < earliestNoteMS) or (earliestNoteMS == None):
+        if track.FirstNoteMs is not None:
+            if (track.FirstNoteMs < earliestNoteMS) or (earliestNoteMS is None):
                 earliestNoteMS = track.FirstNoteMs
-        if track.LastNoteMs != None:
-            if (track.LastNoteMs > lastNoteMS) or (lastNoteMS == None):
+        if track.LastNoteMs is not None:
+            if (track.LastNoteMs > lastNoteMS) or (lastNoteMS is None):
                 lastNoteMS = track.LastNoteMs
     midifile.earliestNoteMS = earliestNoteMS
     midifile.lastNoteMS = lastNoteMS
@@ -672,7 +672,7 @@ def midiParseTrack(filehdl, midifile, trackNum, Length, ErrorNotifyCallback):
     eventBytes = 0
     while track.BytesRead < Length:
         eventBytes = midiProcessEvent(filehdl, track, midifile, ErrorNotifyCallback)
-        if (eventBytes == None) or (eventBytes == -1) or (eventBytes == 0):
+        if (eventBytes is None) or (eventBytes == -1) or (eventBytes == 0):
             return None
         track.BytesRead = track.BytesRead + eventBytes
     return track
@@ -680,7 +680,7 @@ def midiParseTrack(filehdl, midifile, trackNum, Length, ErrorNotifyCallback):
 
 def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
     bytesRead = 0
-    running_status = 0
+    _running_status = 0
     click, varBytes = varLength(filehdl)
     if varBytes == 0:
         return 0
@@ -913,7 +913,7 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
         packet = filehdl.read(2)
         bytesRead = bytesRead + 2
         # print ("T%d: 0x%X" % (track_desc.TrackNum, event_type))
-        if track_desc.FirstNoteClick == None:
+        if track_desc.FirstNoteClick is None:
             track_desc.FirstNoteClick = track_desc.TotalClicksFromStart
         track_desc.LastNoteClick = track_desc.TotalClicksFromStart
     elif (event_type & 0xF0) == 0xA0:
@@ -943,7 +943,7 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
         # F0 Sysex Event (discard)
         Length, varBytes = varLength(filehdl)
         bytesRead = bytesRead + varBytes
-        discard = filehdl.read(Length - 1)
+        _discard = filehdl.read(Length - 1)
         end_byte = filehdl.read(1)
         end = ord(end_byte)
         bytesRead = bytesRead + Length
@@ -953,7 +953,7 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
         # F7 Sysex Event (discard)
         Length, varBytes = varLength(filehdl)
         bytesRead = bytesRead + varBytes
-        discard = filehdl.read(Length)
+        _discard = filehdl.read(Length)
         bytesRead = bytesRead + Length
     else:
         # Unknown event (discard)
@@ -961,7 +961,7 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
             print("Unknown event: 0x%x" % event_type)
         Length, varBytes = varLength(filehdl)
         bytesRead = bytesRead + varBytes
-        discard = filehdl.read(Length)
+        _discard = filehdl.read(Length)
         bytesRead = bytesRead + Length
     return bytesRead
 
@@ -1004,11 +1004,11 @@ class midPlayer(pykPlayer):
         self.midifile = midiParseData(
             self.SongDatas[0].GetData(), self.ErrorNotifyCallback, settings.KarEncoding
         )
-        if self.midifile == None:
+        if self.midifile is None:
             ErrorString = "ERROR: Could not parse the MIDI file"
             self.ErrorNotifyCallback(ErrorString)
             return
-        elif self.midifile.lyrics == None:
+        elif self.midifile.lyrics is None:
             ErrorString = "ERROR: Could not get any lyric data from file"
             self.ErrorNotifyCallback(ErrorString)
             return
@@ -1072,7 +1072,7 @@ class midPlayer(pykPlayer):
         else:
             # Load the sound normally for playback.
             audio_path = self.SongDatas[0].GetFilepath()
-            if type(audio_path) == unicode:
+            if isinstance(audio_path, str):
                 audio_path = audio_path.encode(sys.getfilesystemencoding())
             pygame.mixer.music.load(audio_path)
 
@@ -1175,9 +1175,9 @@ class midPlayer(pykPlayer):
         x may be none if the syllable's x position is already
         known."""
 
-        if syllable.left == None:
+        if syllable.left is None:
             syllable.left = x
-            if syllable.left == None:
+            if syllable.left is None:
                 return
 
         y = Y_BORDER + row * self.lineSize
@@ -1309,7 +1309,7 @@ class midPlayer(pykPlayer):
 
     def colourUpdateMs(self):
         # If there's nothing yet to happen, just return.
-        if self.nextChangeMs == None or self.currentMs < self.nextChangeMs:
+        if self.nextChangeMs is None or self.currentMs < self.nextChangeMs:
             return False
 
         syllables = self.getNewSyllables()
@@ -1385,7 +1385,7 @@ class midPlayer(pykPlayer):
         # But don't scroll unless we have less than
         # PARAGRAPH_LEAD_TIME milliseconds to go.
         timeGap = 0
-        if self.nextColourMs != None:
+        if self.nextColourMs is not None:
             timeGap = self.nextColourMs - self.currentColourMs
             scrollTime = self.nextColourMs - PARAGRAPH_LEAD_TIME
             if self.currentMs < scrollTime:

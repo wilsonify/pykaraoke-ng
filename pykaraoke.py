@@ -971,7 +971,7 @@ class ConfigWindow(wx.Frame):
         if env == ENV_WINDOWS:
             wildcard = "Executable Programs (*.exe)|*.exe"
         else:
-            wildcast = "All files|*"
+            wildcard = "All files|*"
         dlg = wx.FileDialog(self, "External Movie Player", wildcard=wildcard)
         result = dlg.ShowModal()
         if result != wx.ID_OK:
@@ -1069,14 +1069,14 @@ class ConfigWindow(wx.Frame):
                     pos_x = int(self.PlayerPositionX.GetValue())
                     pos_y = int(self.PlayerPositionY.GetValue())
                     settings.PlayerPosition = (pos_x, pos_y)
-                except:
+                except Exception:
                     pass
 
         try:
             size_x = int(self.PlayerSizeX.GetValue())
             size_y = int(self.PlayerSizeY.GetValue())
             settings.PlayerSize = (size_x, size_y)
-        except:
+        except Exception:
             pass
 
         settings.NumChannels = 1
@@ -1088,25 +1088,25 @@ class ConfigWindow(wx.Frame):
         try:
             rate = int(self.SampleRate.GetValue())
             settings.SampleRate = rate
-        except:
+        except Exception:
             pass
 
         try:
             rate = int(self.MIDISampleRate.GetValue())
             settings.MIDISampleRate = rate
-        except:
+        except Exception:
             pass
 
         try:
             buffer = int(self.BufferSize.GetValue())
             settings.BufferMs = buffer
-        except:
+        except Exception:
             pass
 
         try:
             sync = int(self.SyncDelay.GetValue())
             settings.SyncDelayMs = sync
-        except:
+        except Exception:
             pass
 
         settings.KarEncoding = self.KarEncoding.GetValue()
@@ -1823,9 +1823,9 @@ class FileTree(wx.Panel):
                 # wx.DragCopy/DragMove/etc., but in practice it appears that
                 # only wx.DragNone works on Windows.
                 if env == ENV_WINDOWS:
-                    res = dropSource.DoDragDrop(wx.DragNone)
+                    _res = dropSource.DoDragDrop(wx.DragNone)
                 else:
-                    res = dropSource.DoDragDrop(wx.DragCopy)
+                    _res = dropSource.DoDragDrop(wx.DragCopy)
 
             # Can't call dropSource.DoDragDrop here..
             wx.CallAfter(DoDragDrop)
@@ -2188,19 +2188,19 @@ class SearchResultsPanel(wx.Panel):
             )
 
         # Indicate what column is doing the sorting
-        if (self.FilenameCol != None) and column == self.FilenameCol:
+        if (self.FilenameCol is not None) and column == self.FilenameCol:
             filenameItem = wx.ListItem()
             filenameItem.SetText("* Filename")
             self.ListPanel.SetColumn(self.FilenameCol, filenameItem)
-        elif self.FilenameCol != None:
+        elif self.FilenameCol is not None:
             filenameItem = wx.ListItem()
             filenameItem.SetText("Filename")
             self.ListPanel.SetColumn(self.FilenameCol, filenameItem)
-        elif (self.DiscCol != None) and column == self.DiscCol:
+        elif (self.DiscCol is not None) and column == self.DiscCol:
             discItem = wx.ListItem()
             discItem.SetText("* Disc")
             self.ListPanel.SetColumn(self.DiscCol, discItem)
-        elif self.DiscCol != None:
+        elif self.DiscCol is not None:
             discItem = wx.ListItem()
             discItem.SetText("Disc")
             self.ListPanel.SetColumn(self.DiscCol, discItem)
@@ -3080,7 +3080,7 @@ class PrintSongListWindow(wx.Frame):
 
         try:
             fontSize = float(self.fontSize.GetValue())
-        except:
+        except Exception:
             fontSize = 4
 
         printout = SongListPrintout(
@@ -3850,7 +3850,7 @@ class PyKaraokeManager:
         self.SongDB.LoadSettings(None)
 
         # Set the global command-line options.
-        if manager.options == None:
+        if manager.options is None:
             parser = self.SetupOptions()
             (manager.options, args) = parser.parse_args()
             manager.ApplyOptions(self.SongDB)
@@ -4007,7 +4007,7 @@ class PyKaraokeManager:
         # pass data to the event handler (the error string).
         event = PyKaraokeEvent(self.EVT_ERROR_POPUP, ErrorString)
         wx.PostEvent(self.Frame, event)
-        if self.Player != None:
+        if self.Player is not None:
             self.Player.shutdown()
             self.Player = None
         self.SongDB.CleanupTempFiles()
@@ -4022,7 +4022,7 @@ class PyKaraokeManager:
         self.Player = song_struct.MakePlayer(
             self.SongDB, self.ErrorPopupCallback, self.SongFinishedCallback
         )
-        if self.Player == None:
+        if self.Player is None:
             return
 
         # Start playing

@@ -277,15 +277,15 @@ class cdgPlayer(pykPlayer):
             audioProperties = None
             if manager.settings.UseMp3Settings:
                 audioProperties = self.getAudioProperties(self.soundFileData)
-            if audioProperties == None:
+            if audioProperties is None:
                 audioProperties = (None, None, None)
             try:
                 manager.OpenAudio(*audioProperties)
                 audio_path = self.soundFileData.GetFilepath()
-                if type(audio_path) == unicode:
+                if isinstance(audio_path, str):
                     audio_path = audio_path.encode(sys.getfilesystemencoding())
                 pygame.mixer.music.load(audio_path)
-            except:
+            except Exception:
                 self.Close()
                 raise
 
@@ -425,7 +425,7 @@ class cdgPlayer(pykPlayer):
     def doResize(self, newSize):
         self.computeDisplaySize()
 
-        if self.borderColour != None:
+        if self.borderColour is not None:
             manager.surface.fill(self.borderColour)
 
         self.packetReader.MarkTilesDirty()
@@ -494,7 +494,7 @@ class cdgPlayer(pykPlayer):
         # Hopefully we have Mutagen available to pull out the song length
         try:
             import mutagen.mp3
-        except:
+        except Exception:
             print("Mutagen not available, will not be able to determine extra MP3 information.")
             self.soundLength = 0
             return None
@@ -569,7 +569,7 @@ class cdgPlayer(pykPlayer):
             # When the border colour changes, blit the whole screen
             # and redraw it.
             self.borderColour = borderColour
-            if borderColour != None:
+            if borderColour is not None:
                 manager.surface.fill(borderColour)
                 self.packetReader.MarkTilesDirty()
 

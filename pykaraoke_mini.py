@@ -167,7 +167,7 @@ class App(pykPlayer):
         splashFilename = os.path.join(manager.IconPath, "splash.png")
         try:
             splash = pygame.image.load(splashFilename)
-        except:
+        except Exception:
             print("Unable to load splash image.")
             return
 
@@ -266,7 +266,7 @@ class App(pykPlayer):
         self.startSongWindowRow = int(
             (row + self.songWindowRowHeight - 1) / self.songWindowRowHeight
         )
-        numRows = self.numSongWindowRows - self.startSongWindowRow
+        _numRows = self.numSongWindowRows - self.startSongWindowRow
 
         for i in range(len(self.selectedSong.sameSongs)):
             file = self.selectedSong.sameSongs[i]
@@ -339,7 +339,7 @@ class App(pykPlayer):
         artist/title has been marked, returns the marked song object.
         If the song has not been marked, returns None."""
 
-        marked = False
+        _marked = False
         if self.songDb.Sort == "filename":
             # If we're sorting by filename, then every song is
             # individually marked.
@@ -471,7 +471,7 @@ class App(pykPlayer):
         # Now that we've finished loading, wait up a second and give
         # the user a chance to view the splash screen, in case we
         # loaded too fast.
-        if self.splashStart != None:
+        if self.splashStart is not None:
             splashTime = pygame.time.get_ticks() - self.splashStart
             remainingTime = 2500 - splashTime
             if remainingTime > 0:
@@ -598,13 +598,13 @@ class App(pykPlayer):
         self.writeMarkedSongs()
 
         player = file.MakePlayer(self.songDb, self.errorPopupCallback, self.songFinishedCallback)
-        if player == None:
+        if player is None:
             return
 
         # Start playing.
         try:
             player.Play()
-        except:
+        except Exception:
             self.errorPopupCallback(
                 "Error starting player.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
             )
@@ -613,7 +613,7 @@ class App(pykPlayer):
         # Go to sleep until the song is over.
         try:
             manager.WaitForPlayer()
-        except:
+        except Exception:
             self.errorPopupCallback(
                 "Error while playing song.\n%s\n%s" % (sys.exc_info()[0], sys.exc_info()[1])
             )
