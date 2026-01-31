@@ -210,7 +210,7 @@ class SongStruct:
                 # files the song will still be added to the database. For non-database
                 # adds we don't care anyway, we just want a SongStruct for passing around.
                 if DatabaseAdd and settings.ExcludeNonMatchingFilenames:
-                    raise KeyError("Excluding non-matching file: %s" % self.Title)
+                    raise KeyError("Excluding non-matching file: %s" % self.Title) from None
 
         # This is a list of other song files that share the same
         # artist and title data.

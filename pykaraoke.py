@@ -2312,7 +2312,7 @@ class SearchResultsPanel(wx.Panel):
                 listWidth = listWidth - scrollWidth
 
         # Set up initial sizes when list is built, not when window is resized
-        if resize_event == False:
+        if resize_event is False:
             # For some reason the last column becomes shorter than expected,
             # so ask for a bit more from artist column than we need.
             self.MaxArtistWidth = self.MaxArtistWidth + self.GetCharWidth()
@@ -2595,7 +2595,7 @@ class Playlist(wx.Panel):
                 listWidth = listWidth - scrollWidth
 
         # Set up initial sizes when list is built, not when window is resized
-        if resize_event == False:
+        if resize_event is False:
             # Initially attempt to get the full required width for each column
             filenameWidth = max(
                 self.MaxFilenameWidth,
@@ -3767,7 +3767,7 @@ class PyKaraokeWindow(wx.Frame):
     def OnAbout(self, event):
         # Show the appropriate About window (we must use a special About window
         # if using Wx2.6 on which AboutDialogInfo() controls are not available).
-        if HasWx26Only() == True:
+        if HasWx26Only():
             self.Frame = Wx26AboutWindow(self)
         else:
             abtnfAbout = wx.AboutDialogInfo()

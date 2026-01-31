@@ -235,7 +235,7 @@ class cdgPlayer(pykPlayer):
             if not soundFileData:
                 ErrorString = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
                 self.ErrorNotifyCallback(ErrorString)
-                raise "NoSoundFile"
+                raise FileNotFoundError("NoSoundFile")
 
         self.cdgFileData = self.SongDatas[0]
         self.soundFileData = soundFileData

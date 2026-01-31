@@ -404,7 +404,7 @@ class CdgPacketReader:
         # this efficient. A copy scroll (where the data scrolls round)
         # can be achieved by slicing and concatenating again.
         # For non-copy, the new slice is filled in with a new colour.
-        if copy == True:
+        if copy:
             if vScrollUpPixels > 0:
                 self.__cdgPixelColours = N.concatenate(
                     (
@@ -437,7 +437,7 @@ class CdgPacketReader:
                     ),
                     0,
                 )
-        elif copy == False:
+        elif copy is False:
             if vScrollUpPixels > 0:
                 copyBlockActualColour = (
                     N.zeros([CDG_FULL_WIDTH, vScrollUpPixels]) + self.__cdgColourTable[colour]
