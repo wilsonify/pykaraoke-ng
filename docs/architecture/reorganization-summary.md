@@ -1,5 +1,9 @@
 # Repository Reorganization - Summary
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Overview
 This document summarizes the comprehensive reorganization of the PyKaraoke-NG repository completed on 2026-01-31.
 

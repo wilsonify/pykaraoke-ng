@@ -364,3 +364,17 @@ chmod -R 755 /path/to/songs
 kubectl describe pod -n pykaraoke
 kubectl get pvc -n pykaraoke
 ```
+
+---
+
+## Additional Resources
+
+### Architecture
+
+- [Repository Structure](architecture/structure.md) - Project organization
+- [Reorganization Summary](architecture/reorganization-summary.md) - Summary of changes made
+
+### Development
+
+- [SonarQube Setup](development/sonarqube-setup.md) - Code quality scanning setup
+- [SonarCloud HIGH Issues Fixed](development/sonarcloud-high-issues-fixed.md) - Security fixes

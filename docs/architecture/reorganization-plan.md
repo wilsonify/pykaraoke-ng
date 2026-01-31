@@ -1,5 +1,9 @@
 # PyKaraoke-NG Repository Reorganization Plan
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Executive Summary
 
 This document proposes a comprehensive reorganization of the PyKaraoke-NG repository to support:

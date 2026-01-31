@@ -1,5 +1,9 @@
 # SonarQube Quality Gate Fix Summary
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Overview
 This document details the fixes applied to resolve the SonarQube quality gate failure for PR #2.
 

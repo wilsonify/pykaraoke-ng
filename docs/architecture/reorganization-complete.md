@@ -1,6 +1,8 @@
 # PyKaraoke-NG Repository Reorganization
 ## Complete ✅
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
 ---
 
 ## Executive Summary

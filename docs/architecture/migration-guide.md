@@ -1,5 +1,9 @@
 # PyKaraoke NG Tauri Migration - Quick Start Guide
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## What Was Built
 
 This migration introduces a **Tauri-based architecture** that separates the Python karaoke engine from the UI, replacing wxPython with a modern web-based interface.

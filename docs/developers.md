@@ -320,3 +320,20 @@ refactor: simplify player state management
 - Add tests for new features
 
 > **Questions?** Open an issue on GitHub or check existing discussions.
+
+---
+
+## Additional Resources
+
+### Architecture Documentation
+
+- [Architecture Overview](architecture/overview.md) - System design and component relationships
+- [Repository Structure](architecture/structure.md) - Project organization
+- [Migration Guide](architecture/migration-guide.md) - Guide for migrating from legacy code
+- [Reorganization Plan](architecture/reorganization-plan.md) - Repository reorganization details
+
+### Development Documentation
+
+- [SonarQube Setup](development/sonarqube-setup.md) - Code quality scanning
+- [Quality Improvements](development/quality-improvements.md) - Code quality fixes
+- [PR Summary](development/pr-summary.md) - Tauri migration implementation details

@@ -1,5 +1,9 @@
 # Tauri Migration - Next Steps & Known Issues
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Current Status
 
 The Tauri migration architecture has been successfully implemented:

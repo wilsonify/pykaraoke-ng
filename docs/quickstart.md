@@ -1,5 +1,9 @@
 # Quick Start Guide - After Reorganization
 
+[← Back to Home](index.md)
+
+---
+
 ## For Developers
 
 ### Setting Up Your Environment

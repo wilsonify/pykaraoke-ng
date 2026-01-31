@@ -32,6 +32,8 @@ pykar song.kar
 pympg song.mpg
 ```
 
+For detailed setup after cloning, see the **[Quick Start Guide](quickstart.md)**.
+
 ## Supported Formats
 
 | Format | Extension | Player | Description |
@@ -42,10 +44,32 @@ pympg song.mpg
 
 ## Documentation
 
+### By Audience
+
 - **[User Guide](users.md)** - Install and use PyKaraoke-NG
 - **[Developer Guide](developers.md)** - Set up development environment and contribute
 - **[Admin Guide](administrators.md)** - Deploy with Docker, Kubernetes, Electron, or Tauri
+- **[Quick Start](quickstart.md)** - Fast setup after cloning the repository
+
+### Architecture
+
+- **[Overview](architecture/overview.md)** - System architecture and design
+- **[Repository Structure](architecture/structure.md)** - Project organization
+- **[Migration Guide](architecture/migration-guide.md)** - Migrating from legacy code
+- **[Reorganization Plan](architecture/reorganization-plan.md)** - Repository reorganization details
+- **[Reorganization Summary](architecture/reorganization-summary.md)** - Summary of changes made
+- **[Reorganization Complete](architecture/reorganization-complete.md)** - Final reorganization status
+
+### Development
+
+- **[SonarQube Setup](development/sonarqube-setup.md)** - Code quality scanning setup
+- **[Quality Improvements](development/quality-improvements.md)** - Code quality fixes
+- **[SonarQube Fixes](development/sonarqube-fixes.md)** - Resolved SonarQube issues
+- **[SonarCloud HIGH Issues Fixed](development/sonarcloud-high-issues-fixed.md)** - Security fixes
+- **[87 Issues Fixed](development/sonarqube-87-issues-fixed.md)** - Bulk issue resolution
+- **[PR Summary](development/pr-summary.md)** - Tauri migration implementation details
 
 ## License
 
 PyKaraoke-NG is licensed under [LGPL-2.1-or-later](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
+

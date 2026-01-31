@@ -1,5 +1,9 @@
 # SonarQube 87 Issues - Fix Summary
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Overview
 This document tracks the resolution of 87 SonarQube issues identified for PR #2.
 

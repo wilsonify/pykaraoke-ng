@@ -1,5 +1,9 @@
 # PyKaraoke NG Architecture Documentation
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Migration from wxPython to Tauri
 
 This document describes the architectural transformation of PyKaraoke from a monolithic wxPython application to a modern, decoupled Tauri-based architecture.

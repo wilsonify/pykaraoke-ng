@@ -1,5 +1,9 @@
 # SonarQube Integration Setup
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md) | [Admin Guide](../administrators.md)
+
+---
+
 This repository is configured to use SonarCloud for continuous code quality analysis.
 
 ## Prerequisites

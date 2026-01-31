@@ -1,5 +1,9 @@
 # SonarCloud HIGH Issues Resolution - Complete ✅
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md) | [Admin Guide](../administrators.md)
+
+---
+
 **Date**: 2026-01-31  
 **Status**: All HIGH severity issues resolved  
 **Branch**: copilot/reorganize-project-structure

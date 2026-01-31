@@ -1,5 +1,9 @@
 # SonarQube Quality Improvement Summary
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 This document summarizes the code quality improvements made to ensure the pykaraoke-ng repository passes all SonarQube quality gates.
 
 ## Overview

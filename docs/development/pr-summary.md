@@ -1,5 +1,9 @@
 # PyKaraoke NG - Tauri Migration Implementation
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 ## Overview
 
 This PR implements a complete architectural transformation of PyKaraoke from a monolithic wxPython application to a modern, decoupled Tauri-based desktop application.

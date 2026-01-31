@@ -1,5 +1,9 @@
 # PyKaraoke-NG - Repository Structure
 
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+
+---
+
 This document explains the reorganized repository structure.
 
 ## Directory Structure
