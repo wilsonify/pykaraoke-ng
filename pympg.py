@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 
 # pympg - MPEG Karaoke Player
 #
@@ -18,12 +18,16 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+import subprocess
+import sys
+import threading
+
+import pygame
+
 from pykconstants import *
-from pykplayer import pykPlayer
 from pykenv import env
 from pykmanager import manager
-import pygame, sys, os, string, subprocess
-import threading
+from pykplayer import pykPlayer
 
 # OVERVIEW
 #
@@ -72,10 +76,10 @@ import threading
 # and doneCallback:
 #
 # errorNotifyCallback, if provided, will be used to print out any error
-# messages (e.g. song file not found). This allows the module to fit 
+# messages (e.g. song file not found). This allows the module to fit
 # together well with GUI playlist managers by utilising the same GUI's
 # error popup window mechanism (or similar). If no callback is provided,
-# errors are printed to stdout. errorNotifyCallback should take one 
+# errors are printed to stdout. errorNotifyCallback should take one
 # parameter, the error string, e.g.:
 #   def errorPopup (ErrorString):
 #       msgBox (ErrorString)
@@ -112,7 +116,7 @@ import threading
 # response time.
 
 # Display depth (bits)
-DISPLAY_DEPTH       = 32 
+DISPLAY_DEPTH = 32
 
 # Check to see if the movie module is available.
 try:
@@ -120,32 +124,34 @@ try:
 except ImportError:
     movie = None
 
+
 # mpgPlayer Class
 class mpgPlayer(pykPlayer):
     # Initialise the player instace
     def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
-        instance, or it may be a filename. """
+        instance, or it may be a filename."""
 
         pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
 
         self.Movie = None
 
-        manager.setCpuSpeed('mpg')
+        manager.setCpuSpeed("mpg")
 
         manager.InitPlayer(self)
-        manager.OpenDisplay(depth = DISPLAY_DEPTH)
+        manager.OpenDisplay(depth=DISPLAY_DEPTH)
 
         # Close the mixer while using Movie
         manager.CloseAudio()
 
         # Open the Movie module
         filepath = self.SongDatas[0].GetFilepath()
-        if type(filepath) == unicode:
+        if isinstance(filepath, str):
             filepath = filepath.encode(sys.getfilesystemencoding())
         self.Movie = pygame.movie.Movie(filepath)
-        self.Movie.set_display(manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1]))
-
+        self.Movie.set_display(
+            manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1])
+        )
 
     def doPlay(self):
         self.Movie.play()
@@ -159,25 +165,25 @@ class mpgPlayer(pykPlayer):
     def doRewind(self):
         self.Movie.stop()
         self.Movie.rewind()
-            
+
     # Get the movie length (in seconds).
     def GetLength(self):
         return self.Movie.get_length()
-        
+
     # Get the current time (in milliseconds).
     def GetPos(self):
-        return (self.Movie.get_time() * 1000)
+        return self.Movie.get_time() * 1000
 
     def SetupOptions(self):
-        """ Initialise and return optparse OptionParser object,
+        """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
-        application. """
+        application."""
 
-        parser = pykPlayer.SetupOptions(self, usage = "%prog [options] <mpg filename>")
+        parser = pykPlayer.SetupOptions(self, usage="%prog [options] <mpg filename>")
 
         # Remove irrelevant options.
-        parser.remove_option('--font-scale')
-        
+        parser.remove_option("--font-scale")
+
         return parser
 
     def shutdown(self):
@@ -190,17 +196,26 @@ class mpgPlayer(pykPlayer):
         pykPlayer.shutdown(self)
 
     def handleEvent(self, event):
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN and (event.mod & (pygame.KMOD_LSHIFT | pygame.KMOD_RSHIFT | pygame.KMOD_LMETA | pygame.KMOD_RMETA)):
+        if (
+            event.type == pygame.KEYDOWN
+            and event.key == pygame.K_RETURN
+            and (
+                event.mod
+                & (pygame.KMOD_LSHIFT | pygame.KMOD_RSHIFT | pygame.KMOD_LMETA | pygame.KMOD_RMETA)
+            )
+        ):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
             self.Close()
             return
-        
+
         pykPlayer.handleEvent(self, event)
 
     # Internal. Only called by the pykManager.
     def doResize(self, newSize):
         # Resize the screen.
-        self.Movie.set_display(manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1]))
+        self.Movie.set_display(
+            manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1])
+        )
 
     # Internal. Only called by the pykManager.
     def doResizeBegin(self):
@@ -217,21 +232,21 @@ class mpgPlayer(pykPlayer):
         if self.State == STATE_PLAYING:
             self.Movie.play()
 
-class externalPlayer(pykPlayer):
 
-    """ This class is used to invoke an external command and wait for
+class externalPlayer(pykPlayer):
+    """This class is used to invoke an external command and wait for
     it to finish.  It is usually used to play a video file using an
-    external player. """
-    
+    external player."""
+
     def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
-        instance, or it may be a filename. """
+        instance, or it may be a filename."""
 
         pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
 
         self.Movie = None
 
-        manager.setCpuSpeed('mpg')
+        manager.setCpuSpeed("mpg")
         manager.InitPlayer(self)
 
         # Close the audio and the display
@@ -242,9 +257,8 @@ class externalPlayer(pykPlayer):
         self.procReturnCode = None
         self.proc = None
 
-
     def doPlay(self):
-        if self.procReturnCode != None:
+        if self.procReturnCode is not None:
             # The movie is done.
             self.__stop()
 
@@ -265,7 +279,7 @@ class externalPlayer(pykPlayer):
         return pykPlayer.GetPos(self)
 
     def doStuff(self):
-        if self.procReturnCode != None:
+        if self.procReturnCode is not None:
             # The movie is done.
             self.__stop()
             self.Close()
@@ -276,29 +290,30 @@ class externalPlayer(pykPlayer):
         filepath = self.SongDatas[0].GetFilepath()
 
         external = manager.settings.MpgExternal
-        if '%' in external:
+        if "%" in external:
             # Assume the filename parameter is embedded in the string.
             cmd = external % {
-                'file' : filepath,
-                }
+                "file": filepath,
+            }
 
         elif external:
             # No parameter appears to be present; assume the program
             # accepts the filename as the only parameter.
             cmd = [external, filepath]
-            
+
         shell = True
         if env == ENV_WINDOWS:
             # Don't try to open the process under a "shell" in
             # Windows; that just breaks commands with spaces.
             shell = False
 
-        assert self.procReturnCode == None
+        if self.procReturnCode is not None:
+            raise RuntimeError("Process already running")
         sys.stdout.flush()
-        self.proc = subprocess.Popen(cmd, shell = shell)
+        self.proc = subprocess.Popen(cmd, shell=shell)
         if manager.settings.MpgExternalThreaded:
             # Wait for it to complete in a thread.
-            self.thread = threading.Thread(target = self.__runThread)
+            self.thread = threading.Thread(target=self.__runThread)
             self.thread.start()
         else:
             # Don't wait for it in a thread; wait for it here.
@@ -311,18 +326,16 @@ class externalPlayer(pykPlayer):
         self.proc = None
         self.procReturnCode = None
         self.thread = None
-        
 
     def __runThread(self):
-        """ This method runs in a sub-thread.  Its job is just to wait
-        for the process to finish. """
+        """This method runs in a sub-thread.  Its job is just to wait
+        for the process to finish."""
 
         try:
             self.procReturnCode = self.proc.wait()
         except OSError:
             self.procReturnCode = -1
-        
-        
+
 
 # Can be called from the command line with the MPG filepath as parameter
 def main():
@@ -330,9 +343,9 @@ def main():
     player.Play()
     manager.WaitForPlayer()
 
+
 if __name__ == "__main__":
     sys.exit(main())
-    #import profile
-    #result = profile.run('main()', 'pympg.prof')
-    #sys.exit(result)
-    
+    # import profile
+    # result = profile.run('main()', 'pympg.prof')
+    # sys.exit(result)

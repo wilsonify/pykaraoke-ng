@@ -4,7 +4,6 @@ Tests MIDI timing, byte parsing, and karaoke event structures
 without requiring pygame.
 """
 
-import pytest
 import struct
 
 
@@ -138,7 +137,6 @@ class TestMIDIMetaEvents:
 
     def test_meta_event_types(self):
         """Test common meta event type codes."""
-        META_SEQUENCE_NUMBER = 0x00
         META_TEXT = 0x01
         META_COPYRIGHT = 0x02
         META_TRACK_NAME = 0x03
@@ -146,13 +144,6 @@ class TestMIDIMetaEvents:
         META_LYRIC = 0x05
         META_MARKER = 0x06
         META_CUE_POINT = 0x07
-        META_CHANNEL_PREFIX = 0x20
-        META_END_OF_TRACK = 0x2F
-        META_SET_TEMPO = 0x51
-        META_SMPTE_OFFSET = 0x54
-        META_TIME_SIGNATURE = 0x58
-        META_KEY_SIGNATURE = 0x59
-        META_SEQUENCER_SPECIFIC = 0x7F
 
         # Text events are 0x01-0x0F
         text_events = [
@@ -241,7 +232,6 @@ class TestKARFileStructure:
 
         line_break = "/"
         paragraph_break = "\\"
-        info_prefix = "@"
 
         test_lyric = "Hello /World\\New verse"
         assert line_break in test_lyric

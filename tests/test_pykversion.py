@@ -1,6 +1,7 @@
 """Unit tests for pykversion module."""
 
 import re
+
 import pytest
 
 

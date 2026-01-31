@@ -20,36 +20,38 @@ by the modules pykar.py, pycdg.py, and pympg.py.  This collects
 together some common interfaces used by these different
 implementations for different types of Karaoke files."""
 
-from pykconstants import *
-from pykmanager import manager
-from pykenv import env
-import pygame
+import os
 import sys
 import types
-import os
+
+import pygame
+
+from pykconstants import *
+from pykenv import env
+from pykmanager import manager
+
 
 class pykPlayer:
-    def __init__(self, song, songDb,
-                 errorNotifyCallback = None, doneCallback = None,
-                 windowTitle = None):
+    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None, windowTitle=None):
         """The first parameter, song, may be either a pykdb.SongStruct
-        instance, or it may be a filename. """
+        instance, or it may be a filename."""
 
-        if songDb == None:
+        if songDb is None:
             import pykdb
+
             songDb = pykdb.globalSongDB
             songDb.LoadSettings(None)
         self.songDb = songDb
 
         # Set the global command-line options if they have not already
         # been set.
-        if manager.options == None:
+        if manager.options is None:
             parser = self.SetupOptions()
             (manager.options, args) = parser.parse_args()
             manager.ApplyOptions(self.songDb)
 
             if song is None:
-                if (len(args) != 1):
+                if len(args) != 1:
                     parser.print_help()
                     sys.exit(2)
                 song = args[0]
@@ -70,7 +72,7 @@ class pykPlayer:
         if isinstance(song, types.StringTypes):
             # We were given a filename.  Convert it to a SongStruct.
             song = self.songDb.makeSongStruct(song)
-        
+
         # Store the parameters
         self.Song = song
         self.WindowTitle = windowTitle
@@ -79,14 +81,14 @@ class pykPlayer:
         self.SongDatas = song.GetSongDatas()
         if windowTitle is None:
             self.WindowTitle = song.DisplayFilename
-            
+
         # Caller can register a callback by which we
         # print out error information, use stdout if none registered
         if errorNotifyCallback:
             self.ErrorNotifyCallback = errorNotifyCallback
         else:
             self.ErrorNotifyCallback = self.__defaultErrorPrint
-    
+
         # Caller can register a callback by which we
         # let them know when the song is finished
         if doneCallback:
@@ -128,8 +130,8 @@ class pykPlayer:
     # be exported from this class.
 
     def Validate(self):
-        """ Returns True if the karaoke file appears to be playable
-        and contains lyrics, or False otherwise. """
+        """Returns True if the karaoke file appears to be playable
+        and contains lyrics, or False otherwise."""
 
         return self.doValidate()
 
@@ -170,11 +172,11 @@ class pykPlayer:
     # the beginning
     def Stop(self):
         self.Rewind()
-            
+
     # Get the song length (in seconds)
     def GetLength(self):
         ErrorString = "GetLength() not supported"
-        self.ErrorNotifyCallback (ErrorString)
+        self.ErrorNotifyCallback(ErrorString)
         return None
 
     # Get the current time (in milliseconds).
@@ -184,12 +186,12 @@ class pykPlayer:
         else:
             return self.PlayTime
 
-    def SetupOptions(self, usage = None):
-        """ Initialise and return optparse OptionParser object,
+    def SetupOptions(self, usage=None):
+        """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
-        application. """
+        application."""
 
-        if usage == None:
+        if usage is None:
             usage = "%prog [options] <Karaoke file>"
 
         return manager.SetupOptions(usage, self.songDb)
@@ -204,50 +206,50 @@ class pykPlayer:
         self.State = STATE_CAPTURING
 
         self.dumpFrameRate = manager.options.dump_fps
-        assert self.dumpFrameRate
+        if not self.dumpFrameRate:
+            raise ValueError("dump_fps must be specified for frame dumping")
 
         filename = manager.options.dump
         base, ext = os.path.splitext(filename)
         ext_lower = ext.lower()
 
         self.dumpEncoder = None
-        if ext_lower == '.mpg':
+        if ext_lower == ".mpg":
             # Use pymedia to convert frames to an mpeg2 stream
             # on-the-fly.
-            import pymedia
             import pymedia.video.vcodec as vcodec
 
-            self.dumpFile = open(filename, 'wb')
+            self.dumpFile = open(filename, "wb")
             frameRate = int(self.dumpFrameRate * 100 + 0.5)
             self.dumpFrameRate = float(frameRate) / 100.0
-            
-            params= { \
-              'type': 0,
-              'gop_size': 12,
-              'frame_rate_base': 125,
-              'max_b_frames': 0,
-              'height': manager.options.size_y,
-              'width': manager.options.size_x,
-              'frame_rate': frameRate,
-              'deinterlace': 0,
-              'bitrate': 9800000,
-              'id': vcodec.getCodecID('mpeg2video')
+
+            params = {
+                "type": 0,
+                "gop_size": 12,
+                "frame_rate_base": 125,
+                "max_b_frames": 0,
+                "height": manager.options.size_y,
+                "width": manager.options.size_x,
+                "frame_rate": frameRate,
+                "deinterlace": 0,
+                "bitrate": 9800000,
+                "id": vcodec.getCodecID("mpeg2video"),
             }
-            self.dumpEncoder = vcodec.Encoder( params )
+            self.dumpEncoder = vcodec.Encoder(params)
             return
-            
+
         # Don't dump a video file; dump a sequence of frames instead.
-        self.dumpPPM = (ext_lower == '.ppm' or ext_lower == '.pnm')
+        self.dumpPPM = ext_lower == ".ppm" or ext_lower == ".pnm"
         self.dumpAppend = False
-        
+
         # Convert the filename to a pattern.
-        if '#' in filename:
-            hash = filename.index('#')
+        if "#" in filename:
+            hash = filename.index("#")
             end = hash
-            while end < len(filename) and filename[end] == '#':
+            while end < len(filename) and filename[end] == "#":
                 end += 1
             count = end - hash
-            filename = filename[:hash] + '%0' + str(count) + 'd' + filename[end:]
+            filename = filename[:hash] + "%0" + str(count) + "d" + filename[end:]
         else:
             # There's no hash in the filename.
             if self.dumpPPM:
@@ -260,8 +262,8 @@ class pykPlayer:
                     pass
             else:
                 # Implicitly append a frame number.
-                filename = base + '%04d' + ext
-            
+                filename = base + "%04d" + ext
+
         self.dumpFilename = filename
 
     def doFrameDump(self):
@@ -270,8 +272,8 @@ class pykPlayer:
 
             ss = pygame.image.tostring(manager.surface, "RGB")
             bmpFrame = vcodec.VFrame(
-                vcodec.formats.PIX_FMT_RGB24,
-                manager.surface.get_size(), (ss,None,None))
+                vcodec.formats.PIX_FMT_RGB24, manager.surface.get_size(), (ss, None, None)
+            )
             yuvFrame = bmpFrame.convert(vcodec.formats.PIX_FMT_YUV420P)
             d = self.dumpEncoder.encode(yuvFrame)
             self.dumpFile.write(d.data)
@@ -281,34 +283,33 @@ class pykPlayer:
             filename = self.dumpFilename
         else:
             filename = self.dumpFilename % self.PlayFrame
-            print filename
+            print(filename)
 
         if self.dumpPPM:
             # Dump a PPM file.  We do PPM by hand since pygame
             # doesn't support it directly, but it's so easy and
             # useful.
-            
+
             w, h = manager.surface.get_size()
             if self.dumpAppend:
-                f = open(filename, 'ab')
+                f = open(filename, "ab")
             else:
-                f = open(filename, 'wb')
-            f.write('P6\n%s %s 255\n' % (w, h))
-            f.write(pygame.image.tostring(manager.surface, 'RGB'))
+                f = open(filename, "wb")
+            f.write("P6\n%s %s 255\n" % (w, h))
+            f.write(pygame.image.tostring(manager.surface, "RGB"))
 
         else:
             # Ask pygame to dump the file.  We trust that pygame knows
             # how to store an image in the requested format.
             pygame.image.save(manager.surface, filename)
-            
 
     def doValidate(self):
         return True
-    
+
     def doPlay(self):
         pass
 
-    def doPause(self): 
+    def doPause(self):
         pass
 
     def doUnpause(self):
@@ -324,7 +325,7 @@ class pykPlayer:
         # pygame window was quit
         if self.State == STATE_CLOSING:
             if manager.display:
-                manager.display.fill((0,0,0))
+                manager.display.fill((0, 0, 0))
                 pygame.display.flip()
             self.shutdown()
 
@@ -334,9 +335,8 @@ class pykPlayer:
 
             # Set the frame time for the next frame.
             self.PlayTime = 1000.0 * self.PlayFrame / self.dumpFrameRate
-            
+
         self.PlayFrame += 1
-        
 
     def doResize(self, newSize):
         # This will be called internally whenever the window is
@@ -374,27 +374,45 @@ class pykPlayer:
             # Use control-left/right arrow to offset the current
             # graphics time by 1/4 sec.  Use control-down arrow to
             # restore them to sync.
-            elif self.State == STATE_PLAYING and event.key == pygame.K_RIGHT and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
+            elif (
+                self.State == STATE_PLAYING
+                and event.key == pygame.K_RIGHT
+                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
+            ):
                 manager.settings.SyncDelayMs += 250
-                print "sync %s" % manager.settings.SyncDelayMs
-            elif self.State == STATE_PLAYING and event.key == pygame.K_LEFT and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
+                print("sync %s" % manager.settings.SyncDelayMs)
+            elif (
+                self.State == STATE_PLAYING
+                and event.key == pygame.K_LEFT
+                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
+            ):
                 manager.settings.SyncDelayMs -= 250
-                print "sync %s" % manager.settings.SyncDelayMs
-            elif self.State == STATE_PLAYING and event.key == pygame.K_DOWN and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
+                print("sync %s" % manager.settings.SyncDelayMs)
+            elif (
+                self.State == STATE_PLAYING
+                and event.key == pygame.K_DOWN
+                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
+            ):
                 manager.settings.SyncDelayMs = 0
-                print "sync %s" % manager.settings.SyncDelayMs
+                print("sync %s" % manager.settings.SyncDelayMs)
 
             if self.SupportsFontZoom:
-                if event.key == pygame.K_PLUS or event.key == pygame.K_EQUALS or \
-                   event.key == pygame.K_KP_PLUS:
-                    manager.ZoomFont(1.0/0.9)
-                elif event.key == pygame.K_MINUS or event.key == pygame.K_UNDERSCORE or \
-                   event.key == pygame.K_KP_MINUS:
+                if (
+                    event.key == pygame.K_PLUS
+                    or event.key == pygame.K_EQUALS
+                    or event.key == pygame.K_KP_PLUS
+                ):
+                    manager.ZoomFont(1.0 / 0.9)
+                elif (
+                    event.key == pygame.K_MINUS
+                    or event.key == pygame.K_UNDERSCORE
+                    or event.key == pygame.K_KP_MINUS
+                ):
                     manager.ZoomFont(0.9)
 
         elif event.type == pygame.QUIT:
             self.Close()
-            
+
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONDOWN:
             if event.button == GP2X_BUTTON_SELECT:
                 self.Close()
@@ -407,10 +425,10 @@ class pykPlayer:
 
             if self.SupportsFontZoom:
                 if event.button == GP2X_BUTTON_RIGHT and self.ShoulderLHeld:
-                    manager.ZoomFont(1.0/0.9)
+                    manager.ZoomFont(1.0 / 0.9)
                 elif event.button == GP2X_BUTTON_LEFT and self.ShoulderLHeld:
                     manager.ZoomFont(0.9)
-            
+
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONUP:
             if event.button == GP2X_BUTTON_L:
                 self.ShoulderLHeld = False
@@ -424,16 +442,14 @@ class pykPlayer:
         # If the caller gave us a callback, let them know we're finished
         if self.State != STATE_CLOSED:
             self.State = STATE_CLOSED
-            if self.SongFinishedCallback != None:
+            if self.SongFinishedCallback is not None:
                 self.SongFinishedCallback()
 
-
     def __defaultErrorPrint(self, ErrorString):
-        print (ErrorString)
-
+        print(ErrorString)
 
     def findPygameFont(self, fontData, fontSize):
-        """ Returns a pygame.Font selected by this data. """
+        """Returns a pygame.Font selected by this data."""
         if not fontData.size:
             # The font names a specific filename.
             filename = fontData.name
@@ -444,5 +460,5 @@ class pykPlayer:
         # The font names a system font.
         pointSize = int(fontData.size * fontSize / 10.0 + 0.5)
         return pygame.font.SysFont(
-            fontData.name, pointSize, bold = fontData.bold,
-            italic = fontData.italic)
+            fontData.name, pointSize, bold=fontData.bold, italic=fontData.italic
+        )

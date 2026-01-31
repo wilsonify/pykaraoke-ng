@@ -1,21 +1,19 @@
 """Unit tests for pykconstants module."""
 
-import pytest
-
 
 class TestEnvironmentConstants:
     """Test environment type constants."""
 
     def test_environment_constants_are_unique(self):
         """Environment constants should have unique values."""
-        from pykconstants import ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN
+        from pykconstants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
 
         env_values = [ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN]
         assert len(env_values) == len(set(env_values)), "Environment constants must be unique"
 
     def test_environment_constants_are_integers(self):
         """Environment constants should be integers."""
-        from pykconstants import ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN
+        from pykconstants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
 
         for const in [ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN]:
             assert isinstance(const, int), f"Expected int, got {type(const)}"
@@ -27,13 +25,13 @@ class TestStateConstants:
     def test_state_constants_are_unique(self):
         """State constants should have unique values."""
         from pykconstants import (
-            STATE_INIT,
-            STATE_PLAYING,
-            STATE_PAUSED,
-            STATE_NOT_PLAYING,
-            STATE_CLOSING,
-            STATE_CLOSED,
             STATE_CAPTURING,
+            STATE_CLOSED,
+            STATE_CLOSING,
+            STATE_INIT,
+            STATE_NOT_PLAYING,
+            STATE_PAUSED,
+            STATE_PLAYING,
         )
 
         state_values = [
@@ -50,13 +48,13 @@ class TestStateConstants:
     def test_state_constants_are_integers(self):
         """State constants should be integers."""
         from pykconstants import (
-            STATE_INIT,
-            STATE_PLAYING,
-            STATE_PAUSED,
-            STATE_NOT_PLAYING,
-            STATE_CLOSING,
-            STATE_CLOSED,
             STATE_CAPTURING,
+            STATE_CLOSED,
+            STATE_CLOSING,
+            STATE_INIT,
+            STATE_NOT_PLAYING,
+            STATE_PAUSED,
+            STATE_PLAYING,
         )
 
         for const in [
@@ -83,25 +81,25 @@ class TestGP2XButtonConstants:
     def test_gp2x_button_constants_defined(self):
         """All GP2X button constants should be defined."""
         from pykconstants import (
-            GP2X_BUTTON_UP,
-            GP2X_BUTTON_DOWN,
-            GP2X_BUTTON_LEFT,
-            GP2X_BUTTON_RIGHT,
-            GP2X_BUTTON_UPLEFT,
-            GP2X_BUTTON_UPRIGHT,
-            GP2X_BUTTON_DOWNLEFT,
-            GP2X_BUTTON_DOWNRIGHT,
-            GP2X_BUTTON_CLICK,
             GP2X_BUTTON_A,
             GP2X_BUTTON_B,
+            GP2X_BUTTON_CLICK,
+            GP2X_BUTTON_DOWN,
+            GP2X_BUTTON_DOWNLEFT,
+            GP2X_BUTTON_DOWNRIGHT,
+            GP2X_BUTTON_L,
+            GP2X_BUTTON_LEFT,
+            GP2X_BUTTON_R,
+            GP2X_BUTTON_RIGHT,
+            GP2X_BUTTON_SELECT,
+            GP2X_BUTTON_START,
+            GP2X_BUTTON_UP,
+            GP2X_BUTTON_UPLEFT,
+            GP2X_BUTTON_UPRIGHT,
+            GP2X_BUTTON_VOLDOWN,
+            GP2X_BUTTON_VOLUP,
             GP2X_BUTTON_X,
             GP2X_BUTTON_Y,
-            GP2X_BUTTON_L,
-            GP2X_BUTTON_R,
-            GP2X_BUTTON_START,
-            GP2X_BUTTON_SELECT,
-            GP2X_BUTTON_VOLUP,
-            GP2X_BUTTON_VOLDOWN,
         )
 
         # Just verify they're all integers

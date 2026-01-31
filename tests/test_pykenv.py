@@ -1,6 +1,7 @@
 """Unit tests for pykenv module - environment detection."""
 
 import os
+
 import pytest
 
 
@@ -15,16 +16,16 @@ class TestEnvironmentDetection:
 
     def test_env_is_known_constant(self):
         """The env should be one of the known environment constants."""
+        from pykconstants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
         from pykenv import env
-        from pykconstants import ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN
 
         known_envs = {ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN}
         assert env in known_envs, f"env={env} is not a known environment constant"
 
     def test_env_matches_os_name(self):
         """The env should match the current OS name."""
+        from pykconstants import ENV_OSX, ENV_POSIX, ENV_WINDOWS
         from pykenv import env
-        from pykconstants import ENV_WINDOWS, ENV_POSIX, ENV_OSX
 
         if os.name == "nt":
             assert env == ENV_WINDOWS, "On Windows, env should be ENV_WINDOWS"
@@ -47,8 +48,8 @@ class TestPlatformSpecificDetection:
     @pytest.mark.skipif(os.name != "posix", reason="POSIX-only test")
     def test_posix_detection(self):
         """On POSIX systems, should detect correctly."""
+        from pykconstants import ENV_OSX, ENV_POSIX
         from pykenv import env
-        from pykconstants import ENV_POSIX, ENV_OSX, ENV_GP2X
 
         # GP2X is a specific embedded Linux device, unlikely on modern systems
         assert env in {ENV_POSIX, ENV_OSX}, "POSIX system should be POSIX or OSX"
@@ -56,8 +57,8 @@ class TestPlatformSpecificDetection:
     @pytest.mark.skipif(os.name != "nt", reason="Windows-only test")
     def test_windows_detection(self):
         """On Windows systems, should detect ENV_WINDOWS."""
-        from pykenv import env
         from pykconstants import ENV_WINDOWS
+        from pykenv import env
 
         assert env == ENV_WINDOWS, "Windows system should be ENV_WINDOWS"
 
@@ -67,8 +68,8 @@ class TestPlatformSpecificDetection:
     )
     def test_osx_detection(self):
         """On macOS systems, should detect ENV_OSX."""
-        from pykenv import env
         from pykconstants import ENV_OSX
+        from pykenv import env
 
         assert env == ENV_OSX, "macOS system should be ENV_OSX"
 
@@ -78,8 +79,8 @@ class TestPlatformSpecificDetection:
     )
     def test_linux_detection(self):
         """On Linux systems (non-GP2X), should detect ENV_POSIX."""
-        from pykenv import env
         from pykconstants import ENV_POSIX
+        from pykenv import env
 
         # Unless running on actual GP2X hardware
         if os.uname().nodename != "gp2x":

@@ -4,9 +4,6 @@ These tests verify the filename parsing logic used to extract
 artist, title, disc, and track information from karaoke file names.
 """
 
-import pytest
-from unittest.mock import MagicMock
-
 
 class MockSettings:
     """Mock settings object for testing without pygame dependencies."""
@@ -268,7 +265,7 @@ class TestFilepathNormalization:
 
     def test_basename_extraction_windows(self):
         """Test extracting basename from Windows paths.
-        
+
         Note: os.path.basename behavior differs between platforms.
         On POSIX, backslashes are not treated as path separators.
         """
@@ -278,14 +275,14 @@ class TestFilepathNormalization:
         # On Windows, this would work correctly
         # On POSIX, we need to handle Windows paths differently
         path = "C:\\Music\\song.cdg"
-        
+
         # Cross-platform way to get basename from Windows path
         if sys.platform != "win32":
             # On POSIX, split on backslash manually for Windows paths
             result = path.split("\\")[-1]
         else:
             result = os.path.basename(path)
-        
+
         assert result == "song.cdg"
 
     def test_tab_completion_fix(self):
