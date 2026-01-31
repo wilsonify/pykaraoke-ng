@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PyKaraoke NG</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="app-header">
+            <h1>🎤 PyKaraoke NG</h1>
+            <div class="header-controls">
+                <button id="settings-btn" class="btn btn-secondary">⚙️ Settings</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-container">
+            <!-- Left Panel: Library & Search -->
+            <div class="left-panel">
+                <div class="search-section">
+                    <h2>Library</h2>
+                    <div class="search-box">
+                        <input type="text" id="search-input" placeholder="Search songs...">
+                        <button id="search-btn" class="btn btn-primary">Search</button>
+                    </div>
+                    <div class="library-controls">
+                        <button id="add-folder-btn" class="btn btn-secondary">Add Folder</button>
+                        <button id="scan-library-btn" class="btn btn-secondary">Scan Library</button>
+                    </div>
+                </div>
+                
+                <div class="search-results">
+                    <h3>Results</h3>
+                    <div id="results-list" class="song-list">
+                        <div class="no-results">Search for songs to see results</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Playlist & Player -->
+            <div class="right-panel">
+                <!-- Player Controls -->
+                <div class="player-section">
+                    <h2>Now Playing</h2>
+                    <div class="now-playing-info">
+                        <div id="current-song-title" class="song-title">No song loaded</div>
+                        <div id="current-song-artist" class="song-artist"></div>
+                    </div>
+                    
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                        <div class="time-display">
+                            <span id="time-current">0:00</span>
+                            <span id="time-total">0:00</span>
+                        </div>
+                    </div>
+                    
+                    <div class="player-controls">
+                        <button id="prev-btn" class="btn-control">⏮</button>
+                        <button id="play-btn" class="btn-control btn-play">▶️</button>
+                        <button id="pause-btn" class="btn-control" style="display:none;">⏸</button>
+                        <button id="stop-btn" class="btn-control">⏹</button>
+                        <button id="next-btn" class="btn-control">⏭</button>
+                    </div>
+                    
+                    <div class="volume-control">
+                        <span>🔊</span>
+                        <input type="range" id="volume-slider" min="0" max="100" value="75">
+                        <span id="volume-value">75%</span>
+                    </div>
+                </div>
+
+                <!-- Playlist -->
+                <div class="playlist-section">
+                    <h3>Playlist</h3>
+                    <div class="playlist-controls">
+                        <button id="clear-playlist-btn" class="btn btn-secondary">Clear All</button>
+                    </div>
+                    <div id="playlist" class="song-list">
+                        <div class="no-results">Playlist is empty</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <footer class="status-bar">
+            <div id="status-message">Ready</div>
+            <div id="backend-status">Backend: Not Connected</div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

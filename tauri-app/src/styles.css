@@ -1,0 +1,348 @@
+:root {
+    --primary-color: #6366f1;
+    --secondary-color: #8b5cf6;
+    --bg-dark: #1e1e2e;
+    --bg-light: #2a2a3e;
+    --bg-lighter: #363650;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --border-color: #444;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Header */
+.app-header {
+    background-color: var(--bg-light);
+    padding: 1rem 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.app-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* Main Container */
+.main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.left-panel, .right-panel {
+    padding: 1.5rem;
+    overflow-y: auto;
+}
+
+.left-panel {
+    flex: 1;
+    background-color: var(--bg-dark);
+    border-right: 2px solid var(--border-color);
+}
+
+.right-panel {
+    flex: 1;
+    background-color: var(--bg-light);
+}
+
+/* Search Section */
+.search-section h2 {
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+
+.search-box {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.search-box input {
+    flex: 1;
+    padding: 0.5rem;
+    background-color: var(--bg-lighter);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+}
+
+.library-controls {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Buttons */
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #5558e3;
+}
+
+.btn-secondary {
+    background-color: var(--bg-lighter);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background-color: #454560;
+}
+
+.btn-control {
+    background-color: var(--bg-lighter);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+}
+
+.btn-control:hover {
+    background-color: #454560;
+    transform: scale(1.05);
+}
+
+.btn-play {
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 1.5rem;
+    padding: 1rem 1.25rem;
+}
+
+/* Song List */
+.song-list {
+    background-color: var(--bg-lighter);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.song-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.song-item:hover {
+    background-color: #454560;
+}
+
+.song-item:last-child {
+    border-bottom: none;
+}
+
+.song-item.active {
+    background-color: var(--primary-color);
+}
+
+.song-item-title {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.song-item-artist {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.no-results {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+/* Player Section */
+.player-section {
+    background-color: var(--bg-dark);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.player-section h2 {
+    margin-bottom: 1rem;
+}
+
+.now-playing-info {
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.song-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.song-artist {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Progress Bar */
+.progress-bar {
+    margin-bottom: 1rem;
+}
+
+.progress-bar > div:first-child {
+    height: 6px;
+    background-color: var(--bg-lighter);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: var(--primary-color);
+    width: 0%;
+    transition: width 0.3s;
+}
+
+.time-display {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Player Controls */
+.player-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Volume Control */
+.volume-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.volume-control input[type="range"] {
+    flex: 1;
+}
+
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-lighter);
+    border-radius: 3px;
+    height: 6px;
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--primary-color);
+    cursor: pointer;
+    border-radius: 50%;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--primary-color);
+    cursor: pointer;
+    border-radius: 50%;
+    border: none;
+}
+
+/* Playlist Section */
+.playlist-section {
+    background-color: var(--bg-dark);
+    padding: 1.5rem;
+    border-radius: 8px;
+}
+
+.playlist-section h3 {
+    margin-bottom: 1rem;
+}
+
+.playlist-controls {
+    margin-bottom: 1rem;
+}
+
+/* Status Bar */
+.status-bar {
+    background-color: var(--bg-light);
+    padding: 0.5rem 1.5rem;
+    border-top: 2px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+#backend-status.connected {
+    color: var(--success-color);
+}
+
+#backend-status.disconnected {
+    color: var(--danger-color);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-lighter);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
