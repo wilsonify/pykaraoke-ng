@@ -307,7 +307,8 @@ class externalPlayer(pykPlayer):
             # Windows; that just breaks commands with spaces.
             shell = False
 
-        assert self.procReturnCode is None
+        if self.procReturnCode is not None:
+            raise RuntimeError("Process already running")
         sys.stdout.flush()
         self.proc = subprocess.Popen(cmd, shell=shell)
         if manager.settings.MpgExternalThreaded:

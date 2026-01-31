@@ -1035,15 +1035,20 @@ class SongDB:
             return os.path.join(dir, "pykaraoke")
 
         if env != ENV_WINDOWS:
-            if os.path.exists("/tmp"):
-                return "/tmp/pykaraoke"
+            # Use tempfile module for secure temp directory
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            return os.path.join(temp_dir, "pykaraoke")
         else:
             try:
                 import win32api
 
                 return os.path.join(win32api.GetTempPath(), "pykaraoke")
-            except Exception:
-                pass
+            except ImportError:
+                # win32api not available, fallback to tempfile
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                return os.path.join(temp_dir, "pykaraoke")
 
         # If we can't find a good temp directory, use our save directory.
         return self.getSaveDirectory()
@@ -1058,7 +1063,8 @@ class SongDB:
                 import wx
 
                 return wx.GetHomeDir()
-            except Exception:
+            except (ImportError, AttributeError):
+                # wx not available or method not found
                 pass
 
             # Second attempt: look in $HOME
@@ -1178,9 +1184,11 @@ class SongDB:
                     continue
 
                 try:
-                    value = eval(value)
-                except Exception:
-                    # Ignore anything that isn't valid Python.
+                    # Use ast.literal_eval for safe evaluation of Python literals
+                    import ast
+                    value = ast.literal_eval(value)
+                except (ValueError, SyntaxError):
+                    # Ignore anything that isn't valid Python literal.
                     print("Invalid value for %s" % (key))
                     continue
 
@@ -1216,7 +1224,8 @@ class SongDB:
             loaddb = None
             try:
                 loaddb = cPickle.load(file)
-            except Exception:
+            except (EOFError, cPickle.UnpicklingError, AttributeError):
+                # Corrupt or incompatible database file, will create new one
                 pass
             if getattr(loaddb, "Version", None) == DATABASE_VERSION:
                 self.FullSongList = loaddb.FullSongList
@@ -1665,7 +1674,7 @@ class SongDB:
                     full_path = os.path.join(self.TempDir, item)
                     try:
                         os.unlink(full_path)
-                    except Exception:
+                    except OSError:
                         # The unlink can fail on Windows due to a bug in
                         # pygame.mixer.music which does not release the
                         # file handle until you load another music file.

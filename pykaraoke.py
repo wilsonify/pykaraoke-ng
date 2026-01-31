@@ -1069,14 +1069,16 @@ class ConfigWindow(wx.Frame):
                     pos_x = int(self.PlayerPositionX.GetValue())
                     pos_y = int(self.PlayerPositionY.GetValue())
                     settings.PlayerPosition = (pos_x, pos_y)
-                except Exception:
+                except (ValueError, AttributeError):
+                    # Invalid input, keep default position
                     pass
 
         try:
             size_x = int(self.PlayerSizeX.GetValue())
             size_y = int(self.PlayerSizeY.GetValue())
             settings.PlayerSize = (size_x, size_y)
-        except Exception:
+        except (ValueError, AttributeError):
+            # Invalid input, keep default size
             pass
 
         settings.NumChannels = 1
@@ -1088,25 +1090,29 @@ class ConfigWindow(wx.Frame):
         try:
             rate = int(self.SampleRate.GetValue())
             settings.SampleRate = rate
-        except Exception:
+        except (ValueError, AttributeError):
+            # Invalid input, keep default sample rate
             pass
 
         try:
             rate = int(self.MIDISampleRate.GetValue())
             settings.MIDISampleRate = rate
-        except Exception:
+        except (ValueError, AttributeError):
+            # Invalid input, keep default MIDI sample rate
             pass
 
         try:
             buffer = int(self.BufferSize.GetValue())
             settings.BufferMs = buffer
-        except Exception:
+        except (ValueError, AttributeError):
+            # Invalid input, keep default buffer size
             pass
 
         try:
             sync = int(self.SyncDelay.GetValue())
             settings.SyncDelayMs = sync
-        except Exception:
+        except (ValueError, AttributeError):
+            # Invalid input, keep default sync delay
             pass
 
         settings.KarEncoding = self.KarEncoding.GetValue()
@@ -3270,7 +3276,8 @@ class SongListPrintout(wx.Printout):
         # Give extra clearance for the footer.
         self.y2 -= self.lineHeight
 
-        assert self.y2 > self.y1
+        if self.y2 <= self.y1:
+            raise ValueError("Insufficient vertical space for printing")
 
         # Divide the space into columns.
         w = self.x2 - self.x1
@@ -3290,7 +3297,8 @@ class SongListPrintout(wx.Printout):
         self.pageHeight = self.y2 - self.y1 - 2 * self.logUnitsMM
 
         self.linesPerPage = int(self.pageHeight / self.lineHeight)
-        assert self.linesPerPage > 0
+        if self.linesPerPage <= 0:
+            raise ValueError("Insufficient space for at least one line per page")
 
         # Normalize so we don't end up with a little extra whitespace
         # on the bottom

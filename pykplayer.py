@@ -206,7 +206,8 @@ class pykPlayer:
         self.State = STATE_CAPTURING
 
         self.dumpFrameRate = manager.options.dump_fps
-        assert self.dumpFrameRate
+        if not self.dumpFrameRate:
+            raise ValueError("dump_fps must be specified for frame dumping")
 
         filename = manager.options.dump
         base, ext = os.path.splitext(filename)
