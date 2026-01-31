@@ -81,19 +81,18 @@ requires = ["hatchling>=1.21.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["src/pykaraoke"]
 exclude = [
     "tests/",
     "scripts/",
     "install/",
+    "deploy/",
     "icons/*.xcf",
     "*.c",
     ".git/",
     ".venv/",
     "__pycache__/",
     "*.pyc",
-    "electron/",
-    "k8s/",
 ]
 
 [tool.hatch.build.targets.sdist]
