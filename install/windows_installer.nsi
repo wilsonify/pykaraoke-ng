@@ -64,7 +64,7 @@ Section "" ;No components page, name is not important
   CreateDirectory "$SMPROGRAMS\$STARTMENU_FOLDER"
   CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\PyKaraoke.lnk" "$INSTDIR\pykaraoke.exe"
   CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\PyKaraoke Mini.lnk" "$INSTDIR\pykaraoke_mini.exe"
-  WriteINIStr "$SMPROGRAMS\$STARTMENU_FOLDER\PyKaraoke on the Web.url" "InternetShortcut" "URL" "http://www.kibosh.org/pykaraoke/"
+  WriteINIStr "$SMPROGRAMS\$STARTMENU_FOLDER\PyKaraoke on the Web.url" "InternetShortcut" "URL" "https://www.kibosh.org/pykaraoke/"
 
 SectionEnd ; end the section
 

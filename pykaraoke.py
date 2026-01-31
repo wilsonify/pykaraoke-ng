@@ -3798,7 +3798,7 @@ class PyKaraokeWindow(wx.Frame):
             abtnfAbout.SetName("PyKaraoke")
             # abtnfAbout.AddTranslator("N/A")
             abtnfAbout.SetVersion(pykversion.PYKARAOKE_VERSION_STRING)
-            abtnfAbout.SetWebSite("http://www.kibosh.org/pykaraoke/")
+            abtnfAbout.SetWebSite("https://www.kibosh.org/pykaraoke/")
             wx.AboutBox(abtnfAbout)
 
     def OnPrintSongList(self, evt):

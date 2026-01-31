@@ -5,7 +5,7 @@ Release:      pykaraoke v0.7.5
 Date:         26/08/2011
 Author:       Kelvin Lawson <kelvinl@users.sourceforge.net>
 License:      LGPL
-Website:      http://www.kibosh.org/pykaraoke/
+Website:      https://www.kibosh.org/pykaraoke/
 Contributors: John Schneiderman <JohnMS@member.fsf.org>
               William Ferrell <willfe@gmail.com>
               David Rose <pykar@ddrose.com>

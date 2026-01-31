@@ -105,7 +105,7 @@ setupArgs = {
     "description": "PyKaraoke = CD+G/MPEG/KAR Karaoke Player",
     "maintainer": "Kelvin Lawson",
     "maintainer_email": "kelvin@kibosh.org",
-    "url": "http://www.kibosh.org/pykaraoke",
+    "url": "https://www.kibosh.org/pykaraoke",
     "license": "LGPL",
     "long_description": "PyKaraoke - CD+G/MPEG/KAR Karaoke Player",
     "py_modules": [
