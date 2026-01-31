@@ -4,7 +4,6 @@ Tests the CDG format constants and packet structures without requiring pygame.
 """
 
 
-
 class TestCDGConstants:
     """Test CDG format constants."""
 
@@ -135,8 +134,6 @@ class TestCDGColourTable:
     def test_colour_table_split(self):
         """Test that colour table loads are split correctly."""
         # CDG loads colors in two instructions
-        CDG_INST_LOAD_COL_TBL_0_7 = 30  # Colors 0-7
-        CDG_INST_LOAD_COL_TBL_8_15 = 31  # Colors 8-15
 
         # Each instruction loads 8 colors
         colors_per_instruction = 8
@@ -162,10 +159,6 @@ class TestCDGPacketStructure:
         # Bytes 4-19: Data (16 bytes)
         # Bytes 20-23: Parity P
 
-        command_offset = 0
-        instruction_offset = 1
-        parity_q_offset = 2
-        parity_q_length = 2
         data_offset = 4
         data_length = 16
         parity_p_offset = 20

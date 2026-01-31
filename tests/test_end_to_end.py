@@ -19,8 +19,7 @@ def _python2_can_import(python2_path, module_name):
         subprocess.run(
             [python2_path, "-c", f"import {module_name}"],
             check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
         )
         return True
@@ -88,8 +87,7 @@ print(report_path)
     result = subprocess.run(
         [env["PYTHON2"], str(helper)],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         env=env,
     )

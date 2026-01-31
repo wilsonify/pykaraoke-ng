@@ -1,7 +1,6 @@
 """Unit tests for pykconstants module."""
 
 
-
 class TestEnvironmentConstants:
     """Test environment type constants."""
 

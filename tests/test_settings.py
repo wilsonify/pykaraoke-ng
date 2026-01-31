@@ -89,10 +89,7 @@ class TestEncodingSettings:
         """Test default filesystem encoding."""
         import os
 
-        if os.name == "nt":
-            default = "cp1252"
-        else:
-            default = "iso-8859-1"
+        default = "cp1252" if os.name == "nt" else "iso-8859-1"
 
         assert default in ["cp1252", "iso-8859-1", "utf-8"]
 
@@ -143,7 +140,6 @@ class TestSampleRateSettings:
 
     def test_sample_rates_are_divisible(self):
         """Test that sample rates have nice divisibility properties."""
-        rates = [48000, 44100, 22050, 11025]
 
         # 44100 family
         assert 44100 // 22050 == 2

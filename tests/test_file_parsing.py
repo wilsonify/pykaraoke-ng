@@ -5,7 +5,6 @@ artist, title, disc, and track information from karaoke file names.
 """
 
 
-
 class MockSettings:
     """Mock settings object for testing without pygame dependencies."""
 
@@ -266,7 +265,7 @@ class TestFilepathNormalization:
 
     def test_basename_extraction_windows(self):
         """Test extracting basename from Windows paths.
-        
+
         Note: os.path.basename behavior differs between platforms.
         On POSIX, backslashes are not treated as path separators.
         """

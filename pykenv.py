@@ -15,7 +15,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-""" This module guesses the execution environment of the application. """
+"""This module guesses the execution environment of the application."""
 
 import os
 
@@ -26,11 +26,11 @@ if os.name == "posix":
     (uname, host, release, version, machine) = os.uname()
     if host == "gp2x":
         env = ENV_GP2X
-    elif (uname.lower()[:6] == "darwin"):
+    elif uname.lower()[:6] == "darwin":
         env = ENV_OSX
     else:
         env = ENV_POSIX
 elif os.name == "nt":
     env = ENV_WINDOWS
 else:
-	env = ENV_UNKNOWN
+    env = ENV_UNKNOWN

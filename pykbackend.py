@@ -17,6 +17,7 @@ Architecture:
 - Can be used with Tauri, Electron, or web frontends
 """
 
+import contextlib
 import json
 import logging
 import sys
@@ -36,24 +37,28 @@ try:
     from pykconstants import *
     from pykmanager import manager
     from pykplayer import pykPlayer
+
     IMPORTS_AVAILABLE = True
 except (ImportError, SyntaxError) as e:
     # Backend can still be imported for testing/documentation
     # but won't function without these dependencies
     IMPORTS_AVAILABLE = False
     import warnings
-    warnings.warn(f"PyKaraoke dependencies not available: {e}. Backend will not function.")
+
+    warnings.warn(
+        f"PyKaraoke dependencies not available: {e}. Backend will not function.", stacklevel=2
+    )
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 class BackendState(Enum):
     """Playback state enumeration"""
+
     IDLE = "idle"
     PLAYING = "playing"
     PAUSED = "paused"
@@ -65,7 +70,7 @@ class BackendState(Enum):
 class PyKaraokeBackend:
     """
     Main backend service class that manages playback, library, and state.
-    
+
     Provides a command-based API for controlling karaoke playback without
     requiring any UI dependencies.
     """
@@ -78,10 +83,10 @@ class PyKaraokeBackend:
 
         self.state = BackendState.IDLE
         self.current_player: Any | None = None  # pykPlayer when available
-        self.current_song: Any | None = None    # pykdb.SongStruct when available
-        self.playlist: list[Any] = []              # List[pykdb.SongStruct] when available
+        self.current_song: Any | None = None  # pykdb.SongStruct when available
+        self.playlist: list[Any] = []  # List[pykdb.SongStruct] when available
         self.playlist_index: int = -1
-        self.song_db: Any | None = None         # pykdb.SongDatabase when available
+        self.song_db: Any | None = None  # pykdb.SongDatabase when available
         self.volume: float = 0.75
         self.position_ms: int = 0
         self.duration_ms: int = 0
@@ -111,11 +116,7 @@ class PyKaraokeBackend:
 
     def _emit_event(self, event_type: str, data: dict[str, Any] | None = None):
         """Emit an event to the frontend"""
-        event = {
-            "type": event_type,
-            "timestamp": time.time(),
-            "data": data or {}
-        }
+        event = {"type": event_type, "timestamp": time.time(), "data": data or {}}
         if self.event_callback:
             try:
                 self.event_callback(event)
@@ -129,10 +130,10 @@ class PyKaraokeBackend:
     def handle_command(self, command: dict[str, Any]) -> dict[str, Any]:
         """
         Handle a command from the frontend.
-        
+
         Args:
             command: Dictionary with 'action' and optional parameters
-            
+
         Returns:
             Response dictionary with status and data
         """
@@ -180,16 +181,10 @@ class PyKaraokeBackend:
             elif action == "update_settings":
                 return self._handle_update_settings(params)
             else:
-                return {
-                    "status": "error",
-                    "message": f"Unknown action: {action}"
-                }
+                return {"status": "error", "message": f"Unknown action: {action}"}
         except Exception as e:
             logger.error(f"Error handling command {action}: {e}", exc_info=True)
-            return {
-                "status": "error",
-                "message": str(e)
-            }
+            return {"status": "error", "message": str(e)}
 
     def get_state(self) -> dict[str, Any]:
         """Get current backend state"""
@@ -201,17 +196,17 @@ class PyKaraokeBackend:
             "volume": self.volume,
             "position_ms": self.position_ms,
             "duration_ms": self.duration_ms,
-            "error": self.error_message
+            "error": self.error_message,
         }
 
     def _song_to_dict(self, song: Any) -> dict[str, Any]:
         """Convert a SongStruct to a dictionary"""
         return {
-            "title": getattr(song, 'Title', ''),
-            "artist": getattr(song, 'Artist', ''),
-            "filename": getattr(song, 'DisplayFilename', ''),
-            "filepath": getattr(song, 'Filepath', ''),
-            "zip_name": getattr(song, 'ZipStoredName', None),
+            "title": getattr(song, "Title", ""),
+            "artist": getattr(song, "Artist", ""),
+            "filename": getattr(song, "DisplayFilename", ""),
+            "filepath": getattr(song, "Filepath", ""),
+            "zip_name": getattr(song, "ZipStoredName", None),
         }
 
     # Playback control handlers
@@ -312,7 +307,7 @@ class PyKaraokeBackend:
             self.current_player = self.current_song.MakePlayer(
                 self.song_db,
                 errorNotifyCallback=self._on_player_error,
-                doneCallback=self._on_song_finished
+                doneCallback=self._on_song_finished,
             )
 
             if not self.current_player:
@@ -378,9 +373,9 @@ class PyKaraokeBackend:
         try:
             song = self.song_db.makeSongStruct(filepath)
             self.playlist.append(song)
-            self._emit_event("playlist_updated", {
-                "playlist": [self._song_to_dict(s) for s in self.playlist]
-            })
+            self._emit_event(
+                "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
+            )
             return {"status": "ok"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -395,9 +390,9 @@ class PyKaraokeBackend:
         if self.playlist_index >= index and self.playlist_index > 0:
             self.playlist_index -= 1
 
-        self._emit_event("playlist_updated", {
-            "playlist": [self._song_to_dict(s) for s in self.playlist]
-        })
+        self._emit_event(
+            "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
+        )
         return {"status": "ok"}
 
     def _handle_clear_playlist(self) -> dict[str, Any]:
@@ -416,9 +411,7 @@ class PyKaraokeBackend:
             results = self.song_db.SearchDatabase(query)
             return {
                 "status": "ok",
-                "data": {
-                    "results": [self._song_to_dict(song) for song in results]
-                }
+                "data": {"results": [self._song_to_dict(song) for song in results]},
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -426,13 +419,8 @@ class PyKaraokeBackend:
     def _handle_get_library(self, params: dict[str, Any]) -> dict[str, Any]:
         """Get library contents"""
         try:
-            songs = self.song_db.SongList if hasattr(self.song_db, 'SongList') else []
-            return {
-                "status": "ok",
-                "data": {
-                    "songs": [self._song_to_dict(song) for song in songs]
-                }
-            }
+            songs = self.song_db.SongList if hasattr(self.song_db, "SongList") else []
+            return {"status": "ok", "data": {"songs": [self._song_to_dict(song) for song in songs]}}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
@@ -463,14 +451,14 @@ class PyKaraokeBackend:
 
     def _handle_get_settings(self) -> dict[str, Any]:
         """Get current settings"""
-        settings = self.song_db.Settings if hasattr(self.song_db, 'Settings') else {}
+        settings = self.song_db.Settings if hasattr(self.song_db, "Settings") else {}
         return {
             "status": "ok",
             "data": {
-                "fullscreen": getattr(settings, 'FullScreen', False),
-                "player_size": getattr(settings, 'PlayerSize', [640, 480]),
-                "zoom_mode": getattr(settings, 'CdgZoom', 'soft'),
-            }
+                "fullscreen": getattr(settings, "FullScreen", False),
+                "player_size": getattr(settings, "PlayerSize", [640, 480]),
+                "zoom_mode": getattr(settings, "CdgZoom", "soft"),
+            },
         }
 
     def _handle_update_settings(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -486,10 +474,8 @@ class PyKaraokeBackend:
 
             # Update position
             if self.state == BackendState.PLAYING:
-                try:
+                with contextlib.suppress(BaseException):
                     self.position_ms = self.current_player.GetPos()
-                except:
-                    pass
 
     def shutdown(self):
         """Shutdown the backend"""
@@ -504,6 +490,7 @@ def create_stdio_server(backend: PyKaraokeBackend):
     Create a stdio-based command server.
     Reads JSON commands from stdin and writes responses to stdout.
     """
+
     def event_callback(event: dict[str, Any]):
         """Send events to frontend via stdout"""
         output = {"type": "event", "event": event}
@@ -527,13 +514,13 @@ def create_stdio_server(backend: PyKaraokeBackend):
             except json.JSONDecodeError as e:
                 error_response = {
                     "type": "response",
-                    "response": {"status": "error", "message": f"Invalid JSON: {e}"}
+                    "response": {"status": "error", "message": f"Invalid JSON: {e}"},
                 }
                 print(json.dumps(error_response), flush=True)
             except Exception as e:
                 error_response = {
                     "type": "response",
-                    "response": {"status": "error", "message": str(e)}
+                    "response": {"status": "error", "message": str(e)},
                 }
                 print(json.dumps(error_response), flush=True)
 

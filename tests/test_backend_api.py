@@ -19,8 +19,9 @@ class TestBackendAPI:
         """Test that backend module can be imported"""
         try:
             import pykbackend
-            assert hasattr(pykbackend, 'PyKaraokeBackend')
-            assert hasattr(pykbackend, 'BackendState')
+
+            assert hasattr(pykbackend, "PyKaraokeBackend")
+            assert hasattr(pykbackend, "BackendState")
         except ImportError as e:
             pytest.skip(f"Backend module not importable: {e}")
 
@@ -28,6 +29,7 @@ class TestBackendAPI:
         """Test backend can be initialized"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
             assert backend is not None
             assert backend.state == pykbackend.BackendState.IDLE
@@ -40,6 +42,7 @@ class TestBackendAPI:
         """Test get_state command returns valid state"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
 
             command = {"action": "get_state", "params": {}}
@@ -57,6 +60,7 @@ class TestBackendAPI:
         """Test handling of unknown commands"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
 
             command = {"action": "invalid_action", "params": {}}
@@ -71,6 +75,7 @@ class TestBackendAPI:
         """Test volume control command"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
 
             # Set volume to 0.5
@@ -93,6 +98,7 @@ class TestBackendAPI:
         """Test playlist management commands"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
 
             # Clear playlist
@@ -110,6 +116,7 @@ class TestBackendAPI:
         """Test that state can be serialized to JSON"""
         try:
             import pykbackend
+
             backend = pykbackend.PyKaraokeBackend()
 
             state = backend.get_state()
