@@ -81,7 +81,27 @@ import pygame
 
 from pykaraoke.core import database
 from pykaraoke.config import version as pykversion
-from pykaraoke.config.constants import *
+from pykaraoke.config.constants import (
+    ENV_GP2X,
+    GP2X_BUTTON_A,
+    GP2X_BUTTON_B,
+    GP2X_BUTTON_DOWN,
+    GP2X_BUTTON_L,
+    GP2X_BUTTON_LEFT,
+    GP2X_BUTTON_R,
+    GP2X_BUTTON_RIGHT,
+    GP2X_BUTTON_SELECT,
+    GP2X_BUTTON_START,
+    GP2X_BUTTON_UP,
+    GP2X_BUTTON_X,
+    GP2X_BUTTON_Y,
+    STATE_CLOSED,
+    STATE_CLOSING,
+    STATE_INIT,
+    STATE_NOT_PLAYING,
+    STATE_PAUSED,
+    STATE_PLAYING,
+)
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
 from pykaraoke.core.player import pykPlayer

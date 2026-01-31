@@ -26,7 +26,16 @@ import sys
 import pygame
 
 from pykaraoke.config import version as pykversion
-from pykaraoke.config.constants import *
+from pykaraoke.config.constants import (
+    ENV_GP2X,
+    ENV_WINDOWS,
+    STATE_CLOSED,
+    STATE_CLOSING,
+    STATE_INIT,
+    STATE_NOT_PLAYING,
+    STATE_PAUSED,
+    STATE_PLAYING,
+)
 from pykaraoke.config.environment import env
 
 # Python 2.3 and newer ship with optparse; older Python releases need "Optik"
@@ -326,6 +335,7 @@ class pykManager:
         print(message)
 
     def __doneCallback(self):
+        # Callback invoked when song playback completes - intentionally empty as base implementation
         pass
 
     def ValidateDatabase(self, songDb):

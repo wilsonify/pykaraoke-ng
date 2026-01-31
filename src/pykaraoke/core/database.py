@@ -36,7 +36,11 @@ from cStringIO import StringIO
 from pykaraoke.players import cdg
 from pykaraoke.players import kar
 from pykaraoke.players import mpg
-from pykaraoke.config.constants import *
+from pykaraoke.config.constants import (
+    ENV_GP2X,
+    ENV_WINDOWS,
+    STATE_NOT_PLAYING,
+)
 from pykaraoke.config.environment import env
 
 from hashlib import sha256  # Use SHA-256 instead of MD5 for file hashing (security)
@@ -94,12 +98,15 @@ class BusyCancelDialog:
         self.Clicked = False
 
     def Show(self):
+        # Abstract method - subclasses should override to display the dialog
         pass
 
     def SetProgress(self, label, progress):
+        # Abstract method - subclasses should override to update progress display
         pass
 
     def Destroy(self):
+        # Abstract method - subclasses should override to clean up dialog resources
         pass
 
 
@@ -1889,13 +1896,16 @@ class SongDB:
                 if song_data.data is not None:
                     m.update(song_data.data)
                 else:
-                    f = open(song_data.filename)
-                    if f is not None:
-                        while True:
-                            data = f.read(64 * 1024)
-                            if not data:
-                                break
-                            m.update(data)
+                    try:
+                        with open(song_data.filename, 'rb') as f:
+                            while True:
+                                data = f.read(64 * 1024)
+                                if not data:
+                                    break
+                                m.update(data)
+                    except (IOError, OSError):
+                        # Skip files that cannot be read
+                        continue
                 list = fileHashes.setdefault(m.digest(), [])
                 if list:
                     numDuplicates += 1

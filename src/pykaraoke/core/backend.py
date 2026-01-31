@@ -34,7 +34,14 @@ try:
     from pykaraoke.players import kar
     from pykaraoke.core import database
     from pykaraoke.players import mpg
-    from pykaraoke.config.constants import *
+    from pykaraoke.config.constants import (
+        STATE_CLOSED,
+        STATE_CLOSING,
+        STATE_INIT,
+        STATE_NOT_PLAYING,
+        STATE_PAUSED,
+        STATE_PLAYING,
+    )
     from pykaraoke.core.manager import manager
     from pykaraoke.core.player import pykPlayer
 

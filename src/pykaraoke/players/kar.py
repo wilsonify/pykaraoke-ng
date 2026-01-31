@@ -150,7 +150,17 @@ class _CStringIOShim(object):
 cStringIO = _CStringIOShim()
 import pygame
 
-from pykaraoke.config.constants import *
+from pykaraoke.config.constants import (
+    ENV_GP2X,
+    STATE_CLOSED,
+    STATE_CLOSING,
+    STATE_INIT,
+    STATE_NOT_PLAYING,
+    STATE_PAUSED,
+    STATE_PLAYING,
+    X_BORDER,
+    Y_BORDER,
+)
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
 from pykaraoke.core.player import pykPlayer

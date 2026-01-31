@@ -129,7 +129,8 @@ class CdgPacketReader:
         self.__cdgPresetColourIndex = -1
         self.__cdgBorderColourIndex = -1
         # Support only one transparent colour
-        self.__cdgTransparentColour = -1
+        # Note: Currently unused - reserved for future overlay support on movie files
+        self._cdgTransparentColour = -1
 
         # These values are used to implement screen shifting.  The CDG
         # specification allows the entire screen to be shifted, up to
@@ -221,7 +222,7 @@ class CdgPacketReader:
 
     # Read the next CDG command from the file (24 bytes each)
     def __getNextPacket(self):
-        packetData = map(ord, self.__cdgData[self.__cdgDataPos : self.__cdgDataPos + 24])
+        packetData = list(map(ord, self.__cdgData[self.__cdgDataPos : self.__cdgDataPos + 24]))
         self.__cdgDataPos += 24
         if len(packetData) == 24:
             return CdgPacket(packetData)
@@ -481,7 +482,7 @@ class CdgPacketReader:
     def __cdgDefineTransparentColour(self, packd):
         data_block = packd.data
         colour = data_block[0] & 0x0F
-        self.__cdgTransparentColour = colour
+        self._cdgTransparentColour = colour
         return
 
     # Load the RGB value for colours 0..7 or 8..15 in the lookup table

@@ -19,7 +19,13 @@
 
 import os
 
-from pykaraoke.config.constants import *
+from pykaraoke.config.constants import (
+    ENV_GP2X,
+    ENV_OSX,
+    ENV_POSIX,
+    ENV_UNKNOWN,
+    ENV_WINDOWS,
+)
 
 # Try to guess which environment we're running in.
 if os.name == "posix":
