@@ -138,7 +138,7 @@ Fixed print statements with format placeholders but missing arguments:
 
 ### Setup Requirements
 User must add these GitHub Secrets:
-1. `SONARQUBE_TOKEN`: `aa167d020477c4fea14cc1784a756ddf1532e8e6`
+1. `SONARQUBE_TOKEN`: `<your-sonarqube-token>`
 2. `SONARQUBE_HOST_URL`: `https://sonarcloud.io`
 
 ### Workflow
