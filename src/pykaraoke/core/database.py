@@ -39,10 +39,7 @@ from pykaraoke.players import mpg
 from pykaraoke.config.constants import *
 from pykaraoke.config.environment import env
 
-try:
-    from hashlib import md5
-except ImportError:
-    from md5 import md5
+from hashlib import sha256  # Use SHA-256 instead of MD5 for file hashing (security)
 
 # The amount of time to wait, in milliseconds, before yielding to the
 # app for windowing updates during a long update process.
@@ -1853,7 +1850,7 @@ class SongDB:
             self.filesByFullpath[fullpath] = file
 
     def checkFileHashes(self, yielder):
-        """Walks through self.FullSongList, checking for md5 hashes
+        """Walks through self.FullSongList, checking for file hashes
         to see if any files are duplicated."""
 
         self.BusyDlg.SetProgress("Checking file hashes", 0.0)
@@ -1861,7 +1858,7 @@ class SongDB:
         self.lastBusyUpdate = time.time()
         numDuplicates = 0
 
-        # Check the md5's of each file, to see if there are any
+        # Check the hashes of each file, to see if there are any
         # duplicates.
         fileHashes = {}
         numFiles = len(self.FullSongList)
@@ -1879,8 +1876,8 @@ class SongDB:
             if self.BusyDlg.Clicked:
                 return
 
-            # Calculate the MD5 hash of the songfile.
-            m = md5()
+            # Calculate the SHA-256 hash of the songfile for duplicate detection.
+            m = sha256()
 
             # Get details of the associated files
             song = self.FullSongList[i]

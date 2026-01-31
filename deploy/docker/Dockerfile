@@ -120,5 +120,8 @@ CMD ["pytest", "tests/", "-v"]
 # =============================================================================
 FROM development AS test
 
+# Ensure non-root user for security
+USER pykaraoke
+
 # Run tests as default command
 CMD ["pytest", "tests/", "-v", "--tb=short"]
