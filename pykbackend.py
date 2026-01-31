@@ -27,13 +27,23 @@ from typing import Any, Dict, List, Optional, Callable
 import logging
 
 # Core pykaraoke imports (business logic only)
-from pykconstants import *
-import pykdb
-import pycdg
-import pykar
-import pympg
-from pykplayer import pykPlayer
-from pykmanager import manager
+# Note: These imports may fail in Python 3 due to legacy Python 2 syntax
+# This is expected and will be addressed separately
+try:
+    from pykconstants import *
+    import pykdb
+    import pycdg
+    import pykar
+    import pympg
+    from pykplayer import pykPlayer
+    from pykmanager import manager
+    IMPORTS_AVAILABLE = True
+except (ImportError, SyntaxError) as e:
+    # Backend can still be imported for testing/documentation
+    # but won't function without these dependencies
+    IMPORTS_AVAILABLE = False
+    import warnings
+    warnings.warn(f"PyKaraoke dependencies not available: {e}. Backend will not function.")
 
 # Configure logging
 logging.basicConfig(
@@ -63,12 +73,16 @@ class PyKaraokeBackend:
     
     def __init__(self):
         """Initialize the backend service"""
+        if not IMPORTS_AVAILABLE:
+            logger.error("PyKaraoke dependencies not available - backend cannot function")
+            raise RuntimeError("Backend dependencies not available")
+        
         self.state = BackendState.IDLE
-        self.current_player: Optional[pykPlayer] = None
-        self.current_song: Optional[pykdb.SongStruct] = None
-        self.playlist: List[pykdb.SongStruct] = []
+        self.current_player: Optional[Any] = None  # pykPlayer when available
+        self.current_song: Optional[Any] = None    # pykdb.SongStruct when available  
+        self.playlist: List[Any] = []              # List[pykdb.SongStruct] when available
         self.playlist_index: int = -1
-        self.song_db: Optional[pykdb.SongDatabase] = None
+        self.song_db: Optional[Any] = None         # pykdb.SongDatabase when available
         self.volume: float = 0.75
         self.position_ms: int = 0
         self.duration_ms: int = 0
@@ -191,7 +205,7 @@ class PyKaraokeBackend:
             "error": self.error_message
         }
     
-    def _song_to_dict(self, song: pykdb.SongStruct) -> Dict[str, Any]:
+    def _song_to_dict(self, song: Any) -> Dict[str, Any]:
         """Convert a SongStruct to a dictionary"""
         return {
             "title": getattr(song, 'Title', ''),
