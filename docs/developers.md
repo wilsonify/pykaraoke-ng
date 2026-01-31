@@ -47,24 +47,26 @@ pip install -e ".[dev]"
 
 ```
 pykaraoke-ng/
-├── pykaraoke.py       # Main GUI application
-├── pycdg.py           # CDG player
-├── pykar.py           # MIDI/KAR player
-├── pympg.py           # MPEG player
-├── pykaraoke_mini.py  # Minimal player
-├── pykmanager.py      # Song manager/database
-├── pykdb.py           # Database operations
-├── pykenv.py          # Environment detection
-├── pykversion.py      # Version information
-├── pykconstants.py    # Shared constants
-├── pykplayer.py       # Base player class
-├── pycdgAux.py        # CDG helper functions
-├── tests/             # Test suite
-├── scripts/           # Helper scripts
-├── electron/          # Desktop app (Electron)
-├── k8s/               # Kubernetes manifests
-├── docs/              # Documentation (you are here)
-└── pyproject.toml     # Project configuration
+├── src/
+│   ├── pykaraoke/           # Main Python package
+│   │   ├── core/            # Core player modules
+│   │   ├── config/          # Configuration & constants
+│   │   └── utils/           # Utility functions
+│   └── runtimes/
+│       ├── electron/        # Electron desktop app
+│       └── tauri/           # Tauri desktop app
+├── deploy/
+│   ├── docker/              # Dockerfile & compose
+│   └── kubernetes/          # K8s manifests
+├── tests/                   # Test suite
+├── scripts/                 # Helper scripts
+├── docs/                    # Documentation (you are here)
+├── pykaraoke.py             # Main GUI application entry
+├── pycdg.py                 # CDG player
+├── pykar.py                 # MIDI/KAR player
+├── pympg.py                 # MPEG player
+├── pykaraoke_mini.py        # Minimal player
+└── pyproject.toml           # Project configuration
 ```
 
 ---
@@ -167,19 +169,19 @@ pykplayer.py (base)
 
 ```bash
 # Build the image
-docker build -t pykaraoke-ng .
+docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
 
 # Run development container
-docker compose --profile dev up
+docker compose -f deploy/docker/docker-compose.yml --profile dev up
 
 # Run tests in container
-docker compose --profile test up
+docker compose -f deploy/docker/docker-compose.yml --profile test up
 ```
 
 ### Development Container
 
 ```bash
-docker compose run --rm dev bash
+docker compose -f deploy/docker/docker-compose.yml run --rm dev bash
 
 # Inside container
 pytest tests/ -v
@@ -193,7 +195,7 @@ ruff check .
 ### Setup
 
 ```bash
-cd electron
+cd src/runtimes/electron
 npm install
 ```
 
@@ -203,6 +205,85 @@ npm install
 npm start        # Development mode
 npm run build    # Build for distribution
 ```
+
+---
+
+## Tauri Desktop App
+
+Tauri provides a lightweight alternative to Electron using Rust and native webview.
+
+### Prerequisites
+
+1. **Install Rust** (if not already installed):
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source $HOME/.cargo/env
+   ```
+
+2. **Install webkit2gtk** (Linux only):
+   ```bash
+   # Debian/Ubuntu (webkit2gtk 4.0)
+   sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file \
+       libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+   # Debian/Ubuntu (webkit2gtk 4.1 - for newer systems)
+   sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+       libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+   # Fedora
+   sudo dnf install webkit2gtk4.0-devel openssl-devel curl wget file
+   ```
+
+3. **Install Tauri CLI** (version 1.x for webkit2gtk 4.0 compatibility):
+   ```bash
+   cargo install tauri-cli --version "^1"
+   ```
+
+### Setup Icons
+
+The Tauri app requires icons in `src/runtimes/tauri/src-tauri/icons/`. If missing:
+
+```bash
+# Create icons directory
+mkdir -p src/runtimes/tauri/src-tauri/icons
+
+# Copy an icon (adjust source path as needed)
+cp assets/icons/microphone.png src/runtimes/tauri/src-tauri/icons/icon.png
+cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/32x32.png
+cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/128x128.png
+cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/128x128@2x.png
+
+# For Windows builds, also create .ico file
+convert src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/icon.ico
+```
+
+### Development
+
+```bash
+cd src/runtimes/tauri/src-tauri
+cargo tauri dev
+```
+
+### Build for Distribution
+
+```bash
+cd src/runtimes/tauri/src-tauri
+cargo tauri build
+```
+
+Built packages appear in `src/runtimes/tauri/src-tauri/target/release/bundle/`.
+
+### Troubleshooting Tauri
+
+**GBM buffer creation errors (GPU/driver issues):**
+```bash
+WEBKIT_DISABLE_COMPOSITING_MODE=1 cargo tauri dev
+```
+
+**Tauri v1 vs v2 compatibility:**
+- Tauri v1 CLI requires `libwebkit2gtk-4.0-dev`
+- Tauri v2 CLI requires `libwebkit2gtk-4.1-dev`
+- Check your system: `pkg-config --exists webkit2gtk-4.0 && echo "4.0 available"`
 
 ---
 

@@ -10,9 +10,9 @@ A free, open-source karaoke player for Linux, Windows, and macOS
 
 ## Features
 
-| 🎵 Multiple Formats | 📚 Song Database | 🖥️ Cross-Platform |
-|---------------------|------------------|-------------------|
-| CDG+MP3, MIDI/KAR, MPEG video | Automatically catalog and search | Linux, Windows, macOS |
+| 🎵 Multiple Formats | 📚 Song Database | 🖥️ Cross-Platform | 🚀 Desktop Apps |
+|---------------------|------------------|-------------------|-----------------|
+| CDG+MP3, MIDI/KAR, MPEG video | Automatically catalog and search | Linux, Windows, macOS | Electron & Tauri |
 
 ## Quick Start
 
@@ -44,7 +44,7 @@ pympg song.mpg
 
 - **[User Guide](users.md)** - Install and use PyKaraoke-NG
 - **[Developer Guide](developers.md)** - Set up development environment and contribute
-- **[Admin Guide](administrators.md)** - Deploy with Docker, Kubernetes, or Electron
+- **[Admin Guide](administrators.md)** - Deploy with Docker, Kubernetes, Electron, or Tauri
 
 ## License
 

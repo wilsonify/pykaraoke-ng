@@ -30,7 +30,7 @@ docker run -it --rm \
 ### Build Locally
 
 ```bash
-docker build -t pykaraoke-ng:local .
+docker build -f deploy/docker/Dockerfile -t pykaraoke-ng:local .
 
 docker run -it --rm \
     -v ~/Karaoke:/songs:ro \
@@ -41,13 +41,13 @@ docker run -it --rm \
 
 ```bash
 # Start the application
-docker compose up app
+docker compose -f deploy/docker/docker-compose.yml up app
 
 # Run in development mode
-docker compose --profile dev up
+docker compose -f deploy/docker/docker-compose.yml --profile dev up
 
 # Run tests
-docker compose --profile test up test
+docker compose -f deploy/docker/docker-compose.yml --profile test up test
 ```
 
 ### Multi-Stage Build
@@ -84,7 +84,7 @@ sudo mv ./kind /usr/local/bin/kind
 ### Kubernetes Manifests
 
 ```
-k8s/
+deploy/kubernetes/
 ├── kind-config.yaml    # Kind cluster configuration
 ├── namespace.yaml      # pykaraoke namespace
 └── deployment.yaml     # Deployment, Service, ConfigMap, PVC
@@ -94,10 +94,10 @@ k8s/
 
 ```bash
 # Create namespace
-kubectl apply -f k8s/namespace.yaml
+kubectl apply -f deploy/kubernetes/namespace.yaml
 
 # Deploy application
-kubectl apply -f k8s/deployment.yaml
+kubectl apply -f deploy/kubernetes/deployment.yaml
 
 # Check pods
 kubectl get pods -n pykaraoke
@@ -135,7 +135,7 @@ volumes:
 ### Build Installers
 
 ```bash
-cd electron
+cd src/runtimes/electron
 npm install
 
 npm run build         # Current platform
@@ -146,11 +146,98 @@ npm run build:win     # nsis, portable
 
 ### Distribution
 
-Built packages in `electron/dist/`:
+Built packages in `src/runtimes/electron/dist/`:
 
 - **Linux:** `.AppImage`, `.deb`, `.rpm`
 - **macOS:** `.dmg`, `.zip`
 - **Windows:** `.exe` (installer and portable)
+
+---
+
+## Tauri Desktop Deployment
+
+Tauri provides a lightweight, secure alternative to Electron using native webview.
+
+### System Requirements
+
+#### Linux
+```bash
+# Debian/Ubuntu (webkit2gtk 4.0 - older systems)
+sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file \
+    libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+# Debian/Ubuntu (webkit2gtk 4.1 - newer systems)
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+    libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+# Fedora
+sudo dnf install webkit2gtk4.0-devel openssl-devel curl wget file \
+    gtk3-devel libappindicator-gtk3-devel librsvg2-devel
+
+# Arch Linux
+sudo pacman -S webkit2gtk base-devel curl wget file openssl gtk3 \
+    libappindicator-gtk3 librsvg
+```
+
+#### macOS
+```bash
+xcode-select --install
+```
+
+#### Windows
+- Install [Microsoft Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- Install [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
+
+### Install Tauri CLI
+
+```bash
+# Install Rust if needed
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Install Tauri CLI v1 (for webkit2gtk 4.0 compatibility)
+cargo install tauri-cli --version "^1"
+
+# OR for Tauri v2 (requires webkit2gtk 4.1)
+cargo install tauri-cli
+```
+
+> **Note:** Choose the Tauri CLI version based on your webkit2gtk version.
+> Check with: `pkg-config --modversion webkit2gtk-4.0 || pkg-config --modversion webkit2gtk-4.1`
+
+### Build Installers
+
+```bash
+cd src/runtimes/tauri/src-tauri
+cargo tauri build
+```
+
+### Distribution
+
+Built packages in `src/runtimes/tauri/src-tauri/target/release/bundle/`:
+
+- **Linux:** `.AppImage`, `.deb`
+- **macOS:** `.app`, `.dmg`
+- **Windows:** `.msi`, `.exe`
+
+### Icons Requirement
+
+Ensure icons exist in `src/runtimes/tauri/src-tauri/icons/`:
+- `32x32.png`
+- `128x128.png`
+- `128x128@2x.png`
+- `icon.png`
+- `icon.ico` (Windows)
+- `icon.icns` (macOS)
+
+### Tauri vs Electron
+
+| Feature | Tauri | Electron |
+|---------|-------|----------|
+| Bundle Size | ~10MB | ~150MB |
+| Memory Usage | Lower | Higher |
+| Native Look | Yes | Limited |
+| Language | Rust + Web | Node.js + Web |
+| WebView | System native | Chromium bundled |
 
 ---
 

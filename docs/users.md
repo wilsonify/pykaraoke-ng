@@ -83,6 +83,13 @@ For resource-limited systems:
 pykaraoke_mini
 ```
 
+### Desktop Apps
+
+PyKaraoke-NG also provides standalone desktop applications that bundle everything needed:
+
+- **Electron App**: Cross-platform desktop application (see [Admin Guide](administrators.md#electron-desktop-deployment))
+- **Tauri App**: Lightweight native desktop application (see [Admin Guide](administrators.md#tauri-desktop-deployment))
+
 ---
 
 ## Setting Up Your Song Library
