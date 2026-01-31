@@ -18,6 +18,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+import shlex
 import subprocess
 import sys
 import threading
@@ -292,25 +293,24 @@ class externalPlayer(pykPlayer):
         external = manager.settings.MpgExternal
         if "%" in external:
             # Assume the filename parameter is embedded in the string.
-            cmd = external % {
+            # Parse the command string into a list to avoid shell injection
+            cmd_str = external % {
                 "file": filepath,
             }
+            # Split the command string into a list for safe subprocess execution
+            cmd = shlex.split(cmd_str)
 
         elif external:
             # No parameter appears to be present; assume the program
             # accepts the filename as the only parameter.
             cmd = [external, filepath]
 
-        shell = True
-        if env == ENV_WINDOWS:
-            # Don't try to open the process under a "shell" in
-            # Windows; that just breaks commands with spaces.
-            shell = False
-
+        # Security: Never use shell=True to prevent command injection (CWE-78)
+        # Always pass cmd as a list to subprocess.Popen for safe execution
         if self.procReturnCode is not None:
             raise RuntimeError("Process already running")
         sys.stdout.flush()
-        self.proc = subprocess.Popen(cmd, shell=shell)
+        self.proc = subprocess.Popen(cmd, shell=False)
         if manager.settings.MpgExternalThreaded:
             # Wait for it to complete in a thread.
             self.thread = threading.Thread(target=self.__runThread)
