@@ -68,6 +68,12 @@ For detailed setup after cloning, see the **[Quick Start Guide](quickstart.md)**
 - **[SonarCloud HIGH Issues Fixed](development/sonarcloud-high-issues-fixed.md)** - Security fixes
 - **[87 Issues Fixed](development/sonarqube-87-issues-fixed.md)** - Bulk issue resolution
 - **[PR Summary](development/pr-summary.md)** - Tauri migration implementation details
+- **[TODO](development/todo.txt)** - Planned features and improvements
+
+### Historical
+
+- **[Changelog](changelog.txt)** - Historical version changes
+- **[Legacy README](readme-legacy.txt)** - Original project documentation
 
 ## License
 
