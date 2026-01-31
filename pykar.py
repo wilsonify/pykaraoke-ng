@@ -667,7 +667,7 @@ def midiParseTrack(filehdl, midifile, trackNum, Length, ErrorNotifyCallback):
     # Create the new TrackDesc structure
     track = TrackDesc(trackNum)
     if debug:
-        print("Track %d")
+        print("Track %d" % trackNum)
     # Loop through all events in the track, recording salient meta-events and times
     eventBytes = 0
     while track.BytesRead < Length:
@@ -720,7 +720,7 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
         bytesRead = bytesRead + 1
         event = ord(byteStr)
         if debug:
-            print("MetaEvent: 0x%X")
+            print("MetaEvent: 0x%X" % event)
         if event == 0x00:
             # Sequence number (discarded)
             packet = filehdl.read(2)
@@ -1445,7 +1445,7 @@ class midPlayer(pykPlayer):
 
 
 def usage():
-    print("Usage:  %s <kar filename>")
+    print("Usage:  %s <kar filename>" % os.path.basename(sys.argv[0]))
 
 
 # Can be called from the command line with the CDG filepath as parameter

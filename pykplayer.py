@@ -379,21 +379,21 @@ class pykPlayer:
                 and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
             ):
                 manager.settings.SyncDelayMs += 250
-                print("sync %s")
+                print("sync %s" % manager.settings.SyncDelayMs)
             elif (
                 self.State == STATE_PLAYING
                 and event.key == pygame.K_LEFT
                 and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
             ):
                 manager.settings.SyncDelayMs -= 250
-                print("sync %s")
+                print("sync %s" % manager.settings.SyncDelayMs)
             elif (
                 self.State == STATE_PLAYING
                 and event.key == pygame.K_DOWN
                 and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
             ):
                 manager.settings.SyncDelayMs = 0
-                print("sync %s")
+                print("sync %s" % manager.settings.SyncDelayMs)
 
             if self.SupportsFontZoom:
                 if (

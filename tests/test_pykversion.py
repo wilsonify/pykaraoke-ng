@@ -59,7 +59,7 @@ class TestVersionString:
         from pykversion import PYKARAOKE_VERSION_STRING
 
         base_version = PYKARAOKE_VERSION_STRING.split("-")[0]
-        major, minor, patch = (int(x) for x in base_version.split("."))
+        major, minor, patch = [int(x) for x in base_version.split(".")]
 
         # Sanity checks
         assert major >= 0

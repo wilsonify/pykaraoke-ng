@@ -1509,7 +1509,7 @@ class SongDB:
                 try:
                     self.addSong(SongStruct(full_path, self.Settings, DatabaseAdd=True))
                 except KeyError:
-                    print("Excluding filename with unexpected format: %s ")
+                    print("Excluding filename with unexpected format: %s " % repr(os.path.basename(full_path)))
             # Look inside ZIPs if configured to do so
             elif self.Settings.LookInsideZips and ext.lower() == ".zip":
                 try:
@@ -1560,16 +1560,16 @@ class SongDB:
                                             )
                                         )
                                     except KeyError:
-                                        print("Excluding filename with unexpected format: %s ")
+                                        print("Excluding filename with unexpected format: %s " % repr(zippath))
                                 else:
                                     print(
                                         "ZIP member compressed with unsupported type (%d): %s"
                                         % (info.compress_type, repr(full_path))
                                     )
                     else:
-                        print("Cannot parse ZIP file: ")
+                        print("Cannot parse ZIP file: " + repr(full_path))
                 except Exception:
-                    print("Error looking inside zip ")
+                    print("Error looking inside zip " + repr(full_path))
 
     # Add a folder to the database search list
     def FolderAdd(self, FolderPath):
@@ -1892,8 +1892,8 @@ class SongDB:
         removeIndexes = {}
         for list in fileHashes.values():
             if len(list) > 1:
-                _filenames = map(lambda i: self.FullSongList[i].DisplayFilename, list)
-                print("Identical songs: %s")
+                filenames = [self.FullSongList[i].DisplayFilename for i in list]
+                print("Identical songs: %s" % repr(', '.join(filenames)))
                 for i in list[1:]:
                     extra = self.FullSongList[i]
                     removeIndexes[i] = True
