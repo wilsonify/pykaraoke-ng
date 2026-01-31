@@ -2,6 +2,13 @@
 .venv/*
 __pycache__/
 
+# Coverage files
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+pytest-junit.xml
+
 # Tauri build artifacts
 tauri-app/src-tauri/target/
 tauri-app/src-tauri/Cargo.lock
@@ -12,3 +19,6 @@ tauri-app/node_modules/
 # IDE specific files
 .idea/
 .vscode/
+
+# SonarQube
+.scannerwork/
