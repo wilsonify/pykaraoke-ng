@@ -2520,7 +2520,7 @@ class Playlist(wx.Panel):
         song_list = list(self.PlaylistSongStructList)
 
         # Delete all items
-        for index in range(len(song_list)):
+        for _ in range(len(song_list)):
             self.DelItem(0)
 
         # Clear all data

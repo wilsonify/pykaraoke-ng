@@ -539,7 +539,7 @@ class App(pykPlayer):
         file = open(pathname, "w")
         markedSongs = self.markedSongs.items()
         markedSongs.sort()
-        for key, song in markedSongs:
+        for _key, song in markedSongs:
             line = "%s\t%s\t%s\n" % (song.DisplayFilename, song.Title, song.Artist)
             file.write(line.encode("utf-8"))
 
@@ -636,7 +636,7 @@ class App(pykPlayer):
 
         # Discard any events that occurred while we were resetting the
         # display.
-        for event in pygame.event.get():
+        for _event in pygame.event.get():
             pass
 
     def __writeSongTitle(self, file, row):
@@ -1060,7 +1060,7 @@ class App(pykPlayer):
         pygame.time.wait(250)
 
         # Discard any events that occurred in that quarter second.
-        for event in pygame.event.get():
+        for _event in pygame.event.get():
             pass
 
         # Now start listening for events.  The first key or button
