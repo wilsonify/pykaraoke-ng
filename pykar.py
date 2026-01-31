@@ -141,7 +141,13 @@
 import struct
 import sys
 
-import cStringIO
+import io
+
+class _CStringIOShim(object):
+    # Use BytesIO because MIDI/KAR data is binary
+    StringIO = io.BytesIO
+
+cStringIO = _CStringIOShim()
 import pygame
 
 from pykconstants import *
