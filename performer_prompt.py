@@ -25,6 +25,7 @@
 
 import wx
 
+
 class PerformerPrompt(wx.Dialog):
     """ An interface for requesting a performer's name. """
     def __init__(self, parent):

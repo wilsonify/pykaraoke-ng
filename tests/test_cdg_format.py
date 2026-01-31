@@ -3,7 +3,6 @@
 Tests the CDG format constants and packet structures without requiring pygame.
 """
 
-import pytest
 
 
 class TestCDGConstants:

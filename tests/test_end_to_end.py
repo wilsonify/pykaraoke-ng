@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,7 @@ def _find_python2():
 def _python2_can_import(python2_path, module_name):
     try:
         subprocess.run(
-            [python2_path, "-c", "import {}".format(module_name)],
+            [python2_path, "-c", f"import {module_name}"],
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

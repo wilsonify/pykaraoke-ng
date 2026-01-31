@@ -4,7 +4,6 @@ Tests MIDI timing, byte parsing, and karaoke event structures
 without requiring pygame.
 """
 
-import pytest
 import struct
 
 

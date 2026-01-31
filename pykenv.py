@@ -17,8 +17,9 @@
 
 """ This module guesses the execution environment of the application. """
 
-from pykconstants import *
 import os
+
+from pykconstants import *
 
 # Try to guess which environment we're running in.
 if os.name == "posix":

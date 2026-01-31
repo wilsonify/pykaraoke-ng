@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 
 # pympg - MPEG Karaoke Player
 #
@@ -18,12 +18,16 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+import subprocess
+import sys
+import threading
+
+import pygame
+
 from pykconstants import *
-from pykplayer import pykPlayer
 from pykenv import env
 from pykmanager import manager
-import pygame, sys, os, string, subprocess
-import threading
+from pykplayer import pykPlayer
 
 # OVERVIEW
 #
@@ -72,10 +76,10 @@ import threading
 # and doneCallback:
 #
 # errorNotifyCallback, if provided, will be used to print out any error
-# messages (e.g. song file not found). This allows the module to fit 
+# messages (e.g. song file not found). This allows the module to fit
 # together well with GUI playlist managers by utilising the same GUI's
 # error popup window mechanism (or similar). If no callback is provided,
-# errors are printed to stdout. errorNotifyCallback should take one 
+# errors are printed to stdout. errorNotifyCallback should take one
 # parameter, the error string, e.g.:
 #   def errorPopup (ErrorString):
 #       msgBox (ErrorString)
@@ -112,7 +116,7 @@ import threading
 # response time.
 
 # Display depth (bits)
-DISPLAY_DEPTH       = 32 
+DISPLAY_DEPTH       = 32
 
 # Check to see if the movie module is available.
 try:
@@ -159,11 +163,11 @@ class mpgPlayer(pykPlayer):
     def doRewind(self):
         self.Movie.stop()
         self.Movie.rewind()
-            
+
     # Get the movie length (in seconds).
     def GetLength(self):
         return self.Movie.get_length()
-        
+
     # Get the current time (in milliseconds).
     def GetPos(self):
         return (self.Movie.get_time() * 1000)
@@ -177,7 +181,7 @@ class mpgPlayer(pykPlayer):
 
         # Remove irrelevant options.
         parser.remove_option('--font-scale')
-        
+
         return parser
 
     def shutdown(self):
@@ -194,7 +198,7 @@ class mpgPlayer(pykPlayer):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
             self.Close()
             return
-        
+
         pykPlayer.handleEvent(self, event)
 
     # Internal. Only called by the pykManager.
@@ -222,7 +226,7 @@ class externalPlayer(pykPlayer):
     """ This class is used to invoke an external command and wait for
     it to finish.  It is usually used to play a video file using an
     external player. """
-    
+
     def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename. """
@@ -286,7 +290,7 @@ class externalPlayer(pykPlayer):
             # No parameter appears to be present; assume the program
             # accepts the filename as the only parameter.
             cmd = [external, filepath]
-            
+
         shell = True
         if env == ENV_WINDOWS:
             # Don't try to open the process under a "shell" in
@@ -311,7 +315,7 @@ class externalPlayer(pykPlayer):
         self.proc = None
         self.procReturnCode = None
         self.thread = None
-        
+
 
     def __runThread(self):
         """ This method runs in a sub-thread.  Its job is just to wait
@@ -321,8 +325,8 @@ class externalPlayer(pykPlayer):
             self.procReturnCode = self.proc.wait()
         except OSError:
             self.procReturnCode = -1
-        
-        
+
+
 
 # Can be called from the command line with the MPG filepath as parameter
 def main():
@@ -335,4 +339,4 @@ if __name__ == "__main__":
     #import profile
     #result = profile.run('main()', 'pympg.prof')
     #sys.exit(result)
-    
+
