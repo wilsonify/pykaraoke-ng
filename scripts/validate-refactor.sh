@@ -108,10 +108,10 @@ validate_project_structure() {
     print_section "Project Structure"
     
     check_file_exists "pyproject.toml" "Modern Python packaging"
-    check_file_exists "Dockerfile" "Docker configuration"
-    check_file_exists "docker-compose.yml" "Docker Compose"
-    check_dir_exists "k8s" "Kubernetes configs"
-    check_dir_exists "electron" "Electron app"
+    check_file_exists "deploy/docker/Dockerfile" "Docker configuration"
+    check_file_exists "deploy/docker/docker-compose.yml" "Docker Compose"
+    check_dir_exists "deploy/kubernetes" "Kubernetes configs"
+    check_dir_exists "src/runtimes/electron" "Electron app"
     check_dir_exists "scripts" "Scripts directory"
     check_dir_exists "tests" "Tests directory"
 }
@@ -193,8 +193,8 @@ validate_python_tests() {
     
     cd "$PROJECT_ROOT"
     
-    # Check if tests directory has files
-    if [[ -z "$(ls -A tests/*.py 2>/dev/null)" ]]; then
+    # Check if tests directory has files (search recursively)
+    if [[ -z "$(find tests -name '*.py' -type f 2>/dev/null)" ]]; then
         skip "No test files found"
         return
     fi
@@ -230,13 +230,13 @@ validate_docker() {
     fi
     
     # Check Dockerfile syntax
-    if [[ -f "$PROJECT_ROOT/Dockerfile" ]]; then
-        if docker build --check "$PROJECT_ROOT" 2>/dev/null || true; then
+    if [[ -f "$PROJECT_ROOT/deploy/docker/Dockerfile" ]]; then
+        if docker build --check "$PROJECT_ROOT/deploy/docker" 2>/dev/null || true; then
             pass "Dockerfile syntax valid"
         fi
         
         # Check for multi-stage build
-        local stages=$(grep -c "^FROM" "$PROJECT_ROOT/Dockerfile" || echo "0")
+        local stages=$(grep -c "^FROM" "$PROJECT_ROOT/deploy/docker/Dockerfile" || echo "0")
         if [[ "$stages" -ge 2 ]]; then
             pass "Multi-stage build configured ($stages stages)"
         else
@@ -245,20 +245,20 @@ validate_docker() {
     fi
     
     # Check docker-compose.yml
-    if [[ -f "$PROJECT_ROOT/docker-compose.yml" ]]; then
-        if docker compose config --quiet 2>/dev/null; then
+    if [[ -f "$PROJECT_ROOT/deploy/docker/docker-compose.yml" ]]; then
+        if docker compose -f "$PROJECT_ROOT/deploy/docker/docker-compose.yml" config --quiet 2>/dev/null; then
             pass "docker-compose.yml syntax valid"
         else
             fail "docker-compose.yml has syntax errors"
         fi
         
         # Count services
-        local services=$(grep -c "^  [a-z].*:$" "$PROJECT_ROOT/docker-compose.yml" || echo "0")
+        local services=$(grep -c "^  [a-z].*:$" "$PROJECT_ROOT/deploy/docker/docker-compose.yml" || echo "0")
         pass "Docker Compose has $services service(s)"
     fi
     
     # Check .dockerignore
-    check_file_exists ".dockerignore" "Docker ignore file"
+    check_file_exists "deploy/docker/.dockerignore" "Docker ignore file"
 }
 
 validate_docker_build() {
@@ -272,7 +272,7 @@ validate_docker_build() {
     cd "$PROJECT_ROOT"
     
     echo "    Building Docker image (this may take a while)..."
-    if docker build -t pykaraoke-ng:test . 2>&1 | tail -5; then
+    if docker build -t pykaraoke-ng:test -f deploy/docker/Dockerfile . 2>&1 | tail -5; then
         pass "Docker build successful"
         
         # Clean up
@@ -285,27 +285,27 @@ validate_docker_build() {
 validate_kubernetes() {
     print_section "Kubernetes Configuration"
     
-    # Check k8s directory
-    if ! check_dir_exists "k8s" "Kubernetes directory"; then
+    # Check kubernetes directory
+    if ! check_dir_exists "deploy/kubernetes" "Kubernetes directory"; then
         return
     fi
     
     # Check for required manifests
-    check_file_exists "k8s/kind-config.yaml" "Kind cluster config"
-    check_file_exists "k8s/namespace.yaml" "Namespace manifest"
-    check_file_exists "k8s/deployment.yaml" "Deployment manifest"
+    check_file_exists "deploy/kubernetes/kind-config.yaml" "Kind cluster config"
+    check_file_exists "deploy/kubernetes/namespace.yaml" "Namespace manifest"
+    check_file_exists "deploy/kubernetes/deployment.yaml" "Deployment manifest"
     
     # Validate YAML syntax with kubectl if available
     if command -v kubectl &> /dev/null; then
         # Apply namespace first (dry-run), then validate other manifests
         # Use --dry-run=server for better validation or client for basic syntax
-        if [[ -f "$PROJECT_ROOT/k8s/namespace.yaml" ]]; then
+        if [[ -f "$PROJECT_ROOT/deploy/kubernetes/namespace.yaml" ]]; then
             # Basic YAML validation - just check the file is parseable
-            if kubectl apply --dry-run=client -f "$PROJECT_ROOT/k8s/namespace.yaml" 2>/dev/null; then
+            if kubectl apply --dry-run=client -f "$PROJECT_ROOT/deploy/kubernetes/namespace.yaml" 2>/dev/null; then
                 pass "namespace.yaml syntax is valid"
             else
                 # Try alternative validation
-                if python3 -c "import yaml; yaml.safe_load(open('$PROJECT_ROOT/k8s/namespace.yaml'))" 2>/dev/null; then
+                if python3 -c "import yaml; yaml.safe_load(open('$PROJECT_ROOT/deploy/kubernetes/namespace.yaml'))" 2>/dev/null; then
                     pass "namespace.yaml is valid YAML"
                 else
                     fail "namespace.yaml has errors"
@@ -315,8 +315,8 @@ validate_kubernetes() {
         
         # For deployment, the namespace reference will fail on dry-run since namespace doesn't exist
         # Just validate YAML syntax instead
-        if [[ -f "$PROJECT_ROOT/k8s/deployment.yaml" ]]; then
-            if python3 -c "import yaml; list(yaml.safe_load_all(open('$PROJECT_ROOT/k8s/deployment.yaml')))" 2>/dev/null; then
+        if [[ -f "$PROJECT_ROOT/deploy/kubernetes/deployment.yaml" ]]; then
+            if python3 -c "import yaml; list(yaml.safe_load_all(open('$PROJECT_ROOT/deploy/kubernetes/deployment.yaml')))" 2>/dev/null; then
                 pass "deployment.yaml is valid YAML with multiple documents"
             else
                 fail "deployment.yaml has YAML syntax errors"
@@ -360,22 +360,22 @@ validate_electron() {
     print_section "Electron Desktop App"
     
     # Check directory
-    if ! check_dir_exists "electron" "Electron directory"; then
+    if ! check_dir_exists "src/runtimes/electron" "Electron directory"; then
         return
     fi
     
     # Check required files
-    check_file_exists "electron/package.json" "Electron package.json"
-    check_file_exists "electron/main.js" "Electron main process"
-    check_file_exists "electron/preload.js" "Electron preload script"
-    check_file_exists "electron/index.html" "Electron HTML"
-    check_file_exists "electron/styles.css" "Electron styles"
-    check_file_exists "electron/renderer.js" "Electron renderer"
+    check_file_exists "src/runtimes/electron/package.json" "Electron package.json"
+    check_file_exists "src/runtimes/electron/main.js" "Electron main process"
+    check_file_exists "src/runtimes/electron/preload.js" "Electron preload script"
+    check_file_exists "src/runtimes/electron/index.html" "Electron HTML"
+    check_file_exists "src/runtimes/electron/styles.css" "Electron styles"
+    check_file_exists "src/runtimes/electron/renderer.js" "Electron renderer"
     
     # Validate package.json
-    if [[ -f "$PROJECT_ROOT/electron/package.json" ]]; then
+    if [[ -f "$PROJECT_ROOT/src/runtimes/electron/package.json" ]]; then
         if command -v node &> /dev/null; then
-            if node -e "JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/electron/package.json'))" 2>/dev/null; then
+            if node -e "JSON.parse(require('fs').readFileSync('$PROJECT_ROOT/src/runtimes/electron/package.json'))" 2>/dev/null; then
                 pass "electron/package.json is valid JSON"
             else
                 fail "electron/package.json has JSON errors"
@@ -383,14 +383,14 @@ validate_electron() {
         fi
         
         # Check for electron dependency
-        if grep -q '"electron"' "$PROJECT_ROOT/electron/package.json"; then
+        if grep -q '"electron"' "$PROJECT_ROOT/src/runtimes/electron/package.json"; then
             pass "Electron dependency declared"
         else
             fail "Electron dependency missing"
         fi
         
         # Check for electron-builder
-        if grep -q '"electron-builder"' "$PROJECT_ROOT/electron/package.json"; then
+        if grep -q '"electron-builder"' "$PROJECT_ROOT/src/runtimes/electron/package.json"; then
             pass "electron-builder configured for packaging"
         else
             skip "electron-builder not configured"
@@ -406,12 +406,12 @@ validate_electron_deps() {
         return
     fi
     
-    if [[ ! -f "$PROJECT_ROOT/electron/package.json" ]]; then
-        skip "No electron/package.json"
+    if [[ ! -f "$PROJECT_ROOT/src/runtimes/electron/package.json" ]]; then
+        skip "No src/runtimes/electron/package.json"
         return
     fi
     
-    cd "$PROJECT_ROOT/electron"
+    cd "$PROJECT_ROOT/src/runtimes/electron"
     
     if [[ -d "node_modules" ]]; then
         pass "node_modules exists"
