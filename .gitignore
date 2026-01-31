@@ -1,3 +1,10 @@
 *.pyc
 .venv/*
 __pycache__/
+
+# Tauri build artifacts
+tauri-app/src-tauri/target/
+tauri-app/src-tauri/Cargo.lock
+
+# Node modules (if using npm for frontend)
+tauri-app/node_modules/
