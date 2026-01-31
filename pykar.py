@@ -710,10 +710,6 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
         filehdl.seek(-1, 1)
         bytesRead = bytesRead - 1
 
-    # print ("T%d: VarBytes = %d, event_type = 0x%X" % (track_desc.TrackNum, varBytes, event_type))
-    ##     if debug:
-    ##         print "Event: 0x%X" % event_type
-
     # Handle all event types
     if event_type == 0xFF:
         byteStr = filehdl.read(1)
@@ -900,12 +896,12 @@ def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
                 print("Unknown meta-event: 0x%X" % event)
             Length, varBytes = varLength(filehdl)
             bytesRead = bytesRead + varBytes
-            discard = filehdl.read(Length)
+            _discard = filehdl.read(Length)
             bytesRead = bytesRead + Length
 
     elif (event_type & 0xF0) == 0x80:
         # Note off
-        packet = filehdl.read(2)
+        _packet = filehdl.read(2)
         bytesRead = bytesRead + 2
         track_desc.LastNoteClick = track_desc.TotalClicksFromStart
     elif (event_type & 0xF0) == 0x90:
@@ -1458,6 +1454,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-    # import profile
-    # result = profile.run('main()', 'pykar.prof')
-    # sys.exit(result)

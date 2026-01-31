@@ -642,6 +642,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-    # import profile
-    # result = profile.run('main()', 'pycdg.prof')
-    # sys.exit(result)

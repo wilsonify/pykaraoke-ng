@@ -2408,9 +2408,9 @@ class SearchResultsPanel(wx.Panel):
         # wx.DragCopy/DragMove/etc., but in practice it appears that
         # only wx.DragNone works on Windows.
         if env == ENV_WINDOWS:
-            res = dropSource.DoDragDrop(wx.DragNone)
+            _res = dropSource.DoDragDrop(wx.DragNone)
         else:
-            res = dropSource.DoDragDrop(wx.DragCopy)
+            _res = dropSource.DoDragDrop(wx.DragCopy)
 
         # Let's not remove items from the search results list, even if
         # the drag-and-drop says the user thought he was "moving" it.
@@ -2646,7 +2646,7 @@ class Playlist(wx.Panel):
             # If we have too much to fill the list space, then resize so that all columns
             # can be seen on screen. Scale each column by the same amount.
             else:
-                extraWidth = totalWidth - listWidth
+                # extraWidth calculated but not used in this branch
                 if self.KaraokeMgr.SongDB.Settings.DisplayArtistTitleCols:
                     titleWidth = (titleWidth * listWidth) / totalWidth
                     artistWidth = (artistWidth * listWidth) / totalWidth

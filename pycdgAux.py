@@ -455,17 +455,13 @@ class CdgPacketReader:
                     (copyBlockColourIndex, self.__cdgPixelColours[:, :-vScrollDownPixels]), 1
                 )
             elif hScrollLeftPixels > 0:
-                copyBlockActualColour = (
-                    N.zeros([hScrollLeftPixels, CDG_FULL_HEIGHT]) + self.__cdgColourTable[colour]
-                )
+                # copyBlockActualColour not used, only copyBlockColourIndex needed
                 copyBlockColourIndex = N.zeros([hScrollLeftPixels, CDG_FULL_HEIGHT]) + colour
                 self.__cdgPixelColours = N.concatenate(
                     (self.__cdgPixelColours[hScrollLeftPixels:, :], copyBlockColourIndex), 0
                 )
             elif hScrollRightPixels > 0:
-                copyBlockActualColour = (
-                    N.zeros([hScrollRightPixels, CDG_FULL_HEIGHT]) + self.__cdgColourTable[colour]
-                )
+                # copyBlockActualColour not used, only copyBlockColourIndex needed
                 copyBlockColourIndex = N.zeros([hScrollRightPixels, CDG_FULL_HEIGHT]) + colour
                 self.__cdgPixelColours = N.concatenate(
                     (copyBlockColourIndex, self.__cdgPixelColours[:-hScrollRightPixels, :]), 0
