@@ -504,25 +504,25 @@ class App(pykPlayer):
         # songs properly.
         self.songDb.SelectSort("filename")
 
-        file = open(pathname)
-        for line in file:
-            line = line.decode("utf-8").strip()
-            if line:
-                # Read a line from the list.  It describes a song, and
-                # includes filename, title, and artist, though we only
-                # really care about the filename.
-                filename = line.split("\t", 1)[0]
+        with open(pathname) as file:
+            for line in file:
+                line = line.decode("utf-8").strip()
+                if line:
+                    # Read a line from the list.  It describes a song, and
+                    # includes filename, title, and artist, though we only
+                    # really care about the filename.
+                    filename = line.split("\t", 1)[0]
 
-                # Look up the song in the database.
-                song = pykdb.SongStruct(filename, self.songDb.Settings, "", "", filename)
-                found = False
-                row = bisect.bisect_left(self.songDb.SongList, song)
-                if row != len(self.songDb.SongList):
-                    # If we found the song, record that it is marked.
-                    song = self.songDb.SongList[row]
-                    if song.DisplayFilename == filename:
-                        self.markedSongs[song.getMarkKey()] = song
-                        found = True
+                    # Look up the song in the database.
+                    song = pykdb.SongStruct(filename, self.songDb.Settings, "", "", filename)
+                    found = False
+                    row = bisect.bisect_left(self.songDb.SongList, song)
+                    if row != len(self.songDb.SongList):
+                        # If we found the song, record that it is marked.
+                        song = self.songDb.SongList[row]
+                        if song.DisplayFilename == filename:
+                            self.markedSongs[song.getMarkKey()] = song
+                            found = True
 
                 if not found:
                     # If we didn't find the song, it follows that
@@ -536,12 +536,12 @@ class App(pykPlayer):
             return
 
         pathname = os.path.join(self.songDb.SaveDir, "marked.txt")
-        file = open(pathname, "w")
-        markedSongs = self.markedSongs.items()
-        markedSongs.sort()
-        for _key, song in markedSongs:
-            line = "%s\t%s\t%s\n" % (song.DisplayFilename, song.Title, song.Artist)
-            file.write(line.encode("utf-8"))
+        with open(pathname, "w") as file:
+            markedSongs = self.markedSongs.items()
+            markedSongs.sort()
+            for _key, song in markedSongs:
+                line = "%s\t%s\t%s\n" % (song.DisplayFilename, song.Title, song.Artist)
+                file.write(line.encode("utf-8"))
 
         self.markedSongsDirty = False
 

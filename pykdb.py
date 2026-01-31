@@ -133,7 +133,8 @@ class SongData:
             return self.data
 
         # The file has not yet been read
-        self.data = open(self.filename, "rb").read()
+        with open(self.filename, "rb") as f:
+            self.data = f.read()
         return self.data
 
     def GetFilepath(self):
@@ -157,7 +158,8 @@ class SongData:
             # temp files until another song is loaded, preventing the
             # same song from being played twice in a row.
             self.tempFilename = prefix + str(time.time()) + basename
-            open(self.tempFilename, "wb").write(self.data)
+            with open(self.tempFilename, "wb") as f:
+                f.write(self.data)
 
         return self.tempFilename
 
@@ -647,50 +649,56 @@ class TitleStruct:
         self.songs = []
         _dirname = os.path.split(catalogPathname)[0]
 
+        should_close = False
         if catalogFile is None:
             # Open the file for reading.
             try:
                 catalogFile = open(catalogPathname)
+                should_close = True
             except (OSError, IOError):
                 print("Could not open titles file %s" % (repr(catalogPathname)))
                 return
 
-        for line in catalogFile:
-            try:
-                line = line.decode("utf-8").strip()
-            except UnicodeDecodeError:
-                line = line.decode("utf-8", "replace")
-                print("Invalid characters in %s:\n%s" % (repr(catalogPathname), line))
+        try:
+            for line in catalogFile:
+                try:
+                    line = line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    line = line.decode("utf-8", "replace")
+                    print("Invalid characters in %s:\n%s" % (repr(catalogPathname), line))
 
-            if line:
-                tuple = line.split("\t")
-                if len(tuple) == 2:
-                    filename, title = tuple
-                    artist = ""
-                elif len(tuple) == 3:
-                    filename, title, artist = tuple
-                else:
-                    print("Invalid line in %s:\n%s" % (repr(catalogPathname), line))
-                    continue
+                if line:
+                    tuple = line.split("\t")
+                    if len(tuple) == 2:
+                        filename, title = tuple
+                        artist = ""
+                    elif len(tuple) == 3:
+                        filename, title, artist = tuple
+                    else:
+                        print("Invalid line in %s:\n%s" % (repr(catalogPathname), line))
+                        continue
 
-                # Allow a forward slash in the file to stand in for
-                # whatever the OS's path separator is.
-                filename = filename.replace("/", os.path.sep)
+                    # Allow a forward slash in the file to stand in for
+                    # whatever the OS's path separator is.
+                    filename = filename.replace("/", os.path.sep)
 
-                pathname = os.path.join(dirname, filename)
-                song = songDb.filesByFullpath.get(pathname, None)
-                if song is None:
-                    print("Unknown file in %s:\n%s" % (repr(catalogPathname), repr(filename)))
-                else:
-                    song.titles = self
-                    self.songs.append(song)
+                    pathname = os.path.join(dirname, filename)
+                    song = songDb.filesByFullpath.get(pathname, None)
+                    if song is None:
+                        print("Unknown file in %s:\n%s" % (repr(catalogPathname), repr(filename)))
+                    else:
+                        song.titles = self
+                        self.songs.append(song)
 
-                    song.Title = title.strip()
-                    song.Artist = artist.strip()
-                    if song.Title:
-                        songDb.GotTitles = True
-                    if song.Artist:
-                        songDb.GotArtists = True
+                        song.Title = title.strip()
+                        song.Artist = artist.strip()
+                        if song.Title:
+                            songDb.GotTitles = True
+                        if song.Artist:
+                            songDb.GotArtists = True
+        finally:
+            if should_close:
+                catalogFile.close()
 
     def __makeRelTo(self, filename, relTo):
         """Returns the filename expressed as a relative path to

@@ -1375,24 +1375,23 @@ class ExportWindow(wx.Frame):
         filename = dlg.GetPath()
         dlg.Destroy()
 
-        file = codecs.open(filename, "w", "utf-8")
-
-        songDb = self.parent.KaraokeMgr.SongDB
-        if oneLine:
-            songDb.SelectSort("title")
-        else:
-            songDb.SelectSort("filename")
-
-        for song in songDb.SongList:
+        with codecs.open(filename, "w", "utf-8") as file:
+            songDb = self.parent.KaraokeMgr.SongDB
             if oneLine:
-                file.write(song.getDisplayFilenames())
+                songDb.SelectSort("title")
             else:
-                file.write(song.DisplayFilename)
-            if songDb.GotTitles:
-                file.write("\t%s" % song.Title)
-            if songDb.GotArtists:
-                file.write("\t%s" % song.Artist)
-            file.write("\n")
+                songDb.SelectSort("filename")
+
+            for song in songDb.SongList:
+                if oneLine:
+                    file.write(song.getDisplayFilenames())
+                else:
+                    file.write(song.DisplayFilename)
+                if songDb.GotTitles:
+                    file.write("\t%s" % song.Title)
+                if songDb.GotArtists:
+                    file.write("\t%s" % song.Artist)
+                file.write("\n")
 
         self.Destroy()
 
