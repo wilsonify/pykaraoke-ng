@@ -8,3 +8,7 @@ tauri-app/src-tauri/Cargo.lock
 
 # Node modules (if using npm for frontend)
 tauri-app/node_modules/
+
+# IDE specific files
+.idea/
+.vscode/
