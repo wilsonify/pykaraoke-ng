@@ -1,0 +1,68 @@
+# Ignore everything by default
+*
+
+# Include source files
+!*.py
+!pyproject.toml
+!pytest.ini
+!.coveragerc
+
+# Include assets
+!fonts/
+!fonts/**
+!icons/
+!icons/**
+
+# Include tests and scripts
+!tests/
+!tests/**
+!scripts/
+!scripts/**
+
+# Include documentation
+!README.txt
+!ChangeLog
+!COPYING
+!TODO
+
+# Exclude compiled files
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+
+# Exclude build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Exclude virtual environments
+.venv/
+venv/
+env/
+
+# Exclude IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Exclude coverage and test artifacts
+htmlcov/
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+
+# Exclude Docker artifacts
+.docker/
+
+# Exclude Electron artifacts
+electron/node_modules/
+electron/dist/
+electron/out/
+
+# Exclude Kubernetes secrets
+k8s/secrets/

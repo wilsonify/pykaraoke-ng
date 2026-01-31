@@ -1,0 +1,8 @@
+# PyKaraoke-NG Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pykaraoke
+  labels:
+    app.kubernetes.io/name: pykaraoke-ng
+    app.kubernetes.io/part-of: pykaraoke

@@ -1,0 +1,96 @@
+{
+  "name": "pykaraoke-ng-desktop",
+  "version": "0.7.5",
+  "description": "PyKaraoke-NG Desktop Application",
+  "main": "main.js",
+  "author": {
+    "name": "PyKaraoke Development Team",
+    "email": "kelvinl@users.sourceforge.net"
+  },
+  "license": "LGPL-2.1-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wilsonify/pykaraoke-ng.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "pack": "electron-builder --dir",
+    "clean": "rm -rf dist out",
+    "lint": "eslint *.js",
+    "test": "echo 'No Electron tests yet'"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "eslint": "^8.56.0"
+  },
+  "build": {
+    "appId": "org.pykaraoke.ng",
+    "productName": "PyKaraoke-NG",
+    "copyright": "Copyright © PyKaraoke Development Team",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "styles.css",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../",
+        "to": "python",
+        "filter": [
+          "**/*.py",
+          "fonts/**",
+          "icons/**",
+          "!tests/**",
+          "!scripts/**",
+          "!**/__pycache__/**"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Audio",
+      "icon": "build/icons"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.music",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

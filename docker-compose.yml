@@ -1,0 +1,152 @@
+# PyKaraoke-NG Docker Compose Configuration
+# 
+# Usage:
+#   docker compose up              # Start services
+#   docker compose up -d           # Start in background
+#   docker compose run test        # Run tests
+#   docker compose down            # Stop and remove
+#
+# Profiles:
+#   docker compose --profile dev up    # Development mode
+#   docker compose --profile test up   # Run tests
+
+name: pykaraoke-ng
+
+services:
+  # ==========================================================================
+  # Main Application Service
+  # ==========================================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: pykaraoke-ng:latest
+    container_name: pykaraoke-app
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=${DISPLAY:-:0}
+      - PULSE_SERVER=unix:${XDG_RUNTIME_DIR:-/run/user/1000}/pulse/native
+    volumes:
+      # Mount songs directory (customize path as needed)
+      - ${SONGS_DIR:-./songs}:/app/songs:ro
+      # Mount X11 socket for GUI (Linux)
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # Mount PulseAudio socket for audio (Linux)
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse:ro
+    networks:
+      - pykaraoke-net
+    # For GUI access on Linux, you may need: xhost +local:docker
+    # security_opt:
+    #   - seccomp:unconfined
+
+  # ==========================================================================
+  # Development Service
+  # ==========================================================================
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: pykaraoke-ng:dev
+    container_name: pykaraoke-dev
+    profiles:
+      - dev
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    volumes:
+      # Mount source for live reload
+      - .:/app:cached
+      # Anonymous volume for venv to avoid overwriting
+      - /app/.venv
+    working_dir: /app
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Test Runner Service
+  # ==========================================================================
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test
+    profiles:
+      - test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTEST_ADDOPTS=--color=yes
+    volumes:
+      # Mount source for testing current code
+      - ./tests:/app/tests:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      # Mount for coverage output
+      - ./htmlcov:/app/htmlcov
+    command: ["pytest", "tests/", "-v", "--tb=short"]
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Test with Coverage
+  # ==========================================================================
+  test-coverage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test-coverage
+    profiles:
+      - test
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./tests:/app/tests:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./htmlcov:/app/htmlcov
+    command: >
+      pytest tests/ -v
+      --cov=/app
+      --cov-report=term-missing
+      --cov-report=html:/app/htmlcov
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Linting Service
+  # ==========================================================================
+  lint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: pykaraoke-ng:dev
+    container_name: pykaraoke-lint
+    profiles:
+      - dev
+    volumes:
+      - .:/app:ro
+    command: ["python", "-m", "ruff", "check", "."]
+    networks:
+      - pykaraoke-net
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  pykaraoke-net:
+    driver: bridge
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  songs:
+    driver: local
