@@ -1,4 +1,4 @@
-"""Unit tests for pykconstants module."""
+"""Unit tests for constants module."""
 
 
 class TestEnvironmentConstants:
@@ -6,14 +6,14 @@ class TestEnvironmentConstants:
 
     def test_environment_constants_are_unique(self):
         """Environment constants should have unique values."""
-        from pykconstants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
+        from pykaraoke.config.constants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
 
         env_values = [ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN]
         assert len(env_values) == len(set(env_values)), "Environment constants must be unique"
 
     def test_environment_constants_are_integers(self):
         """Environment constants should be integers."""
-        from pykconstants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
+        from pykaraoke.config.constants import ENV_GP2X, ENV_OSX, ENV_POSIX, ENV_UNKNOWN, ENV_WINDOWS
 
         for const in [ENV_WINDOWS, ENV_POSIX, ENV_OSX, ENV_GP2X, ENV_UNKNOWN]:
             assert isinstance(const, int), f"Expected int, got {type(const)}"
@@ -24,7 +24,7 @@ class TestStateConstants:
 
     def test_state_constants_are_unique(self):
         """State constants should have unique values."""
-        from pykconstants import (
+        from pykaraoke.config.constants import (
             STATE_CAPTURING,
             STATE_CLOSED,
             STATE_CLOSING,
@@ -47,7 +47,7 @@ class TestStateConstants:
 
     def test_state_constants_are_integers(self):
         """State constants should be integers."""
-        from pykconstants import (
+        from pykaraoke.config.constants import (
             STATE_CAPTURING,
             STATE_CLOSED,
             STATE_CLOSING,
@@ -70,7 +70,7 @@ class TestStateConstants:
 
     def test_init_state_is_zero(self):
         """STATE_INIT should be 0 for easy boolean checks."""
-        from pykconstants import STATE_INIT
+        from pykaraoke.config.constants import STATE_INIT
 
         assert STATE_INIT == 0
 
@@ -80,7 +80,7 @@ class TestGP2XButtonConstants:
 
     def test_gp2x_button_constants_defined(self):
         """All GP2X button constants should be defined."""
-        from pykconstants import (
+        from pykaraoke.config.constants import (
             GP2X_BUTTON_A,
             GP2X_BUTTON_B,
             GP2X_BUTTON_CLICK,
@@ -133,14 +133,14 @@ class TestBorderConstants:
 
     def test_border_constants_positive(self):
         """Border constants should be positive integers."""
-        from pykconstants import X_BORDER, Y_BORDER
+        from pykaraoke.config.constants import X_BORDER, Y_BORDER
 
         assert X_BORDER > 0, "X_BORDER should be positive"
         assert Y_BORDER > 0, "Y_BORDER should be positive"
 
     def test_border_constants_reasonable_values(self):
         """Border constants should have reasonable values for a display."""
-        from pykconstants import X_BORDER, Y_BORDER
+        from pykaraoke.config.constants import X_BORDER, Y_BORDER
 
         assert X_BORDER < 100, "X_BORDER should be reasonable (< 100)"
         assert Y_BORDER < 100, "Y_BORDER should be reasonable (< 100)"
