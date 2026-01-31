@@ -289,7 +289,7 @@ function startPythonProcess() {
     const scriptsPath = getScriptsPath();
 
     // For now, just validate Python is available
-    pythonProcess = spawn(pythonPath, ['-c', 'import pykversion; print(pykversion.PYKARAOKE_VERSION_STRING)'], {
+    pythonProcess = spawn(pythonPath, ['-c', 'from pykaraoke.config import version; print(version.PYKARAOKE_VERSION_STRING)'], {
         cwd: scriptsPath,
         stdio: ['pipe', 'pipe', 'pipe']
     });

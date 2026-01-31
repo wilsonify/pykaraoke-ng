@@ -45,7 +45,15 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         .resource_dir()
         .unwrap_or_else(|| std::env::current_dir().unwrap());
     
-    let backend_script = resource_path.join("pykbackend.py");
+    // Navigate to the src/pykaraoke/core directory from project root
+    let backend_script = resource_path
+        .join("..")
+        .join("..")
+        .join("..")
+        .join("src")
+        .join("pykaraoke")
+        .join("core")
+        .join("backend.py");
     
     // Start the Python backend process
     let mut child = Command::new("python3")
