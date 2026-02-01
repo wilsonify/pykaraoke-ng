@@ -17,9 +17,13 @@ Architecture:
 - Can be used with Tauri, Electron, or web frontends
 """
 
+import argparse
+import asyncio
 import contextlib
 import json
 import logging
+import os
+import signal
 import sys
 import time
 from collections.abc import Callable
@@ -537,7 +541,265 @@ def create_stdio_server(backend: PyKaraokeBackend):
         backend.shutdown()
 
 
-if __name__ == "__main__":
-    # Run as standalone stdio server
+def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: int = 8080):
+    """
+    Create an HTTP-based command server using FastAPI.
+    Exposes a REST API for controlling the backend.
+    """
+    try:
+        import uvicorn
+        from fastapi import FastAPI, HTTPException
+        from fastapi.responses import JSONResponse
+    except ImportError as e:
+        logger.error(
+            "FastAPI/Uvicorn not available. Install with: pip install fastapi uvicorn"
+        )
+        raise RuntimeError("HTTP mode requires fastapi and uvicorn") from e
+
+    app = FastAPI(
+        title="PyKaraoke Backend API",
+        description="Headless karaoke backend with JSON API",
+        version="0.7.5",
+    )
+
+    # Store events in memory for polling (simple implementation)
+    events_queue: list[dict[str, Any]] = []
+
+    def event_callback(event: dict[str, Any]):
+        """Store events for retrieval via API"""
+        events_queue.append(event)
+        # Keep only last 100 events to prevent memory issues
+        if len(events_queue) > 100:
+            events_queue.pop(0)
+
+    backend.set_event_callback(event_callback)
+
+    # Health check endpoint
+    @app.get("/health")
+    async def health_check():
+        """Health check endpoint for container orchestration"""
+        return {"status": "healthy", "timestamp": time.time()}
+
+    # Get current state
+    @app.get("/api/state")
+    async def get_state():
+        """Get current backend state"""
+        return backend.get_state()
+
+    # Execute a command
+    @app.post("/api/command")
+    async def execute_command(command: dict[str, Any]):
+        """Execute a command on the backend"""
+        try:
+            response = backend.handle_command(command)
+            return response
+        except Exception as e:
+            logger.error(f"Error executing command: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    # Get events (polling endpoint)
+    @app.get("/api/events")
+    async def get_events(since: float = 0):
+        """Get events since a given timestamp"""
+        filtered_events = [e for e in events_queue if e.get("timestamp", 0) > since]
+        return {"events": filtered_events}
+
+    # Clear events queue
+    @app.delete("/api/events")
+    async def clear_events():
+        """Clear the events queue"""
+        events_queue.clear()
+        return {"status": "ok"}
+
+    # Playback control endpoints
+    @app.post("/api/play")
+    async def play(playlist_index: int | None = None):
+        """Start playback"""
+        params = {}
+        if playlist_index is not None:
+            params["playlist_index"] = playlist_index
+        return backend.handle_command({"action": "play", "params": params})
+
+    @app.post("/api/pause")
+    async def pause():
+        """Pause playback"""
+        return backend.handle_command({"action": "pause", "params": {}})
+
+    @app.post("/api/stop")
+    async def stop():
+        """Stop playback"""
+        return backend.handle_command({"action": "stop", "params": {}})
+
+    @app.post("/api/next")
+    async def next_track():
+        """Next track"""
+        return backend.handle_command({"action": "next", "params": {}})
+
+    @app.post("/api/previous")
+    async def previous_track():
+        """Previous track"""
+        return backend.handle_command({"action": "previous", "params": {}})
+
+    @app.post("/api/volume")
+    async def set_volume(volume: float):
+        """Set volume (0.0 to 1.0)"""
+        return backend.handle_command({"action": "set_volume", "params": {"volume": volume}})
+
+    # Playlist management endpoints
+    @app.post("/api/playlist/add")
+    async def add_to_playlist(filepath: str):
+        """Add song to playlist"""
+        return backend.handle_command({"action": "add_to_playlist", "params": {"filepath": filepath}})
+
+    @app.delete("/api/playlist/{index}")
+    async def remove_from_playlist(index: int):
+        """Remove song from playlist"""
+        return backend.handle_command(
+            {"action": "remove_from_playlist", "params": {"index": index}}
+        )
+
+    @app.delete("/api/playlist")
+    async def clear_playlist():
+        """Clear playlist"""
+        return backend.handle_command({"action": "clear_playlist", "params": {}})
+
+    # Library endpoints
+    @app.get("/api/library/search")
+    async def search_songs(query: str):
+        """Search song library"""
+        return backend.handle_command({"action": "search_songs", "params": {"query": query}})
+
+    @app.get("/api/library")
+    async def get_library():
+        """Get library contents"""
+        return backend.handle_command({"action": "get_library", "params": {}})
+
+    @app.post("/api/library/scan")
+    async def scan_library():
+        """Scan library folders"""
+        return backend.handle_command({"action": "scan_library", "params": {}})
+
+    @app.post("/api/library/folder")
+    async def add_folder(folder: str):
+        """Add folder to library"""
+        return backend.handle_command({"action": "add_folder", "params": {"folder": folder}})
+
+    # Graceful shutdown handling
+    shutdown_event = asyncio.Event()
+
+    def handle_shutdown(signum, frame):
+        """Handle shutdown signals"""
+        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        shutdown_event.set()
+
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
+
+    # Configure uvicorn
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=True,
+    )
+    server = uvicorn.Server(config)
+
+    logger.info(f"Starting HTTP server on {host}:{port}")
+
+    try:
+        # Run server
+        asyncio.run(server.serve())
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal")
+    finally:
+        backend.shutdown()
+
+
+def main():
+    """
+    Main entry point with mode selection.
+    
+    Supports two modes:
+    1. stdio: Read commands from stdin, write responses to stdout (default for compatibility)
+    2. http: Run HTTP API server
+    
+    Mode can be selected via:
+    - Command-line argument: --mode stdio|http or --stdio|--http
+    - Environment variable: BACKEND_MODE=stdio|http
+    """
+    parser = argparse.ArgumentParser(
+        description="PyKaraoke Backend - Headless karaoke service",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run in stdio mode (default)
+  python -m pykaraoke.core.backend --stdio
+  
+  # Run in HTTP mode
+  python -m pykaraoke.core.backend --http
+  
+  # HTTP mode with custom host and port
+  python -m pykaraoke.core.backend --http --host 127.0.0.1 --port 8080
+  
+  # Using environment variable
+  BACKEND_MODE=http python -m pykaraoke.core.backend
+        """,
+    )
+
+    # Mode selection
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--stdio",
+        action="store_const",
+        const="stdio",
+        dest="mode",
+        help="Run in stdio mode (read from stdin, write to stdout)",
+    )
+    mode_group.add_argument(
+        "--http",
+        action="store_const",
+        const="http",
+        dest="mode",
+        help="Run in HTTP API mode",
+    )
+    mode_group.add_argument(
+        "--mode",
+        type=str,
+        choices=["stdio", "http"],
+        help="Explicitly set the mode (stdio or http)",
+    )
+
+    # HTTP-specific options
+    parser.add_argument(
+        "--host",
+        type=str,
+        default=os.getenv("PYKARAOKE_API_HOST", "0.0.0.0"),
+        help="HTTP server host (default: 0.0.0.0, env: PYKARAOKE_API_HOST)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("PYKARAOKE_API_PORT", "8080")),
+        help="HTTP server port (default: 8080, env: PYKARAOKE_API_PORT)",
+    )
+
+    args = parser.parse_args()
+
+    # Determine mode from args or environment
+    mode = args.mode or os.getenv("BACKEND_MODE", "stdio")
+
+    logger.info(f"PyKaraoke Backend starting in {mode} mode")
+
+    # Create backend instance
     backend = PyKaraokeBackend()
-    create_stdio_server(backend)
+
+    # Start appropriate server
+    if mode == "http":
+        create_http_server(backend, host=args.host, port=args.port)
+    else:
+        create_stdio_server(backend)
+
+
+if __name__ == "__main__":
+    main()
