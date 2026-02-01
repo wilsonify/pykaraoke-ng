@@ -537,7 +537,149 @@ def create_stdio_server(backend: PyKaraokeBackend):
         backend.shutdown()
 
 
+def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: int = 8080):
+    """
+    Create an HTTP-based API server using FastAPI.
+    Provides REST endpoints for controlling the backend.
+    """
+    try:
+        from fastapi import FastAPI, HTTPException
+        from fastapi.middleware.cors import CORSMiddleware
+        from pydantic import BaseModel
+        import uvicorn
+    except ImportError as e:
+        logger.error(f"HTTP server dependencies not available: {e}")
+        logger.error("Install with: pip install fastapi uvicorn")
+        raise RuntimeError("HTTP server dependencies not available") from e
+
+    app = FastAPI(
+        title="PyKaraoke Backend API",
+        description="HTTP API for PyKaraoke karaoke player",
+        version="0.7.5"
+    )
+
+    # Enable CORS for frontend access
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    class CommandRequest(BaseModel):
+        command: str
+        params: dict = {}
+
+    @app.get("/health")
+    def health_check():
+        """Health check endpoint"""
+        return {"status": "healthy", "service": "pykaraoke-backend"}
+
+    @app.get("/status")
+    def get_status():
+        """Get current backend status"""
+        return backend.handle_command({"command": "get_state"})
+
+    @app.post("/command")
+    def execute_command(request: CommandRequest):
+        """Execute a command on the backend"""
+        try:
+            command_dict = {"command": request.command, **request.params}
+            return backend.handle_command(command_dict)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+    @app.get("/library/search")
+    def search_library(query: str = "", limit: int = 100):
+        """Search the song library"""
+        return backend.handle_command({
+            "command": "search",
+            "query": query,
+            "limit": limit
+        })
+
+    @app.post("/player/play")
+    def play(song_id: int | None = None):
+        """Start playback"""
+        command = {"command": "play"}
+        if song_id is not None:
+            command["song_id"] = song_id
+        return backend.handle_command(command)
+
+    @app.post("/player/pause")
+    def pause():
+        """Pause playback"""
+        return backend.handle_command({"command": "pause"})
+
+    @app.post("/player/stop")
+    def stop():
+        """Stop playback"""
+        return backend.handle_command({"command": "stop"})
+
+    @app.post("/player/next")
+    def next_song():
+        """Skip to next song"""
+        return backend.handle_command({"command": "next"})
+
+    @app.post("/player/previous")
+    def previous_song():
+        """Go to previous song"""
+        return backend.handle_command({"command": "previous"})
+
+    @app.post("/player/volume")
+    def set_volume(level: float):
+        """Set volume level (0.0 to 1.0)"""
+        return backend.handle_command({"command": "set_volume", "level": level})
+
+    @app.post("/playlist/add")
+    def add_to_playlist(song_id: int):
+        """Add a song to the playlist"""
+        return backend.handle_command({"command": "add_to_playlist", "song_id": song_id})
+
+    @app.delete("/playlist/{index}")
+    def remove_from_playlist(index: int):
+        """Remove a song from the playlist by index"""
+        return backend.handle_command({"command": "remove_from_playlist", "index": index})
+
+    @app.get("/playlist")
+    def get_playlist():
+        """Get the current playlist"""
+        return backend.handle_command({"command": "get_playlist"})
+
+    logger.info(f"Starting HTTP server on {host}:{port}")
+    
+    # Run the server
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 if __name__ == "__main__":
-    # Run as standalone stdio server
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="PyKaraoke Backend Server")
+    parser.add_argument(
+        "--mode", 
+        choices=["stdio", "http"], 
+        default="stdio",
+        help="Server mode: stdio (for Tauri IPC) or http (for REST API)"
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="HTTP server host (default: 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8080,
+        help="HTTP server port (default: 8080)"
+    )
+    
+    args = parser.parse_args()
+    
     backend = PyKaraokeBackend()
-    create_stdio_server(backend)
+    
+    if args.mode == "http":
+        create_http_server(backend, host=args.host, port=args.port)
+    else:
+        create_stdio_server(backend)

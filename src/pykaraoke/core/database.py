@@ -29,9 +29,9 @@ import time
 import types
 import zipfile
 
-import cPickle
+import pickle
 import pygame
-from cStringIO import StringIO
+from io import BytesIO
 
 from pykaraoke.players import cdg
 from pykaraoke.players import kar
@@ -592,7 +592,7 @@ class TitleStruct:
         if self.ZipStoredName is not None:
             zip = songDb.GetZipFile(self.Filepath)
             unzipped_data = zip.read(self.ZipStoredName)
-            sfile = StringIO(unzipped_data)
+            sfile = BytesIO(unzipped_data)
             self.__readTitles(songDb, sfile, os.path.join(self.Filepath, self.ZipStoredName))
         else:
             self.__readTitles(songDb, None, self.Filepath)
@@ -600,7 +600,7 @@ class TitleStruct:
     def rewrite(self, songDb):
         """Rewrites the titles.txt file with the current data."""
         if self.ZipStoredName is not None:
-            sfile = StringIO()
+            sfile = BytesIO()
             self.__writeTitles(songDb, sfile, os.path.join(self.Filepath, self.ZipStoredName))
             unzipped_data = sfile.getvalue()
             songDb.DropZipFile(self.Filepath)
@@ -1235,8 +1235,8 @@ class SongDB:
             file = open(db_filepath, "rb")
             loaddb = None
             try:
-                loaddb = cPickle.load(file)
-            except (EOFError, cPickle.UnpicklingError, AttributeError):
+                loaddb = pickle.load(file)
+            except (EOFError, pickle.UnpicklingError, AttributeError):
                 # Corrupt or incompatible database file, will create new one
                 pass
             if getattr(loaddb, "Version", None) == DATABASE_VERSION:
@@ -1313,7 +1313,7 @@ class SongDB:
             loaddb.GotTitles = self.GotTitles
             loaddb.GotArtists = self.GotArtists
 
-            cPickle.dump(loaddb, file, cPickle.HIGHEST_PROTOCOL)
+            pickle.dump(loaddb, file, pickle.HIGHEST_PROTOCOL)
         except OSError as message:
             print(message)
         self.databaseDirty = False
