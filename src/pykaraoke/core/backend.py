@@ -682,12 +682,11 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
         return backend.handle_command({"action": "add_folder", "params": {"folder": folder}})
 
     # Graceful shutdown handling
-    shutdown_event = asyncio.Event()
-
     def handle_shutdown(signum, frame):  # noqa: ARG001
         """Handle shutdown signals"""
         logger.info(f"Received signal {signum}, shutting down gracefully...")
-        shutdown_event.set()
+        # Use uvicorn's documented shutdown mechanism
+        server.should_exit = True
 
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
@@ -774,10 +773,20 @@ Examples:
         default=os.getenv("PYKARAOKE_API_HOST", "0.0.0.0"),
         help="HTTP server host (default: 0.0.0.0, env: PYKARAOKE_API_HOST)",
     )
+
+    # Parse port with error handling for invalid env var
+    default_port = 8080
+    try:
+        port_env = os.getenv("PYKARAOKE_API_PORT")
+        if port_env:
+            default_port = int(port_env)
+    except ValueError:
+        logger.warning(f"Invalid PYKARAOKE_API_PORT value, using default: {default_port}")
+
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.getenv("PYKARAOKE_API_PORT", "8080")),
+        default=default_port,
         help="HTTP server port (default: 8080, env: PYKARAOKE_API_PORT)",
     )
 
