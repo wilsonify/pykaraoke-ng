@@ -34,11 +34,7 @@ from typing import Any
 # Note: These imports may fail in Python 3 due to legacy Python 2 syntax
 # This is expected and will be addressed separately
 try:
-    from pykaraoke.players import cdg
-    from pykaraoke.players import kar
-    from pykaraoke.core import database
-    from pykaraoke.players import mpg
-    from pykaraoke.config.constants import (
+    from pykaraoke.config.constants import (  # noqa: F401 - Used for future expansion
         STATE_CLOSED,
         STATE_CLOSING,
         STATE_INIT,
@@ -46,8 +42,10 @@ try:
         STATE_PAUSED,
         STATE_PLAYING,
     )
+    from pykaraoke.core import database
     from pykaraoke.core.manager import manager
-    from pykaraoke.core.player import pykPlayer
+    from pykaraoke.core.player import pykPlayer  # noqa: F401 - Used for type hints
+    from pykaraoke.players import cdg, kar, mpg  # noqa: F401 - Used for player creation
 
     IMPORTS_AVAILABLE = True
 except (ImportError, SyntaxError) as e:
@@ -427,7 +425,7 @@ class PyKaraokeBackend:
         except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
-    def _handle_get_library(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handle_get_library(self, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG002
         """Get library contents"""
         try:
             songs = self.song_db.SongList if hasattr(self.song_db, "SongList") else []
@@ -435,7 +433,7 @@ class PyKaraokeBackend:
         except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
-    def _handle_scan_library(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _handle_scan_library(self, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG002
         """Scan library folders"""
         # This is a long-running operation that should be async
         logger.info("Starting library scan")
@@ -549,7 +547,6 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     try:
         import uvicorn
         from fastapi import FastAPI, HTTPException
-        from fastapi.responses import JSONResponse
     except ImportError as e:
         logger.error(
             "FastAPI/Uvicorn not available. Install with: pip install fastapi uvicorn"
@@ -687,7 +684,7 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     # Graceful shutdown handling
     shutdown_event = asyncio.Event()
 
-    def handle_shutdown(signum, frame):
+    def handle_shutdown(signum, frame):  # noqa: ARG001
         """Handle shutdown signals"""
         logger.info(f"Received signal {signum}, shutting down gracefully...")
         shutdown_event.set()
@@ -719,11 +716,11 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
 def main():
     """
     Main entry point with mode selection.
-    
+
     Supports two modes:
     1. stdio: Read commands from stdin, write responses to stdout (default for compatibility)
     2. http: Run HTTP API server
-    
+
     Mode can be selected via:
     - Command-line argument: --mode stdio|http or --stdio|--http
     - Environment variable: BACKEND_MODE=stdio|http
@@ -735,13 +732,13 @@ def main():
 Examples:
   # Run in stdio mode (default)
   python -m pykaraoke.core.backend --stdio
-  
+
   # Run in HTTP mode
   python -m pykaraoke.core.backend --http
-  
+
   # HTTP mode with custom host and port
   python -m pykaraoke.core.backend --http --host 127.0.0.1 --port 8080
-  
+
   # Using environment variable
   BACKEND_MODE=http python -m pykaraoke.core.backend
         """,
