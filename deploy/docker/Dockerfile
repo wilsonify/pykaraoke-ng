@@ -1,73 +1,71 @@
 # PyKaraoke-NG Docker Image
-# Multi-stage build for optimal image size
+# Multi-stage build for Python backend and Tauri desktop app
 #
-# Build:  docker build -t pykaraoke-ng .
-# Run:    docker run -it --rm pykaraoke-ng
+# Build Targets:
+#   docker build --target backend -t pykaraoke-ng:backend .     # Python backend only
+#   docker build --target tauri-dev -t pykaraoke-ng:tauri-dev . # Tauri dev environment
+#   docker build --target tauri-runtime -t pykaraoke-ng:tauri . # Full Tauri app
+#   docker build --target test -t pykaraoke-ng:test .           # Test environment
 
 # =============================================================================
-# Stage 1: Build stage with uv
+# Stage 1: Python Builder
 # =============================================================================
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim AS python-builder
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Set working directory
 WORKDIR /app
 
 # Copy dependency files first for better caching
 COPY pyproject.toml ./
-COPY pykversion.py ./
+COPY src/pykaraoke/config/version.py ./src/pykaraoke/config/
 
 # Create virtual environment and install dependencies
 RUN uv venv /app/.venv
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Install dependencies (without the package itself)
+# Install Python dependencies
 RUN uv pip install --no-cache-dir \
     pygame>=2.5.0 \
     numpy>=1.24.0 \
-    mutagen>=1.47.0
+    mutagen>=1.47.0 \
+    fastapi>=0.104.0 \
+    uvicorn>=0.24.0
 
-# Copy source code
-COPY *.py ./
-COPY fonts/ ./fonts/
-COPY icons/ ./icons/
+# Copy Python source code
+COPY src/pykaraoke /app/src/pykaraoke
+COPY assets/ /app/assets/
 
 # =============================================================================
-# Stage 2: Runtime stage
+# Stage 2: Python Backend Service (for Tauri)
 # =============================================================================
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim AS backend
 
 # Install runtime dependencies for pygame/SDL
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    libfreetype6 \
+    libportmidi0 \
     libsdl2-2.0-0 \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
-    libfreetype6 \
-    libportmidi0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user for security
+# Create non-root user
 RUN useradd --create-home --shell /bin/bash pykaraoke
 
-# Set working directory
 WORKDIR /app
 
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy application code
-COPY --from=builder /app/*.py /app/
-COPY --from=builder /app/fonts /app/fonts/
-COPY --from=builder /app/icons /app/icons/
+# Copy virtual environment and source from builder
+COPY --from=python-builder /app/.venv /app/.venv
+COPY --from=python-builder /app/src /app/src
+COPY --from=python-builder /app/assets /app/assets
 
 # Set ownership
 RUN chown -R pykaraoke:pykaraoke /app
 
-# Switch to non-root user
 USER pykaraoke
 
 # Set environment
@@ -75,21 +73,144 @@ ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app/src
 
-# Expose port for potential web interface
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import pygame; print('healthy')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" || exit 1
 
-# Default command
-CMD ["python", "-c", "import pykversion; print(f'PyKaraoke-NG v{pykversion.PYKARAOKE_VERSION_STRING}')"]
+# Run the Python backend API
+CMD ["python", "-m", "pykaraoke.core.backend"]
 
 # =============================================================================
-# Stage 3: Development stage
+# Stage 3: Tauri Development Environment
 # =============================================================================
-FROM runtime AS development
+FROM rust:1.75-bookworm AS tauri-dev
+
+# Install system dependencies for Tauri
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build essentials
+    build-essential \
+    pkg-config \
+    # Tauri/WebKit dependencies
+    libwebkit2gtk-4.0-dev \
+    libgtk-3-dev \
+    libayatana-appindicator3-dev \
+    librsvg2-dev \
+    # Audio/Video dependencies
+    libsdl2-dev \
+    libsdl2-image-dev \
+    libsdl2-mixer-dev \
+    libsdl2-ttf-dev \
+    libasound2-dev \
+    # Python runtime
+    python3 \
+    python3-pip \
+    python3-venv \
+    # GUI tools
+    libxcb1-dev \
+    libxrandr-dev \
+    libxi-dev \
+    # Utilities
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js for potential frontend tooling
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Tauri CLI
+RUN cargo install tauri-cli
+
+# Install uv for Python
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy Python backend
+COPY --from=python-builder /app/.venv /app/.venv
+COPY --from=python-builder /app/src /app/src
+COPY --from=python-builder /app/assets /app/assets
+
+# Copy Tauri source
+COPY src/runtimes/tauri /app/tauri
+
+# Set environment
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/app/src
+ENV CARGO_HOME=/app/.cargo
+ENV RUSTUP_HOME=/app/.rustup
+
+WORKDIR /app/tauri
+
+# Pre-fetch Rust dependencies for caching
+RUN cd src-tauri && cargo fetch
+
+# Default: interactive shell for development
+CMD ["bash"]
+
+# =============================================================================
+# Stage 4: Tauri Runtime (built application)
+# =============================================================================
+FROM debian:bookworm-slim AS tauri-runtime
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # WebKit/GTK runtime
+    libwebkit2gtk-4.0-37 \
+    libgtk-3-0 \
+    libayatana-appindicator3-1 \
+    librsvg2-2 \
+    # Audio runtime
+    libasound2 \
+    libpulse0 \
+    # Python runtime
+    python3 \
+    python3-pip \
+    # SDL runtime
+    libsdl2-2.0-0 \
+    libsdl2-image-2.0-0 \
+    libsdl2-mixer-2.0-0 \
+    libsdl2-ttf-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash pykaraoke
+
+WORKDIR /app
+
+# Copy Python environment
+COPY --from=python-builder /app/.venv /app/.venv
+COPY --from=python-builder /app/src /app/src
+COPY --from=python-builder /app/assets /app/assets
+
+# Copy built Tauri application (this requires a pre-build step)
+# In practice, build with tauri-dev stage and copy the binary
+COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng 2>/dev/null || true
+
+# Set ownership
+RUN chown -R pykaraoke:pykaraoke /app
+
+USER pykaraoke
+
+# Environment
+ENV VIRTUAL_ENV=/app/.venv
+ENV PATH="/app/.venv/bin:/app:$PATH"
+ENV PYTHONPATH=/app/src
+ENV DISPLAY=:0
+
+# Run the Tauri application
+CMD ["/app/pykaraoke-ng"]
+
+# =============================================================================
+# Stage 5: Development stage (Python only)
+# =============================================================================
+FROM backend AS development
 
 USER root
 
@@ -97,30 +218,29 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
+    vim \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for development
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy test files
+# Copy additional development files
 COPY tests/ /app/tests/
 COPY scripts/ /app/scripts/
 COPY pyproject.toml /app/
 
 # Install dev dependencies
-RUN uv pip install --no-cache-dir pytest pytest-cov pytest-xdist
+RUN uv pip install --no-cache-dir pytest pytest-cov pytest-xdist ruff
 
-# Switch back to non-root user
 USER pykaraoke
 
-CMD ["pytest", "tests/", "-v"]
+CMD ["bash"]
 
 # =============================================================================
-# Stage 4: Test runner stage
+# Stage 6: Test runner stage
 # =============================================================================
 FROM development AS test
 
-# Ensure non-root user for security
 USER pykaraoke
 
 # Run tests as default command

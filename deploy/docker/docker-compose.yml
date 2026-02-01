@@ -1,53 +1,156 @@
 # PyKaraoke-NG Docker Compose Configuration
 # 
 # Usage:
-#   docker compose up              # Start services
-#   docker compose up -d           # Start in background
-#   docker compose run test        # Run tests
-#   docker compose down            # Stop and remove
+#   docker compose up                       # Start Python backend API
+#   docker compose up -d                    # Start in background
+#   docker compose --profile tauri-dev up   # Tauri development mode
+#   docker compose --profile test up        # Run tests
+#   docker compose down                     # Stop and remove
 #
 # Profiles:
-#   docker compose --profile dev up    # Development mode
-#   docker compose --profile test up   # Run tests
+#   docker compose --profile dev up         # Python development mode
+#   docker compose --profile tauri-dev up   # Tauri frontend development
+#   docker compose --profile tauri-build up # Build Tauri binaries
+#   docker compose --profile test up        # Run tests
 
 name: pykaraoke-ng
 
 services:
   # ==========================================================================
-  # Main Application Service
+  # Python Backend API Service (for Tauri)
   # ==========================================================================
-  app:
+  backend:
     build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
-    image: pykaraoke-ng:latest
-    container_name: pykaraoke-app
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: backend
+    image: pykaraoke-ng:backend
+    container_name: pykaraoke-backend
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-      - DISPLAY=${DISPLAY:-:0}
-      - PULSE_SERVER=unix:${XDG_RUNTIME_DIR:-/run/user/1000}/pulse/native
+      - PYKARAOKE_API_HOST=0.0.0.0
+      - PYKARAOKE_API_PORT=8080
     volumes:
       # Mount songs directory (customize path as needed)
-      - ${SONGS_DIR:-./songs}:/app/songs:ro
-      # Mount X11 socket for GUI (Linux)
-      - /tmp/.X11-unix:/tmp/.X11-unix:ro
-      # Mount PulseAudio socket for audio (Linux)
-      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse:ro
+      - ${SONGS_DIR:-../../songs}:/app/songs:ro
+    ports:
+      - "8080:8080"
     networks:
       - pykaraoke-net
-    # For GUI access on Linux, you may need: xhost +local:docker
-    # security_opt:
-    #   - seccomp:unconfined
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
   # ==========================================================================
-  # Development Service
+  # Tauri Desktop App (Runtime with GUI)
+  # ==========================================================================
+  tauri-app:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: tauri-runtime
+    image: pykaraoke-ng:tauri
+    container_name: pykaraoke-tauri-app
+    profiles:
+      - tauri
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - PYKARAOKE_BACKEND_URL=http://backend:8080
+    volumes:
+      # Mount songs directory
+      - ${SONGS_DIR:-../../songs}:/app/songs:ro
+      # X11 socket for GUI (Linux)
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      # Wayland socket (if using Wayland)
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}:/run/user/1000:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+    # For GUI access: xhost +local:docker
+
+  # ==========================================================================
+  # Tauri Development Service
+  # ==========================================================================
+  tauri-dev:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: tauri-dev
+    image: pykaraoke-ng:tauri-dev
+    container_name: pykaraoke-tauri-dev
+    profiles:
+      - tauri-dev
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}
+      - XDG_RUNTIME_DIR=/run/user/1000
+      - PYKARAOKE_BACKEND_URL=http://backend:8080
+      - CARGO_HOME=/app/.cargo
+      - RUSTUP_HOME=/app/.rustup
+    volumes:
+      # Mount Tauri source for live development
+      - ../../src/runtimes/tauri:/app/tauri:cached
+      # Mount Python backend source
+      - ../../src/pykaraoke:/app/src/pykaraoke:cached
+      # Cargo cache for faster builds
+      - cargo-cache:/app/.cargo
+      - rustup-cache:/app/.rustup
+      # X11 socket for GUI
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    working_dir: /app/tauri
+    command: ["cargo", "tauri", "dev"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Tauri Build Service (produces binaries)
+  # ==========================================================================
+  tauri-build:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: tauri-dev
+    image: pykaraoke-ng:tauri-dev
+    container_name: pykaraoke-tauri-build
+    profiles:
+      - tauri-build
+    environment:
+      - CARGO_HOME=/app/.cargo
+      - RUSTUP_HOME=/app/.rustup
+    volumes:
+      # Mount Tauri source
+      - ../../src/runtimes/tauri:/app/tauri:cached
+      # Cargo cache for faster builds
+      - cargo-cache:/app/.cargo
+      - rustup-cache:/app/.rustup
+      # Output directory for built binaries
+      - ../../dist:/app/dist
+    working_dir: /app/tauri
+    command: ["cargo", "tauri", "build"]
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Python Development Service
   # ==========================================================================
   dev:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
       target: development
     image: pykaraoke-ng:dev
     container_name: pykaraoke-dev
@@ -58,7 +161,7 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
     volumes:
       # Mount source for live reload
-      - .:/app:cached
+      - ../..:/app:cached
       # Anonymous volume for venv to avoid overwriting
       - /app/.venv
     working_dir: /app
@@ -73,8 +176,8 @@ services:
   # ==========================================================================
   test:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
       target: test
     image: pykaraoke-ng:test
     container_name: pykaraoke-test
@@ -85,10 +188,10 @@ services:
       - PYTEST_ADDOPTS=--color=yes
     volumes:
       # Mount source for testing current code
-      - ./tests:/app/tests:ro
-      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ../../tests:/app/tests:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
       # Mount for coverage output
-      - ./htmlcov:/app/htmlcov
+      - ../../htmlcov:/app/htmlcov
     command: ["pytest", "tests/", "-v", "--tb=short"]
     networks:
       - pykaraoke-net
@@ -98,8 +201,8 @@ services:
   # ==========================================================================
   test-coverage:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
       target: test
     image: pykaraoke-ng:test
     container_name: pykaraoke-test-coverage
@@ -108,9 +211,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
-      - ./tests:/app/tests:ro
-      - ./pyproject.toml:/app/pyproject.toml:ro
-      - ./htmlcov:/app/htmlcov
+      - ../../tests:/app/tests:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../htmlcov:/app/htmlcov
     command: >
       pytest tests/ -v
       --cov=/app
@@ -124,15 +227,15 @@ services:
   # ==========================================================================
   lint:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
       target: development
     image: pykaraoke-ng:dev
     container_name: pykaraoke-lint
     profiles:
       - dev
     volumes:
-      - .:/app:ro
+      - ../..:/app:ro
     command: ["python", "-m", "ruff", "check", "."]
     networks:
       - pykaraoke-net
@@ -149,4 +252,8 @@ networks:
 # ==========================================================================
 volumes:
   songs:
+    driver: local
+  cargo-cache:
+    driver: local
+  rustup-cache:
     driver: local
