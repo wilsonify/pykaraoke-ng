@@ -38,6 +38,10 @@ dependencies = [
 gui = [
     "wxPython>=4.2.0",
 ]
+http = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
@@ -56,7 +60,7 @@ docs = [
     "mkdocs-material>=9.5.0",
 ]
 all = [
-    "pykaraoke-ng[gui,dev,test,docs]",
+    "pykaraoke-ng[gui,http,dev,test,docs]",
 ]
 
 [project.urls]
