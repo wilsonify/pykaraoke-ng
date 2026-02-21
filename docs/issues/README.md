@@ -39,23 +39,24 @@ The original PyKaraoke project had 18 open issues at the time of forking. These 
 ### Status in PyKaraoke-NG
 
 **Resolved**:
-- #18, #21, #22: Platform and dependency issues resolved through modernization
-- wxPython GUI completely removed
-- Python 3.13+ fully supported
-- GP2X support dropped
+- #6: `.divx` and `.xvid` added to `MpgExtensions`
+- #14: `FilenameParser` handles "Artist - Title" and legacy dash formats; regression tests in place
+- #18, #21, #22: Platform and dependency issues resolved through modernization (Python 3.13+, wxPython removed, GP2X dropped)
 
-**High Priority for Investigation**:
-- #14: File parsing improvements
-- #16: MIDI playback testing
+**Partially Addressed** (regression tests exist, edge cases remain):
+- #5: ZIP inner-path parsing uses `ZipStoredName`; filenames without a delimiter are marked as known-ambiguous
+- #16: MIDI playback — Python 3 byte-string handling fixed; needs testing with real `.mid` files
 
-**Medium Priority**:
-- #7, #8: Database management features
-- #13: Scan filters
+**High Priority**:
+- #7, #8: Database path reallocation and backup/restore
+- #11: Scan failure logging
+- #13: Scan exclusion filters
 
 **Future Consideration**:
 - #1: Personal playlists
-- #2, #4: Audio manipulation features
+- #2, #4: Pitch and tempo shifting
 - #9: Professional KJ features
+- #10: MIDI without lyrics crash handling
 
 ## Contributing
 
