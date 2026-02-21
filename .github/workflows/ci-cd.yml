@@ -430,6 +430,22 @@ jobs:
           path: release-artifacts/
           merge-multiple: false
 
+      - name: Collect distributable files
+        run: |
+          mkdir -p release-files/
+          find release-artifacts/ -type f \( \
+            -name "*.deb" -o \
+            -name "*.exe" -o \
+            -name "*.dmg" -o \
+            -name "*.msi" -o \
+            -name "*.AppImage" \
+          \) -exec cp {} release-files/ \;
+          echo "=== Files to release ==="
+          ls -lh release-files/
+          file_count=$(find release-files/ -type f | wc -l)
+          echo "Total: $file_count file(s)"
+          test "$file_count" -gt 0 || { echo "ERROR: No distributable files found"; exit 1; }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         with:
@@ -438,6 +454,6 @@ jobs:
           body: ${{ steps.tag.outputs.changelog }}
           draft: false
           prerelease: false
-          files: release-artifacts/**/*
+          files: release-files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
