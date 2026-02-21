@@ -229,8 +229,14 @@ COPY tests/ /app/tests/
 COPY scripts/ /app/scripts/
 COPY pyproject.toml /app/
 
-# Install dev dependencies
-RUN uv pip install --no-cache-dir pytest pytest-cov pytest-xdist ruff
+# Install dev dependencies including testing and integration test deps
+RUN uv pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-xdist \
+    ruff \
+    fastapi \
+    uvicorn
 
 USER pykaraoke
 

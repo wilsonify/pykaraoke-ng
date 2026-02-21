@@ -158,3 +158,7 @@ def test_end_to_end_database_scan_and_report(tmp_path):
         assert "SampleArtist-SampleTitle.kar" in body_text
     finally:
         driver.quit()
+
+
+# Mark the entire module as integration tests
+pytestmark = pytest.mark.integration

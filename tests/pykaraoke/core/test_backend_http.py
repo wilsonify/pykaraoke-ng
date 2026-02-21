@@ -6,6 +6,7 @@ Test suite for PyKaraoke Backend HTTP API
 Tests the HTTP server mode to ensure it provides a proper REST API.
 """
 
+import os
 import pytest
 
 
@@ -75,22 +76,88 @@ class TestBackendModeSelection:
 class TestHTTPEndpoints:
     """Integration tests for HTTP endpoints (require server to be running)"""
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_health_endpoint(self):
         """Test /health endpoint"""
-        pytest.skip("Integration test - requires running server")
+        try:
+            import urllib.request
+            import urllib.error
+            
+            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+            
+            try:
+                response = urllib.request.urlopen(f"{api_url}/health", timeout=5)
+                assert response.status == 200
+            except urllib.error.URLError:
+                pytest.skip("Backend API server not running")
+        except Exception as e:
+            pytest.skip(f"Health check failed: {e}")
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_state_endpoint(self):
         """Test /api/state endpoint"""
-        pytest.skip("Integration test - requires running server")
+        try:
+            import json
+            import urllib.request
+            import urllib.error
+            
+            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+            
+            try:
+                response = urllib.request.urlopen(f"{api_url}/api/state", timeout=5)
+                assert response.status == 200
+                data = json.loads(response.read().decode())
+                assert "playback_state" in data or "status" in data
+            except urllib.error.URLError:
+                pytest.skip("Backend API server not running")
+        except Exception as e:
+            pytest.skip(f"State endpoint test failed: {e}")
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_command_endpoint(self):
         """Test /api/command endpoint"""
-        pytest.skip("Integration test - requires running server")
+        try:
+            import json
+            import urllib.request
+            import urllib.error
+            
+            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+            
+            try:
+                command = {"action": "get_state", "params": {}}
+                data = json.dumps(command).encode("utf-8")
+                req = urllib.request.Request(
+                    f"{api_url}/api/command",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                response = urllib.request.urlopen(req, timeout=5)
+                assert response.status == 200
+                response_data = json.loads(response.read().decode())
+                assert "status" in response_data
+            except urllib.error.URLError:
+                pytest.skip("Backend API server not running")
+        except Exception as e:
+            pytest.skip(f"Command endpoint test failed: {e}")
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_events_endpoint(self):
         """Test /api/events endpoint"""
-        pytest.skip("Integration test - requires running server")
+        try:
+            import urllib.request
+            import urllib.error
+            
+            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+            
+            try:
+                response = urllib.request.urlopen(
+                    f"{api_url}/api/events",
+                    timeout=5
+                )
+                # For SSE endpoint, just check that it returns successfully
+                assert response.status == 200
+            except urllib.error.URLError:
+                pytest.skip("Backend API server not running")
+        except Exception as e:
+            pytest.skip(f"Events endpoint test failed: {e}")

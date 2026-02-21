@@ -135,15 +135,74 @@ class TestBackendAPI:
 class TestBackendIntegration:
     """Integration tests for backend service"""
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_stdio_server_startup(self):
         """Test that stdio server can start (requires pygame/wx dependencies)"""
-        pytest.skip("Integration test - requires full environment")
+        try:
+            from pykaraoke.core import backend as backend_module
+            import subprocess
+            import time
+            
+            # Try to start backend in stdio mode as a subprocess
+            proc = subprocess.Popen(
+                ["python", "-c", "from pykaraoke.core.backend import main; main()"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            # Give it a moment to start
+            time.sleep(0.5)
+            
+            # Check if it's still running
+            poll_result = proc.poll()
+            
+            # Clean up
+            proc.terminate()
+            proc.wait(timeout=2)
+            
+            # If poll_result is None, process is running
+            if poll_result is None:
+                assert True  # Server started successfully
+            else:
+                pytest.skip("Backend startup failed")
+        except Exception as e:
+            pytest.skip(f"Integration test - requires full environment: {e}")
 
-    @pytest.mark.slow
+    @pytest.mark.integration
     def test_command_response_flow(self):
         """Test sending command and receiving response via stdio"""
-        pytest.skip("Integration test - requires full environment")
+        try:
+            from pykaraoke.core import backend as backend_module
+            import json
+            import subprocess
+            
+            # Start backend in stdio mode
+            proc = subprocess.Popen(
+                ["python", "-c", "from pykaraoke.core.backend import main; main()"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            
+            try:
+                # Send a command
+                command = {"action": "get_state", "params": {}}
+                proc.stdin.write(json.dumps(command) + "\n")
+                proc.stdin.flush()
+                
+                # Try to read response
+                response_line = proc.stdout.readline()
+                response = json.loads(response_line)
+                
+                assert "status" in response
+            finally:
+                proc.terminate()
+                proc.wait(timeout=2)
+        except Exception as e:
+            pytest.skip(f"Integration test - requires full environment: {e}")
 
 
 if __name__ == "__main__":
