@@ -1099,12 +1099,14 @@ class midPlayer(pykPlayer):
         else:
             return pykPlayer.GetPos(self)
 
-    def SetupOptions(self):
+    def SetupOptions(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
-        parser = pykPlayer.SetupOptions(self, usage="%prog [options] <KAR file>")
+        if usage is None:
+            usage = "%prog [options] <KAR file>"
+        parser = pykPlayer.SetupOptions(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--fps")

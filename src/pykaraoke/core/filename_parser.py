@@ -186,25 +186,31 @@ class FilenameParser:
                     title="-".join(parts[2:]).strip(),
                 )
         elif self.file_name_type == FileNameType.ARTIST_TITLE:
-            # Expect at least 2 parts: artist, title…
-            if len(parts) >= 2:
-                # Heuristic for artists whose names contain dashes (e.g. "AC-DC"):
-                # if the first part looks like a short all-caps abbreviation, group
-                # consecutive such parts into the artist until a non-abbreviation
-                # part is found.  The last part is always kept for the title so we
-                # never produce an empty title when all parts are abbreviations.
-                if _is_abbreviation_part(parts[0]):
-                    i = 1
-                    while i < len(parts) - 1 and _is_abbreviation_part(parts[i]):
-                        i += 1
-                    return ParsedSong(
-                        artist="-".join(parts[:i]).strip(),
-                        title="-".join(parts[i:]).strip(),
-                    )
-                return ParsedSong(
-                    artist=parts[0].strip(),
-                    title="-".join(parts[1:]).strip(),
-                )
+            return self._parse_artist_title(parts)
 
         logger.debug("Could not parse filename stem %r; returning as title only.", stem)
         return ParsedSong(title=stem.strip())
+
+    def _parse_artist_title(self, parts: list) -> ParsedSong:
+        """Handle the ``"Artist-Title"`` legacy pattern.
+
+        Includes a heuristic for artists whose names contain dashes
+        (e.g. "AC-DC"): consecutive short all-caps abbreviation parts
+        are grouped into the artist name.
+        """
+        if len(parts) < 2:
+            return ParsedSong(title="-".join(parts).strip())
+
+        if _is_abbreviation_part(parts[0]):
+            i = 1
+            while i < len(parts) - 1 and _is_abbreviation_part(parts[i]):
+                i += 1
+            return ParsedSong(
+                artist="-".join(parts[:i]).strip(),
+                title="-".join(parts[i:]).strip(),
+            )
+
+        return ParsedSong(
+            artist=parts[0].strip(),
+            title="-".join(parts[1:]).strip(),
+        )

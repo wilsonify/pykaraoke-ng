@@ -185,12 +185,14 @@ class mpgPlayer(pykPlayer):
     def GetPos(self):
         return self.Movie.get_time() * 1000
 
-    def SetupOptions(self):
+    def SetupOptions(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
-        parser = pykPlayer.SetupOptions(self, usage="%prog [options] <mpg filename>")
+        if usage is None:
+            usage = "%prog [options] <mpg filename>"
+        parser = pykPlayer.SetupOptions(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--font-scale")

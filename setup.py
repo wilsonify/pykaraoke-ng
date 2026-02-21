@@ -26,10 +26,12 @@ import sys
 from distutils.command.build_ext import build_ext
 from distutils.core import Extension, setup
 
+import os
+
 import wxversion
 
 import pykversion
-from pykenv import *
+from pykenv import env, ENV_WINDOWS
 
 wxversion.ensureMinimal("2.6")
 

@@ -45,6 +45,9 @@ from pykaraoke.config.constants import (
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
 
+# Constant for the sync delay message (avoiding literal duplication)
+_SYNC_MSG = "sync %s"
+
 
 class pykPlayer:
     def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None, windowTitle=None):
@@ -380,79 +383,71 @@ class pykPlayer:
         if event.type == pygame.USEREVENT:
             self.Close()
         elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                self.Close()
-
-            elif event.key == pygame.K_PAUSE or event.key == pygame.K_p:
-                self.Pause()
-
-            elif event.key == pygame.K_BACKSPACE or event.key == pygame.K_DELETE:
-                self.Rewind()
-                self.Play()
-
-            # Use control-left/right arrow to offset the current
-            # graphics time by 1/4 sec.  Use control-down arrow to
-            # restore them to sync.
-            elif (
-                self.State == STATE_PLAYING
-                and event.key == pygame.K_RIGHT
-                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
-            ):
-                manager.settings.SyncDelayMs += 250
-                print("sync %s" % manager.settings.SyncDelayMs)
-            elif (
-                self.State == STATE_PLAYING
-                and event.key == pygame.K_LEFT
-                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
-            ):
-                manager.settings.SyncDelayMs -= 250
-                print("sync %s" % manager.settings.SyncDelayMs)
-            elif (
-                self.State == STATE_PLAYING
-                and event.key == pygame.K_DOWN
-                and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL)
-            ):
-                manager.settings.SyncDelayMs = 0
-                print("sync %s" % manager.settings.SyncDelayMs)
-
-            if self.SupportsFontZoom:
-                if (
-                    event.key == pygame.K_PLUS
-                    or event.key == pygame.K_EQUALS
-                    or event.key == pygame.K_KP_PLUS
-                ):
-                    manager.ZoomFont(1.0 / 0.9)
-                elif (
-                    event.key == pygame.K_MINUS
-                    or event.key == pygame.K_UNDERSCORE
-                    or event.key == pygame.K_KP_MINUS
-                ):
-                    manager.ZoomFont(0.9)
-
+            self._handleKeyDown(event)
         elif event.type == pygame.QUIT:
             self.Close()
-
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONDOWN:
-            if event.button == GP2X_BUTTON_SELECT:
-                self.Close()
-            elif event.button == GP2X_BUTTON_START:
-                self.Pause()
-            elif event.button == GP2X_BUTTON_L:
-                self.ShoulderLHeld = True
-            elif event.button == GP2X_BUTTON_R:
-                self.ShoulderRHeld = True
-
-            if self.SupportsFontZoom:
-                if event.button == GP2X_BUTTON_RIGHT and self.ShoulderLHeld:
-                    manager.ZoomFont(1.0 / 0.9)
-                elif event.button == GP2X_BUTTON_LEFT and self.ShoulderLHeld:
-                    manager.ZoomFont(0.9)
-
+            self._handleJoyButtonDown(event)
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONUP:
-            if event.button == GP2X_BUTTON_L:
-                self.ShoulderLHeld = False
-            elif event.button == GP2X_BUTTON_R:
-                self.ShoulderRHeld = False
+            self._handleJoyButtonUp(event)
+
+    def _handleKeyDown(self, event):
+        """Handle keyboard events, extracted to reduce cognitive complexity."""
+        if event.key == pygame.K_ESCAPE:
+            self.Close()
+        elif event.key in (pygame.K_PAUSE, pygame.K_p):
+            self.Pause()
+        elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+            self.Rewind()
+            self.Play()
+        elif self.State == STATE_PLAYING and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
+            self._handleCtrlArrow(event)
+
+        if self.SupportsFontZoom:
+            self._handleFontZoomKey(event)
+
+    def _handleCtrlArrow(self, event):
+        """Handle ctrl+arrow keys for sync delay adjustment."""
+        if event.key == pygame.K_RIGHT:
+            manager.settings.SyncDelayMs += 250
+            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+        elif event.key == pygame.K_LEFT:
+            manager.settings.SyncDelayMs -= 250
+            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+        elif event.key == pygame.K_DOWN:
+            manager.settings.SyncDelayMs = 0
+            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+
+    def _handleFontZoomKey(self, event):
+        """Handle font zoom keyboard shortcuts."""
+        if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
+            manager.ZoomFont(1.0 / 0.9)
+        elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
+            manager.ZoomFont(0.9)
+
+    def _handleJoyButtonDown(self, event):
+        """Handle GP2X joystick button down events."""
+        if event.button == GP2X_BUTTON_SELECT:
+            self.Close()
+        elif event.button == GP2X_BUTTON_START:
+            self.Pause()
+        elif event.button == GP2X_BUTTON_L:
+            self.ShoulderLHeld = True
+        elif event.button == GP2X_BUTTON_R:
+            self.ShoulderRHeld = True
+
+        if self.SupportsFontZoom and self.ShoulderLHeld:
+            if event.button == GP2X_BUTTON_RIGHT:
+                manager.ZoomFont(1.0 / 0.9)
+            elif event.button == GP2X_BUTTON_LEFT:
+                manager.ZoomFont(0.9)
+
+    def _handleJoyButtonUp(self, event):
+        """Handle GP2X joystick button up events."""
+        if event.button == GP2X_BUTTON_L:
+            self.ShoulderLHeld = False
+        elif event.button == GP2X_BUTTON_R:
+            self.ShoulderRHeld = False
 
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
