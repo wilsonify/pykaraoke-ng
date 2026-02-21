@@ -14,18 +14,14 @@ Everything you need to host your own karaoke night.
 - A sound card and speakers
 - Karaoke files (CDG, KAR, or MPEG format)
 
-### Install from GitHub Releases
+### Install with pip
 
 ```bash
-# Download and install the latest release
-pip install https://github.com/wilsonify/pykaraoke-ng/releases/latest/download/pykaraoke_ng-0.0.0-py3-none-any.whl
-```
+# Standard installation
+pip install pykaraoke-ng
 
-### Install from GitHub Packages
-
-```bash
-# Install from GitHub Container Registry
-pip install pykaraoke-ng --index-url https://ghcr.io/wilsonify/pykaraoke-ng
+# Or using uv (faster)
+uv pip install pykaraoke-ng
 ```
 
 ### Install from Source

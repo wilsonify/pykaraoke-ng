@@ -17,16 +17,11 @@ A free, open-source karaoke player for Linux, Windows, and macOS
 ## Quick Start
 
 ```bash
-# Install from GitHub Releases
-pip install https://github.com/wilsonify/pykaraoke-ng/releases/latest/download/pykaraoke_ng-0.0.0-py3-none-any.whl
+# Install with pip
+pip install pykaraoke-ng
 
-# Or install from GitHub Packages
-pip install pykaraoke-ng --index-url https://ghcr.io/wilsonify/pykaraoke-ng
-
-# Or install from source (recommended for development)
-git clone https://github.com/wilsonify/pykaraoke-ng.git
-cd pykaraoke-ng
-pip install -e .
+# Or using uv (recommended)
+uv pip install pykaraoke-ng
 
 # Run the GUI
 pykaraoke

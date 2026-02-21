@@ -444,7 +444,7 @@ scripts/
 8. **Packaging and Distribution**
    - Proper Python package structure
    - Clear what gets installed
-   - Published via GitHub Releases and GitHub Packages
+   - Easier to publish to PyPI
 
 ## Trade-offs and Considerations
 

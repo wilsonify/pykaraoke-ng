@@ -13,20 +13,16 @@ A free, open-source karaoke player for Linux, Windows, and macOS.
 - 📚 **Song Database**: Automatically catalog and search your library
 - 🖥️ **Cross-Platform**: Linux, Windows, macOS support
 - 🚀 **Desktop Apps**: Modern Electron and Tauri runtimes
+- 🐳 **Dual-Mode Backend**: stdio for desktop apps, HTTP API for containers and headless deployments
 
 ## Quick Start
 
 ```bash
-# Install from GitHub Releases
-pip install https://github.com/wilsonify/pykaraoke-ng/releases/latest/download/pykaraoke_ng-0.0.0-py3-none-any.whl
+# Install with pip
+pip install pykaraoke-ng
 
-# Or install from GitHub Packages
-pip install pykaraoke-ng --index-url https://ghcr.io/wilsonify/pykaraoke-ng
-
-# Or install from source (recommended for development)
-git clone https://github.com/wilsonify/pykaraoke-ng.git
-cd pykaraoke-ng
-pip install -e .
+# Or using uv (recommended)
+uv pip install pykaraoke-ng
 
 # Run the GUI
 pykaraoke
@@ -36,6 +32,31 @@ pycdg song.cdg
 pykar song.kar
 pympg song.mpg
 ```
+
+## Backend API Modes
+
+The PyKaraoke backend supports two execution modes for different deployment scenarios:
+
+### stdio Mode (Desktop)
+For desktop applications using IPC:
+```bash
+python -m pykaraoke.core.backend --stdio
+```
+
+### HTTP API Mode (Docker/Headless)
+For containerized and headless deployments:
+```bash
+# Install HTTP dependencies
+pip install pykaraoke-ng[http]
+
+# Run HTTP server
+python -m pykaraoke.core.backend --http
+
+# Or with Docker
+docker run -p 8080:8080 -e BACKEND_MODE=http pykaraoke-ng:backend
+```
+
+See [Backend Modes Documentation](docs/backend-modes.md) for complete API reference and examples.
 
 ## Documentation
 
@@ -51,6 +72,7 @@ pympg song.mpg
 - [Architecture Overview](docs/architecture/overview.md) - System design and architecture
 - [Repository Structure](docs/architecture/structure.md) - Project organization
 - [Migration Guide](docs/architecture/migration-guide.md) - Guide for migrating from legacy code
+- [Backend Modes](docs/backend-modes.md) - stdio and HTTP API modes for desktop and containerized environments
 
 ## Supported Formats
 
