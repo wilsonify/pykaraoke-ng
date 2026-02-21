@@ -1,0 +1,443 @@
+# Production-grade CI/CD Pipeline for PyKaraoke NG
+#
+# Job graph (stage order):
+#   unit-tests-python ─┐
+#   unit-tests-rust   ─┼─► sonarqube ─► integration-tests ─► build (matrix) ─► e2e-tests (matrix) ─► release
+#   unit-tests-frontend┘
+#
+# Pull requests: run full CI, but do NOT trigger the release stage.
+# Main branch pushes: run full CI + release stage.
+#
+# Required secrets:
+#   SONARQUBE_TOKEN      – SonarQube/SonarCloud authentication token
+#   SONARQUBE_HOST_URL   – SonarQube server URL (e.g. https://sonarcloud.io)
+#   TAURI_PRIVATE_KEY    – (optional) Tauri updater signing key
+#   TAURI_KEY_PASSWORD   – (optional) Tauri updater key password
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Cancel redundant runs on the same ref (e.g. rapid-fire pushes).
+# Do NOT cancel in-progress runs on main so a release is never interrupted.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '20'
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 1: Unit Tests — Python, Rust, and Frontend run in parallel.
+  #          Coverage is collected for the SonarQube stage.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  unit-tests-python:
+    name: Unit Tests / Python
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for SonarQube blame data
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/setup.cfg') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test]"
+
+      - name: Run Python unit tests with coverage
+        run: |
+          pytest tests/pykaraoke/ \
+            --cov=src/pykaraoke \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov \
+            --junitxml=pytest-junit.xml \
+            -v
+
+      - name: Upload Python coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: |
+            coverage.xml
+            pytest-junit.xml
+            htmlcov/
+          retention-days: 7
+
+  unit-tests-rust:
+    name: Unit Tests / Rust
+    runs-on: ubuntu-22.04      # Tauri v1 requires webkit2gtk-4.0, only on 22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libwebkit2gtk-4.0-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            librsvg2-dev
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+        with:
+          workspaces: src/runtimes/tauri/src-tauri
+
+      - name: Run Rust unit tests
+        working-directory: src/runtimes/tauri/src-tauri
+        run: cargo test
+
+  unit-tests-frontend:
+    name: Unit Tests / Frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run frontend unit tests
+        working-directory: src/runtimes/tauri/src
+        run: node --test app.test.js index.test.js
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 2: SonarQube — static analysis + quality gate enforcement.
+  #          Runs only after ALL unit-test jobs succeed.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  sonarqube:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+    needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend]
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # disable shallow clone for accurate blame/history
+
+      - name: Download Python coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-coverage
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+
+      # Quality gate check — no continue-on-error: pipeline fails if gate fails.
+      - name: SonarQube Quality Gate check
+        uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 3: Integration Tests — realistic service dependencies.
+  #          Runs only after SonarQube quality gate passes.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [sonarqube]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml', '**/setup.cfg') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test]"
+
+      - name: Install Chromium for Selenium E2E helper
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q chromium-browser chromium-chromedriver
+
+      - name: Run integration tests
+        run: |
+          xvfb-run -a pytest tests/integration/ -v -m integration \
+            --junitxml=integration-junit.xml
+
+      - name: Upload integration test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: integration-junit.xml
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 4: Platform Build Matrix — parallel native builds.
+  #          Triggers only after integration tests pass.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  build:
+    name: Build / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    needs: [integration-tests]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-22.04
+            bundles: deb
+            artifact-name: tauri-linux-x86_64
+          - platform: windows
+            os: windows-latest
+            bundles: nsis
+            artifact-name: tauri-windows-x86_64
+          - platform: macos
+            os: macos-latest
+            bundles: dmg
+            artifact-name: tauri-macos-aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libwebkit2gtk-4.0-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install Windows bundler (NSIS)
+        if: matrix.platform == 'windows'
+        run: choco install nsis --no-progress -y
+        shell: pwsh
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+        with:
+          workspaces: src/runtimes/tauri/src-tauri
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Tauri CLI
+        run: npm install -g --ignore-scripts @tauri-apps/cli@1.6.3
+
+      - name: Build Tauri application
+        working-directory: src/runtimes/tauri
+        run: tauri build --bundles ${{ matrix.bundles }}
+        env:
+          # Optional: Tauri updater signing keys — set these secrets if using the updater.
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Upload platform build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: src/runtimes/tauri/src-tauri/target/release/bundle/
+          retention-days: 14
+          if-no-files-found: error
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 5: End-to-End Tests — validate each platform's artifact.
+  #          Runs per platform after ALL builds succeed.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  e2e-tests:
+    name: E2E Tests / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    needs: [build]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-22.04
+            artifact-name: tauri-linux-x86_64
+          - platform: windows
+            os: windows-latest
+            artifact-name: tauri-windows-x86_64
+          - platform: macos
+            os: macos-latest
+            artifact-name: tauri-macos-aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download platform build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: dist/
+
+      - name: Verify artifact exists
+        shell: bash
+        run: |
+          echo "=== Platform build artifacts ==="
+          find dist/ -type f | sort
+          file_count=$(find dist/ -type f | wc -l)
+          echo "Total files: $file_count"
+          test "$file_count" -gt 0 || { echo "ERROR: No artifacts found"; exit 1; }
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install E2E test dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e ".[dev,test]"
+
+      - name: Install Linux display and Chromium (for headless E2E)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q xvfb chromium-browser chromium-chromedriver
+
+      - name: Run E2E tests (Linux — headless via Xvfb)
+        if: matrix.platform == 'linux'
+        run: |
+          xvfb-run -a pytest tests/integration/test_end_to_end.py \
+            -v -m "e2e or integration" \
+            --junitxml=e2e-junit-${{ matrix.platform }}.xml
+
+      - name: Run E2E tests (Windows / macOS)
+        if: matrix.platform != 'linux'
+        run: |
+          pytest tests/integration/test_end_to_end.py \
+            -v -m "e2e or integration" \
+            --junitxml=e2e-junit-${{ matrix.platform }}.xml
+        shell: bash
+
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.platform }}
+          path: e2e-junit-${{ matrix.platform }}.xml
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 6: Release — semver tag + GitHub Release with all platform artifacts.
+  #          Runs ONLY on main branch pushes after all E2E tests pass.
+  #          Pull requests never trigger this stage.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [e2e-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write  # required to create tags and GitHub Releases
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history required for changelog generation
+
+      # Determine next semver version from conventional commit messages:
+      #   feat!: / BREAKING CHANGE → major bump
+      #   feat:                    → minor bump
+      #   fix: / chore: / etc.    → patch bump (default)
+      - name: Compute next semantic version and create tag
+        id: tag
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          release_branches: main,master
+          tag_prefix: v
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tauri-*
+          path: release-artifacts/
+          merge-multiple: false
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
+        with:
+          tag_name: ${{ steps.tag.outputs.new_tag }}
+          name: PyKaraoke NG ${{ steps.tag.outputs.new_tag }}
+          body: ${{ steps.tag.outputs.changelog }}
+          draft: false
+          prerelease: false
+          files: release-artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

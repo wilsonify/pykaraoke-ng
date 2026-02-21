@@ -23,3 +23,4 @@ tauri-app/node_modules/
 
 # SonarQube
 .scannerwork/
+.env
