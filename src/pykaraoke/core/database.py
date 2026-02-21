@@ -205,10 +205,12 @@ class SongStruct:
                 _parser = FilenameParser(
                     file_name_type=FileNameType(settings.CdgFileNameType)
                 )
-                # When the song lives inside a ZIP, parse the inner member
-                # name rather than the outer archive path.
-                _parse_path = ZipStoredName if ZipStoredName else Filepath
-                _parsed = _parser.parse(_parse_path)
+                # When the song lives inside a ZIP, use the inner member
+                # path for parsing (directory structure can provide the artist).
+                if ZipStoredName:
+                    _parsed = _parser.parse_zip_path(ZipStoredName)
+                else:
+                    _parsed = _parser.parse(Filepath)
                 # An empty artist means the filename did not match the
                 # configured naming scheme (equivalent to the legacy KeyError).
                 if not _parsed.artist:

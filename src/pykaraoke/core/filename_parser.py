@@ -46,6 +46,18 @@ class ParsedSong:
 _SPACE_DASH_RE = re.compile(r"\s+-\s+")
 
 
+def _is_abbreviation_part(part: str) -> bool:
+    """Return True if *part* looks like a short all-caps abbreviation.
+
+    Examples of abbreviation parts: "AC", "DC", "DJ", "MC", "ZZ".
+    A part qualifies when it has at least one alphabetic character, every
+    *cased* character is uppercase, and the total length is at most 3.
+    This identifies artist-name components that contain internal dashes
+    (e.g. "AC-DC") so they can be grouped together before the title begins.
+    """
+    return bool(part) and len(part) <= 3 and part.isupper() and any(c.isalpha() for c in part)
+
+
 class FilenameParser:
     """Parses karaoke filenames to extract artist, title, disc, and track.
 
@@ -89,6 +101,42 @@ class FilenameParser:
             return self._parse_space_dash(stem)
 
         return self._parse_legacy(stem)
+
+    def parse_zip_path(self, zip_stored_name: str) -> ParsedSong:
+        """Parse a ZIP member path, using directory structure as a fallback.
+
+        First tries to parse the filename component using the regular strategy
+        (``parse``).  If that yields no artist — e.g. the filename is a plain
+        title with no separator — uses the *parent directory* component as the
+        artist.
+
+        This supports the common karaoke ZIP layout::
+
+            Language/Artist/Title.kar
+            Artist/Title.kar
+
+        Args:
+            zip_stored_name: The path of the member inside the ZIP archive,
+                using forward or backward slashes.
+
+        Returns:
+            :class:`ParsedSong` with extracted fields.
+        """
+        # Try regular parsing on the basename first.
+        result = self.parse(zip_stored_name)
+        if result.artist:
+            return result
+
+        # Fallback: derive artist from the parent directory component.
+        # result.title already holds the filename stem from the parse() call above.
+        normalized = zip_stored_name.replace("\\", "/")
+        components = normalized.split("/")
+        if len(components) >= 2:
+            artist = components[-2].strip()
+            if artist:
+                return ParsedSong(artist=artist, title=result.title)
+
+        return result
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -140,6 +188,19 @@ class FilenameParser:
         elif self.file_name_type == FileNameType.ARTIST_TITLE:
             # Expect at least 2 parts: artist, title…
             if len(parts) >= 2:
+                # Heuristic for artists whose names contain dashes (e.g. "AC-DC"):
+                # if the first part looks like a short all-caps abbreviation, group
+                # consecutive such parts into the artist until a non-abbreviation
+                # part is found.  The last part is always kept for the title so we
+                # never produce an empty title when all parts are abbreviations.
+                if _is_abbreviation_part(parts[0]):
+                    i = 1
+                    while i < len(parts) - 1 and _is_abbreviation_part(parts[i]):
+                        i += 1
+                    return ParsedSong(
+                        artist="-".join(parts[:i]).strip(),
+                        title="-".join(parts[i:]).strip(),
+                    )
                 return ParsedSong(
                     artist=parts[0].strip(),
                     title="-".join(parts[1:]).strip(),
