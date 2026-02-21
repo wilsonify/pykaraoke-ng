@@ -28,6 +28,7 @@ import pygame
 from pykaraoke.config import version as pykversion
 from pykaraoke.config.constants import (
     ENV_GP2X,
+    ENV_OSX,
     ENV_WINDOWS,
     STATE_CLOSED,
     STATE_CLOSING,

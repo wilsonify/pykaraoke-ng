@@ -569,7 +569,15 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
         return backend.get_state()
 
     # Execute a command
-    @app.post(\"/api/command\", responses={500: {\"description\": \"Internal server error from command execution\"}})\n    async def execute_command(command: dict[str, Any]):\n        \"\"\"Execute a command on the backend\"\"\"\n        try:\n            response = backend.handle_command(command)\n            return response\n        except (RuntimeError, OSError, ValueError, TypeError) as e:\n            logger.error(\"Error executing command: %s\", e, exc_info=True)\n            raise HTTPException(status_code=500, detail=str(e)) from e
+    @app.post("/api/command", responses={500: {"description": "Internal server error from command execution"}})
+    async def execute_command(command: dict[str, Any]):
+        """Execute a command on the backend"""
+        try:
+            response = backend.handle_command(command)
+            return response
+        except (RuntimeError, OSError, ValueError, TypeError) as e:
+            logger.error("Error executing command: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     # Get events (polling endpoint)
     @app.get("/api/events")
