@@ -1,6 +1,10 @@
-# PyKaraoke Backend - Dual Mode Support
+# Backend Modes
 
-The PyKaraoke backend now supports two execution modes:
+[← Back to Home](index.md) | [Architecture Overview](architecture/overview.md)
+
+---
+
+The PyKaraoke backend supports two execution modes:
 
 ## 1. stdio Mode (Default)
 

@@ -22,7 +22,6 @@ implementations for different types of Karaoke files."""
 
 import os
 import sys
-import types
 
 import pygame
 
@@ -78,7 +77,7 @@ class pykPlayer:
         if manager.options.dump:
             manager.options.nomusic = True
 
-        if isinstance(song, types.StringTypes):
+        if isinstance(song, str):
             # We were given a filename.  Convert it to a SongStruct.
             song = self.songDb.makeSongStruct(song)
 

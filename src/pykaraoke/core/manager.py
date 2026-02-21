@@ -38,12 +38,7 @@ from pykaraoke.config.constants import (
 )
 from pykaraoke.config.environment import env
 
-# Python 2.3 and newer ship with optparse; older Python releases need "Optik"
-# installed (optik.sourceforge.net)
-try:
-    import optparse
-except ImportError:
-    import Optik as optparse
+import optparse
 
 if env == ENV_GP2X:
     import _cpuctrl as cpuctrl
@@ -134,7 +129,7 @@ class pykManager:
 
     def GetVolume(self):
         """Gives the current volume level."""
-        if vars().has_key("music"):
+        if "music" in vars():
             return pygame.mixer.music.get_volume()
         else:
             return 0.50  # 75% is the industry recommended maximum value

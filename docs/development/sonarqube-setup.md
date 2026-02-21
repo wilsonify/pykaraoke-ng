@@ -1,6 +1,6 @@
 # SonarQube Integration Setup
 
-[← Back to Home](../index.md) | [Developer Guide](../developers.md) | [Admin Guide](../administrators.md)
+[← Back to Home](../index.md) | [Developer Guide](../developers.md)
 
 ---
 

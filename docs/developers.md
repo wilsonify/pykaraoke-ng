@@ -6,38 +6,25 @@ Set up your development environment and contribute to PyKaraoke-NG.
 
 ---
 
-## Development Setup
-
-### Prerequisites
+## Prerequisites
 
 - Python 3.10+
 - Git
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- Docker (optional, for containerized development)
+- Docker (optional)
+- Rust toolchain (optional, for Tauri development)
 
-### Quick Setup with uv
+## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
 
-# Run the setup script
-./scripts/setup-dev-env.sh
-
-# Or manually with uv
-uv venv
-source .venv/bin/activate
+# Quick setup with uv
 uv sync
-```
 
-### Manual Setup with pip
-
-```bash
-git clone https://github.com/wilsonify/pykaraoke-ng.git
-cd pykaraoke-ng
-python -m venv .venv
-source .venv/bin/activate
+# Or with pip
+python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
@@ -46,244 +33,118 @@ pip install -e ".[dev]"
 ## Project Structure
 
 ```
-pykaraoke-ng/
-├── src/
-│   ├── pykaraoke/           # Main Python package
-│   │   ├── core/            # Core player modules
-│   │   ├── config/          # Configuration & constants
-│   │   └── utils/           # Utility functions
-│   └── runtimes/
-│       ├── electron/        # Electron desktop app
-│       └── tauri/           # Tauri desktop app
-├── deploy/
-│   ├── docker/              # Dockerfile & compose
-│   └── kubernetes/          # K8s manifests
-├── tests/                   # Test suite
-├── scripts/                 # Helper scripts
-├── docs/                    # Documentation (you are here)
-├── pykaraoke.py             # Main GUI application entry
-├── pycdg.py                 # CDG player
-├── pykar.py                 # MIDI/KAR player
-├── pympg.py                 # MPEG player
-├── pykaraoke_mini.py        # Minimal player
-└── pyproject.toml           # Project configuration
+src/pykaraoke/              # Core Python package
+├── players/                # CDG, KAR, MPG players
+├── core/                   # Backend, database, manager, player
+├── config/                 # Constants, environment, version
+└── native/                 # C extensions
+
+src/runtimes/tauri/         # Tauri desktop app
+├── src/                    # Web frontend (HTML/CSS/JS)
+└── src-tauri/              # Rust backend
+
+tests/                      # Test suite
+├── pykaraoke/              # Unit tests (mirrors src/)
+├── integration/            # End-to-end tests
+└── fixtures/               # Test data
 ```
+
+See [Repository Structure](architecture/structure.md) for the full breakdown.
 
 ---
 
 ## Running Tests
 
-### Run All Tests
-
 ```bash
-# Using the test script
+# All tests
 ./scripts/run-tests.sh
 
-# Or directly with pytest
+# Directly with pytest
 uv run pytest tests/ -v
 
-# With coverage report
+# Specific test file
+uv run pytest tests/pykaraoke/core/test_filename_parser.py -v
+
+# With coverage
 uv run pytest tests/ --cov=. --cov-report=html
 ```
 
-### Run Specific Tests
+### Tauri Tests
 
 ```bash
-# Run a single test file
-uv run pytest tests/test_pykversion.py -v
+# Rust unit tests
+cd src/runtimes/tauri/src-tauri && cargo test
 
-# Run tests matching a pattern
-uv run pytest -k "test_cdg" -v
-
-# Run with parallel execution
-uv run pytest -n auto
-```
-
-### Test Coverage
-
-```bash
-uv run pytest --cov=. --cov-report=html
-open htmlcov/index.html
+# JavaScript tests
+cd src/runtimes/tauri && node --test src/app.test.js src/index.test.js
 ```
 
 ---
 
 ## Code Quality
 
-### Linting with Ruff
-
 ```bash
-# Check for issues
+# Lint
 uv run ruff check .
 
-# Auto-fix issues
+# Auto-fix
 uv run ruff check . --fix
 
-# Format code
+# Format
 uv run ruff format .
-```
-
-### Type Checking with mypy
-
-```bash
-uv run mypy *.py
-```
-
-### Pre-commit Hooks
-
-```bash
-uv pip install pre-commit
-pre-commit install
-pre-commit run --all-files
 ```
 
 ---
 
-## Architecture Overview
-
-### Player Classes
-
-All players inherit from a common base:
-
-```
-pykplayer.py (base)
-├── pycdg.py    (CDG+audio)
-├── pykar.py    (MIDI/KAR)
-└── pympg.py    (MPEG video)
-```
-
-### Key Components
+## Key Modules
 
 | Module | Purpose |
 |--------|---------|
-| `pykmanager.py` | Manages playback, queues, and settings |
-| `pykdb.py` | SQLite database for song library |
-| `pykenv.py` | Platform detection (Linux/Windows/macOS) |
-| `pycdgAux.py` | CDG format parsing and rendering |
+| `core/backend.py` | Headless backend — stdio and HTTP modes |
+| `core/database.py` | Song database, library scanning, settings |
+| `core/filename_parser.py` | Artist–title extraction from filenames |
+| `core/manager.py` | Playback coordination and queues |
+| `players/cdg.py` | CD+G format playback |
+| `players/kar.py` | MIDI / KAR playback with lyrics |
+| `players/mpg.py` | MPEG / AVI video playback |
 
 ---
 
 ## Docker Development
 
-### Build and Run
-
 ```bash
-# Build the image
+# Build and run
 docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
 
-# Run development container
+# Development container
 docker compose -f deploy/docker/docker-compose.yml --profile dev up
 
 # Run tests in container
 docker compose -f deploy/docker/docker-compose.yml --profile test up
 ```
 
-### Development Container
-
-```bash
-docker compose -f deploy/docker/docker-compose.yml run --rm dev bash
-
-# Inside container
-pytest tests/ -v
-ruff check .
-```
-
 ---
 
-## Electron Desktop App
+## Tauri Development
 
-### Setup
-
-```bash
-cd src/runtimes/electron
-npm install
-```
-
-### Development
+### Prerequisites (Linux)
 
 ```bash
-npm start        # Development mode
-npm run build    # Build for distribution
-```
+# Debian/Ubuntu
+sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget \
+    libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
----
-
-## Tauri Desktop App
-
-Tauri provides a lightweight alternative to Electron using Rust and native webview.
-
-### Prerequisites
-
-1. **Install Rust** (if not already installed):
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   source $HOME/.cargo/env
-   ```
-
-2. **Install webkit2gtk** (Linux only):
-   ```bash
-   # Debian/Ubuntu (webkit2gtk 4.0)
-   sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file \
-       libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-   # Debian/Ubuntu (webkit2gtk 4.1 - for newer systems)
-   sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
-       libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-   # Fedora
-   sudo dnf install webkit2gtk4.0-devel openssl-devel curl wget file
-   ```
-
-3. **Install Tauri CLI** (version 1.x for webkit2gtk 4.0 compatibility):
-   ```bash
-   cargo install tauri-cli --version "^1"
-   ```
-
-### Setup Icons
-
-The Tauri app requires icons in `src/runtimes/tauri/src-tauri/icons/`. If missing:
-
-```bash
-# Create icons directory
-mkdir -p src/runtimes/tauri/src-tauri/icons
-
-# Copy an icon (adjust source path as needed)
-cp assets/icons/microphone.png src/runtimes/tauri/src-tauri/icons/icon.png
-cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/32x32.png
-cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/128x128.png
-cp src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/128x128@2x.png
-
-# For Windows builds, also create .ico file
-convert src/runtimes/tauri/src-tauri/icons/icon.png src/runtimes/tauri/src-tauri/icons/icon.ico
+# Install Tauri CLI v1
+cargo install tauri-cli --version "^1"
 ```
 
 ### Development
 
 ```bash
 cd src/runtimes/tauri/src-tauri
-cargo tauri dev
+cargo tauri dev     # hot-reload development
+cargo tauri build   # production build
 ```
-
-### Build for Distribution
-
-```bash
-cd src/runtimes/tauri/src-tauri
-cargo tauri build
-```
-
-Built packages appear in `src/runtimes/tauri/src-tauri/target/release/bundle/`.
-
-### Troubleshooting Tauri
-
-**GBM buffer creation errors (GPU/driver issues):**
-```bash
-WEBKIT_DISABLE_COMPOSITING_MODE=1 cargo tauri dev
-```
-
-**Tauri v1 vs v2 compatibility:**
-- Tauri v1 CLI requires `libwebkit2gtk-4.0-dev`
-- Tauri v2 CLI requires `libwebkit2gtk-4.1-dev`
-- Check your system: `pkg-config --exists webkit2gtk-4.0 && echo "4.0 available"`
 
 ---
 
@@ -293,15 +154,11 @@ WEBKIT_DISABLE_COMPOSITING_MODE=1 cargo tauri dev
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make your changes
-4. Run tests: `./scripts/run-tests.sh`
-5. Run linting: `uv run ruff check .`
-6. Commit with clear messages
-7. Push and create a Pull Request
+3. Make changes and run tests: `./scripts/run-tests.sh`
+4. Lint: `uv run ruff check .`
+5. Commit with clear messages and open a PR
 
 ### Commit Messages
-
-Use conventional commit format:
 
 ```
 feat: add support for OGG audio files
@@ -313,27 +170,16 @@ refactor: simplify player state management
 
 ### Code Style
 
-- Follow PEP 8 guidelines
+- Follow PEP 8
 - Use type hints where practical
 - Write docstrings for public functions
-- Keep functions focused and small
 - Add tests for new features
-
-> **Questions?** Open an issue on GitHub or check existing discussions.
 
 ---
 
 ## Additional Resources
 
-### Architecture Documentation
-
-- [Architecture Overview](architecture/overview.md) - System design and component relationships
-- [Repository Structure](architecture/structure.md) - Project organization
-- [Migration Guide](architecture/migration-guide.md) - Guide for migrating from legacy code
-- [Reorganization Plan](architecture/reorganization-plan.md) - Repository reorganization details
-
-### Development Documentation
-
-- [SonarQube Setup](development/sonarqube-setup.md) - Code quality scanning
-- [Quality Improvements](development/quality-improvements.md) - Code quality fixes
-- [PR Summary](development/pr-summary.md) - Tauri migration implementation details
+- [Architecture Overview](architecture/overview.md) — system design
+- [Backend Modes](backend-modes.md) — stdio and HTTP API reference
+- [Quality Improvements](development/quality-improvements.md) — code quality history
+- [SonarQube Setup](development/sonarqube-setup.md) — CI quality scanning

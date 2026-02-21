@@ -1,369 +1,142 @@
-# PyKaraoke NG Architecture Documentation
+# Architecture Overview
 
 [← Back to Home](../index.md) | [Developer Guide](../developers.md)
 
 ---
 
-## Migration from wxPython to Tauri
+## Design
 
-This document describes the architectural transformation of PyKaraoke from a monolithic wxPython application to a modern, decoupled Tauri-based architecture.
-
-## Problem Statement
-
-The original PyKaraoke application was tightly coupled to wxPython:
-- UI and business logic were intertwined
-- Difficult to modernize the UI
-- Limited to platforms where wxPython is available
-- Hard to test components independently
-- No clear separation of concerns
-
-## Solution Architecture
-
-### High-Level Design
+PyKaraoke-NG uses a **decoupled frontend/backend architecture**. The Python backend owns all business logic; lightweight desktop shells (Tauri, Electron) provide the UI.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Desktop Application                       │
-│                                                                    │
-│  ┌─────────────────┐           ┌──────────────────────────┐     │
-│  │  Web Frontend   │           │   Tauri Shell (Rust)     │     │
-│  │  (HTML/CSS/JS)  │◄─────────►│   • Window Management    │     │
-│  │                 │   Events  │   • Native Integration   │     │
-│  │  • UI Views     │           │   • IPC Router           │     │
-│  │  • User Input   │           │   • Process Manager      │     │
-│  └─────────────────┘           └──────────────────────────┘     │
-│                                           │                       │
-│                                           │ stdin/stdout          │
-│                                           │ (JSON Protocol)       │
-│                                           ▼                       │
-│                          ┌─────────────────────────────┐         │
-│                          │  Python Backend Service     │         │
-│                          │  (pykbackend.py)            │         │
-│                          │                             │         │
-│                          │  ┌──────────────────────┐  │         │
-│                          │  │  Command Processor   │  │         │
-│                          │  └──────────────────────┘  │         │
-│                          │            ▼                │         │
-│                          │  ┌──────────────────────┐  │         │
-│                          │  │  Core Engine         │  │         │
-│                          │  │  (pykplayer,         │  │         │
-│                          │  │   pykmanager, etc)   │  │         │
-│                          │  └──────────────────────┘  │         │
-│                          │            ▼                │         │
-│                          │  ┌──────────────────────┐  │         │
-│                          │  │  Database & Library  │  │         │
-│                          │  │  (pykdb)             │  │         │
-│                          │  └──────────────────────┘  │         │
-│                          │            ▼                │         │
-│                          │  ┌──────────────────────┐  │         │
-│                          │  │  Players             │  │         │
-│                          │  │  (pycdg, pykar,      │  │         │
-│                          │  │   pympg)             │  │         │
-│                          │  └──────────────────────┘  │         │
-│                          └─────────────────────────────┘         │
-└──────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│            Desktop Application                │
+│                                               │
+│  ┌─────────────┐      ┌──────────────────┐   │
+│  │ Web Frontend │◄────►│ Tauri Shell      │   │
+│  │ (HTML/CSS/JS)│ IPC  │ (Rust)           │   │
+│  └─────────────┘      └──────────────────┘   │
+│                               │               │
+│                        stdin / stdout         │
+│                         (JSON lines)          │
+│                               ▼               │
+│                 ┌──────────────────────┐      │
+│                 │  Python Backend      │      │
+│                 │  (backend.py)        │      │
+│                 │                      │      │
+│                 │  • Playback engine   │      │
+│                 │  • Song database     │      │
+│                 │  • Playlist manager  │      │
+│                 │  • Event emitter     │      │
+│                 └──────────────────────┘      │
+└───────────────────────────────────────────────┘
 ```
 
-## Component Responsibilities
+## Components
 
-### 1. Python Backend Service (`pykbackend.py`)
+### Python Backend (`src/pykaraoke/core/backend.py`)
 
-**Purpose**: Headless service managing all karaoke business logic
+Headless service managing all karaoke logic. Supports two transport modes:
 
-**Responsibilities**:
-- Playback control (play, pause, stop, seek)
-- Song database management
-- Playlist management
-- Library scanning and indexing
-- Settings persistence
-- Event emission to frontend
+| Mode | Flag | Use Case |
+|------|------|----------|
+| **stdio** (default) | `--stdio` | Desktop apps — reads JSON from stdin, writes to stdout |
+| **HTTP** | `--http` | Docker / Kubernetes — FastAPI + Uvicorn REST server |
 
-**Key Features**:
-- Runs as subprocess
-- Communicates via JSON over stdin/stdout
-- No UI dependencies (no wx imports)
-- Maintains authoritative state
-- Emits events on state changes
+See [Backend Modes](../backend-modes.md) for the full API reference.
 
-**API Design**:
-- Command-based interface
-- Asynchronous event notifications
-- Stateless request/response pattern
-- Clear error handling
+### Tauri Shell (`src/runtimes/tauri/src-tauri/src/main.rs`)
 
-### 2. Tauri Shell (Rust)
+Rust-based native desktop wrapper:
+- Manages the Python subprocess lifecycle
+- Routes IPC messages between the web frontend and the backend
+- Emits events to the frontend on state changes
 
-**Purpose**: Native desktop wrapper and IPC bridge
+### Web Frontend (`src/runtimes/tauri/src/`)
 
-**Responsibilities**:
-- Window lifecycle management
-- Python subprocess management
-- Message routing between frontend and Python
-- Native OS integrations
-- Security boundaries
+Vanilla HTML/CSS/JS interface:
+- Player controls (play, pause, stop, seek, volume)
+- Library browser with search
+- Playlist manager
 
-**Key Components**:
-- Process manager: Starts/stops Python backend
-- IPC router: Forwards commands and events
-- Event emitter: Notifies frontend of backend events
-- State manager: Tracks backend connection status
-
-### 3. Web Frontend (HTML/CSS/JavaScript)
-
-**Purpose**: User interface layer
-
-**Responsibilities**:
-- Display current state
-- Capture user interactions
-- Send commands to backend
-- Respond to backend events
-- Provide visual feedback
-
-**UI Sections**:
-1. **Player Controls**: Play/pause/stop, progress, volume
-2. **Library Browser**: Search, filter, browse songs
-3. **Playlist Manager**: Queue, reorder, remove songs
-4. **Settings**: Configure app behavior
-
-**Technology Choices**:
-- Vanilla JS (can be upgraded to React/Vue/Svelte)
-- CSS Grid/Flexbox for layout
-- Modern ES6+ features
-- Event-driven updates
+Technology-agnostic — can be replaced with React, Vue, or Svelte.
 
 ## Communication Protocol
 
-### Message Format
+All messages are newline-delimited JSON over stdin/stdout.
 
-All messages are JSON objects sent over stdin/stdout.
-
-#### Command (Frontend → Backend)
+### Command (Frontend → Backend)
 
 ```json
-{
-  "action": "string",       // Command name
-  "params": {               // Optional parameters
-    "key": "value"
-  }
-}
+{"action": "play", "params": {"playlist_index": 0}}
 ```
 
-#### Response (Backend → Frontend)
+### Response (Backend → Frontend)
 
 ```json
-{
-  "type": "response",
-  "response": {
-    "status": "ok|error",   // Result status
-    "message": "string",    // Optional message
-    "data": {}              // Optional data payload
-  }
-}
+{"type": "response", "response": {"status": "ok"}}
 ```
 
-#### Event (Backend → Frontend)
+### Event (Backend → Frontend)
 
 ```json
-{
-  "type": "event",
-  "event": {
-    "type": "event_name",
-    "timestamp": 1234567890.123,
-    "data": {}
-  }
-}
+{"type": "event", "event": {"type": "state_changed", "timestamp": 1706745678.1, "data": {...}}}
 ```
 
 ### Command Reference
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| `play` | `playlist_index?` | Start/resume playback |
-| `pause` | - | Pause playback |
-| `stop` | - | Stop and reset |
-| `next` | - | Next track |
-| `previous` | - | Previous track |
+| `play` | `playlist_index?` | Start / resume playback |
+| `pause` | — | Pause |
+| `stop` | — | Stop and reset |
+| `next` / `previous` | — | Navigate playlist |
 | `seek` | `position_ms` | Seek to position |
-| `set_volume` | `volume` (0-1) | Adjust volume |
-| `load_song` | `filepath` | Load a song file |
-| `add_to_playlist` | `filepath` | Add to queue |
+| `set_volume` | `volume` (0–1) | Adjust volume |
+| `add_to_playlist` | `filepath` | Queue a song |
 | `remove_from_playlist` | `index` | Remove from queue |
-| `clear_playlist` | - | Empty playlist |
-| `search_songs` | `query` | Search library |
-| `get_library` | - | List all songs |
-| `scan_library` | - | Rescan folders |
-| `add_folder` | `folder` | Add library folder |
-| `get_state` | - | Get current state |
-| `get_settings` | - | Get app settings |
-| `update_settings` | `settings` | Update settings |
+| `clear_playlist` | — | Empty the playlist |
+| `search_songs` | `query` | Search the library |
+| `get_library` | — | List all songs |
+| `scan_library` | — | Re-scan library folders |
+| `add_folder` | `folder` | Add a folder to scan |
+| `get_state` | — | Current state snapshot |
 
-### Event Reference
+### Event Types
 
-| Event Type | Data | Description |
-|-----------|------|-------------|
-| `state_changed` | Full state object | State updated |
-| `song_finished` | - | Track completed |
-| `playback_error` | `error` | Error occurred |
-| `playlist_updated` | `playlist` | Queue changed |
-| `library_scan_complete` | - | Scan finished |
-| `volume_changed` | `volume` | Volume adjusted |
+| Event | Description |
+|-------|-------------|
+| `state_changed` | Playback state updated |
+| `song_finished` | Current track completed |
+| `playback_error` | Error during playback |
+| `playlist_updated` | Queue modified |
+| `library_scan_complete` | Folder scan finished |
+| `volume_changed` | Volume adjusted |
 
-## State Management
+## State Model
 
-### Backend State
+The backend maintains the authoritative state:
 
-The Python backend maintains authoritative state:
-
-```python
+```json
 {
-    "playback_state": "idle|playing|paused|stopped|loading|error",
-    "current_song": {
-        "title": str,
-        "artist": str,
-        "filename": str,
-        "filepath": str,
-        "zip_name": str?
-    },
-    "playlist": [SongStruct, ...],
-    "playlist_index": int,
-    "volume": float (0-1),
-    "position_ms": int,
-    "duration_ms": int,
-    "error": str?
+  "playback_state": "idle | playing | paused | stopped | loading | error",
+  "current_song": {"title": "", "artist": "", "filepath": ""},
+  "playlist": [],
+  "playlist_index": 0,
+  "volume": 0.75,
+  "position_ms": 0,
+  "duration_ms": 0
 }
 ```
 
-### Frontend State
+The frontend polls `get_state` to stay in sync.
 
-Frontend maintains local UI state:
-- Search results (from search queries)
-- UI element states (expanded panels, etc.)
-- Form inputs
-- Temporary UI feedback
+## Key Design Decisions
 
-The frontend regularly polls `get_state` to sync with backend.
-
-## Migration Strategy
-
-### Phase 1: Backend Extraction ✅
-
-1. Created `pykbackend.py` - headless backend service
-2. Extracted core logic from wx dependencies
-3. Implemented JSON command API
-4. Added event emission system
-
-### Phase 2: Tauri Setup ✅
-
-1. Created Tauri project structure
-2. Implemented Rust IPC handlers
-3. Created Python subprocess manager
-4. Configured message routing
-
-### Phase 3: Frontend Development ✅
-
-1. Built web UI (HTML/CSS/JS)
-2. Implemented player controls
-3. Created library browser
-4. Added playlist management
-
-### Phase 4: Integration (In Progress)
-
-- [ ] Test end-to-end communication
-- [ ] Verify all playback functions
-- [ ] Validate state synchronization
-- [ ] Add error handling
-- [ ] Performance tuning
-
-### Phase 5: Testing & Polish
-
-- [ ] Write integration tests
-- [ ] Add unit tests for backend
-- [ ] UI/UX improvements
-- [ ] Documentation
-- [ ] Packaging and distribution
-
-## Benefits of New Architecture
-
-1. **Separation of Concerns**: UI and logic are decoupled
-2. **Modern UI**: Web technologies enable rich, responsive UI
-3. **Testability**: Components can be tested independently
-4. **Cross-Platform**: Tauri supports Windows, macOS, Linux
-5. **Maintainability**: Clear interfaces and boundaries
-6. **Extensibility**: Easy to add new features
-7. **Performance**: Rust runtime is lightweight and fast
-8. **Distribution**: Single binary with embedded assets
-
-## Development Workflow
-
-### Running the App
-
-```bash
-# Development mode
-cd tauri-app
-cargo tauri dev
-
-# Production build
-cargo tauri build
-```
-
-### Testing Backend Standalone
-
-```bash
-# Run backend service
-python3 pykbackend.py
-
-# Send test commands (in another terminal)
-echo '{"action":"get_state","params":{}}' | python3 pykbackend.py
-```
-
-### Debugging
-
-- **Backend logs**: Python logging to stderr
-- **Rust logs**: Printed to Tauri console
-- **Frontend logs**: Browser DevTools console
-
-## Future Enhancements
-
-1. **WebSocket Support**: Replace stdio with WebSocket for better performance
-2. **HTTP API**: Add REST API for remote control
-3. **Plugin System**: Allow extensions via plugins
-4. **Cloud Sync**: Sync playlists and settings
-5. **Mobile App**: Build companion mobile app
-6. **Web Version**: Deploy frontend as web app with backend as service
-
-## Backward Compatibility
-
-## Technical Decisions
-
-### Why Tauri?
-
-- **Smaller bundle**: ~3MB (compared to ~100MB for Electron)
-- **Better performance**: Rust runtime
-- **Lower memory**: System webview instead of bundled Chromium
-- **Security**: Built-in security features
-- **Cross-platform**: Native look and feel on all platforms
-
-### Why stdio vs WebSocket?
-
-- **Simplicity**: No network configuration
-- **Security**: No exposed ports
-- **Reliability**: Direct parent-child process
-- **Can upgrade**: Easy to switch later
-
-### Why JSON vs Protocol Buffers?
-
-- **Simplicity**: Human-readable, debuggable
-- **Flexibility**: Easy schema evolution
-- **Tooling**: Native JS support
-- **Sufficient**: Performance not critical
-
-## Conclusion
-
-This architecture modernizes PyKaraoke while preserving its core functionality. The separation of UI and logic enables:
-
-- Easier maintenance and testing
-- Modern, responsive user interface
-- Better cross-platform support
-- Foundation for future enhancements
-
-The migration is incremental and non-breaking, allowing gradual adoption.
+| Decision | Rationale |
+|----------|-----------|
+| **Tauri over Electron** | ~10 MB bundle vs ~150 MB; lower memory; native webview |
+| **stdio over WebSocket** | No exposed ports; no network config; easy to secure |
+| **JSON over Protobuf** | Human-readable; easy to debug; sufficient performance |
+| **Vanilla JS** | No build step; can upgrade to any framework later |
+| **Python backend** | Reuses existing mature player code (pygame, CDG parser) |

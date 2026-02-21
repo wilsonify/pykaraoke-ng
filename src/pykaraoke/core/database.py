@@ -26,7 +26,6 @@ well as the user's settings file."""
 import os
 import sys
 import time
-import types
 import zipfile
 
 import pickle
@@ -44,6 +43,8 @@ from pykaraoke.config.constants import (
 from pykaraoke.config.environment import env
 
 from hashlib import sha256  # Use SHA-256 instead of MD5 for file hashing (security)
+
+from pykaraoke.core.filename_parser import FileNameType, FilenameParser
 
 # The amount of time to wait, in milliseconds, before yielding to the
 # app for windowing updates during a long update process.
@@ -200,10 +201,23 @@ class SongStruct:
         # Check to see if we are deriving song information from the filename
         if settings.CdgDeriveSongInformation:
             try:
-                self.Title = self.ParseTitle(Filepath, settings)  # Title for display in playlist
-                self.Artist = self.ParseArtist(Filepath, settings)  # Artist for display
-                self.Disc = self.ParseDisc(Filepath, settings)  # Disc for display
-                self.Track = self.ParseTrack(Filepath, settings)  # Track for display
+                _parser = FilenameParser(
+                    file_name_type=FileNameType(settings.CdgFileNameType)
+                )
+                # When the song lives inside a ZIP, use the inner member
+                # path for parsing (directory structure can provide the artist).
+                if ZipStoredName:
+                    _parsed = _parser.parse_zip_path(ZipStoredName)
+                else:
+                    _parsed = _parser.parse(Filepath)
+                # An empty artist means the filename did not match the
+                # configured naming scheme (equivalent to the legacy KeyError).
+                if not _parsed.artist:
+                    raise KeyError(f"Could not parse filename: {Filepath}")
+                self.Title = _parsed.title
+                self.Artist = _parsed.artist
+                self.Disc = _parsed.disc
+                self.Track = _parsed.track
             except (ValueError, KeyError, IndexError):
                 # Filename did not match requested scheme, set the title to the filepath
                 # so that the structure is still created, but without any additional info
@@ -233,11 +247,11 @@ class SongStruct:
 
         if ZipStoredName:
             self.DisplayFilename = os.path.basename(ZipStoredName)
-            if isinstance(self.DisplayFilename, types.StringType):
+            if isinstance(self.DisplayFilename, bytes):
                 self.DisplayFilename = self.DisplayFilename.decode(settings.ZipfileCoding)
         else:
             self.DisplayFilename = os.path.basename(Filepath)
-            if isinstance(self.DisplayFilename, types.StringType):
+            if isinstance(self.DisplayFilename, bytes):
                 self.DisplayFilename = self.DisplayFilename.decode(settings.FilesystemCoding)
 
         # Check the file type based on extension.
@@ -465,14 +479,16 @@ class SongStruct:
             for file in os.listdir(dir):
                 # Handle potential byte-strings with invalid characters
                 # that startswith() will not handle.
-                try:
-                    file = unicode(file)
-                except UnicodeDecodeError:
-                    file = file.decode("ascii", "replace")
-                try:
-                    prefix = unicode(prefix)
-                except UnicodeDecodeError:
-                    prefix = prefix.decode("ascii", "replace")
+                if isinstance(file, bytes):
+                    try:
+                        file = file.decode("utf-8")
+                    except UnicodeDecodeError:
+                        file = file.decode("ascii", "replace")
+                if isinstance(prefix, bytes):
+                    try:
+                        prefix = prefix.decode("utf-8")
+                    except UnicodeDecodeError:
+                        prefix = prefix.decode("ascii", "replace")
 
                 # Check for a file which matches the prefix
                 if file.startswith(prefix):
@@ -858,7 +874,7 @@ class SettingsStruct:
         self.FolderList = []
         self.CdgExtensions = [".cdg"]
         self.KarExtensions = [".kar", ".mid"]
-        self.MpgExtensions = [".mpg", ".mpeg", ".avi"]
+        self.MpgExtensions = [".mpg", ".mpeg", ".avi", ".divx", ".xvid"]
         self.IgnoredExtensions = []
         self.LookInsideZips = True
         self.ReadTitlesTxt = True
@@ -1499,10 +1515,11 @@ class SongDB:
             # Every so often, update the progress bar.
             basename = os.path.split(full_path)[1]
             # Sanitise byte-strings
-            try:
-                basename = unicode(basename)
-            except UnicodeDecodeError:
-                basename = basename.decode("ascii", "replace")
+            if isinstance(basename, bytes):
+                try:
+                    basename = basename.decode("utf-8")
+                except UnicodeDecodeError:
+                    basename = basename.decode("ascii", "replace")
             self.BusyDlg.SetProgress(
                 "Scanning %s" % basename, self.__computeProgressValue(progress)
             )
@@ -1546,10 +1563,11 @@ class SongDB:
                                 nextProgress = progress + [(i, len(namelist))]
                                 basename = os.path.split(full_path)[1]
                                 # Sanitise byte-strings
-                                try:
-                                    basename = unicode(basename)
-                                except UnicodeDecodeError:
-                                    basename = basename.decode("ascii", "replace")
+                                if isinstance(basename, bytes):
+                                    try:
+                                        basename = basename.decode("utf-8")
+                                    except UnicodeDecodeError:
+                                        basename = basename.decode("ascii", "replace")
                                 self.BusyDlg.SetProgress(
                                     "Scanning %s" % basename,
                                     self.__computeProgressValue(nextProgress),

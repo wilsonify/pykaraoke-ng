@@ -1,82 +1,69 @@
 # 🎤 PyKaraoke-NG
 
-A free, open-source karaoke player for Linux, Windows, and macOS
+A free, open-source karaoke player for Linux, Windows, and macOS.
 
 ---
 
-**[User Guide](users.md)** | **[Developer Guide](developers.md)** | **[Admin Guide](administrators.md)** | **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
+**[User Guide](users.md)** · **[Developer Guide](developers.md)** · **[Admin Guide](administrators.md)** · **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
 
 ---
 
 ## Features
 
-| 🎵 Multiple Formats | 📚 Song Database | 🖥️ Cross-Platform | 🚀 Desktop Apps |
-|---------------------|------------------|-------------------|-----------------|
-| CDG+MP3, MIDI/KAR, MPEG video | Automatically catalog and search | Linux, Windows, macOS | Electron & Tauri |
+| 🎵 Multiple Formats | 📚 Song Database | 🖥️ Cross-Platform | 🚀 Desktop App |
+|---------------------|------------------|-------------------|----------------|
+| CDG+MP3, MIDI/KAR, MPEG video | Automatically catalog and search | Linux, Windows, macOS | Tauri (Rust + web UI) |
 
 ## Quick Start
 
 ```bash
-# Install with pip
-pip install pykaraoke-ng
+# Install
+uv pip install pykaraoke-ng   # or: pip install pykaraoke-ng
 
-# Or using uv (recommended)
-uv pip install pykaraoke-ng
-
-# Run the GUI
-pykaraoke
-
-# Play a specific file
+# Play files directly
 pycdg song.cdg
 pykar song.kar
 pympg song.mpg
 ```
 
-For detailed setup after cloning, see the **[Quick Start Guide](quickstart.md)**.
+For development setup, see the **[Quick Start Guide](quickstart.md)**.
 
 ## Supported Formats
 
-| Format | Extension | Player | Description |
+| Format | Extensions | Player | Description |
 |--------|-----------|--------|-------------|
-| CD+G | .cdg + .mp3 | pycdg | Standard karaoke format with graphics |
-| MIDI Karaoke | .kar, .mid | pykar | MIDI files with embedded lyrics |
-| MPEG Video | .mpg, .mpeg, .avi | pympg | Video karaoke files |
+| CD+G | `.cdg` + `.mp3` | pycdg | Standard karaoke with graphics |
+| MIDI Karaoke | `.kar`, `.mid` | pykar | MIDI with embedded lyrics |
+| MPEG Video | `.mpg`, `.mpeg`, `.avi`, `.divx`, `.xvid` | pympg | Video karaoke |
 
 ## Documentation
 
-### By Audience
+### Guides
 
-- **[User Guide](users.md)** - Install and use PyKaraoke-NG
-- **[Developer Guide](developers.md)** - Set up development environment and contribute
-- **[Admin Guide](administrators.md)** - Deploy with Docker, Kubernetes, Electron, or Tauri
-- **[Quick Start](quickstart.md)** - Fast setup after cloning the repository
+- **[User Guide](users.md)** — Install and use PyKaraoke-NG
+- **[Developer Guide](developers.md)** — Set up development and contribute
+- **[Admin Guide](administrators.md)** — Deploy with Docker, Kubernetes, or Tauri
+- **[Quick Start](quickstart.md)** — Fast setup after cloning
 
 ### Architecture
 
-- **[Overview](architecture/overview.md)** - System architecture and design
-- **[Repository Structure](architecture/structure.md)** - Project organization
-- **[Migration Guide](architecture/migration-guide.md)** - Migrating from legacy code
-- **[Reorganization Plan](architecture/reorganization-plan.md)** - Repository reorganization details
-- **[Reorganization Summary](architecture/reorganization-summary.md)** - Summary of changes made
-- **[Reorganization Complete](architecture/reorganization-complete.md)** - Final reorganization status
+- **[Overview](architecture/overview.md)** — System design and communication protocol
+- **[Repository Structure](architecture/structure.md)** — Project layout and key modules
+- **[Next Steps](architecture/next-steps.md)** — Open work and future features
+- **[Reorganization](architecture/reorganization.md)** — Historical record of the repo restructuring
 
-### Development
+### Reference
 
-- **[SonarQube Setup](development/sonarqube-setup.md)** - Code quality scanning setup
-- **[Quality Improvements](development/quality-improvements.md)** - Code quality fixes
-- **[SonarQube Fixes](development/sonarqube-fixes.md)** - Resolved SonarQube issues
-- **[SonarCloud HIGH Issues Fixed](development/sonarcloud-high-issues-fixed.md)** - Security fixes
-- **[87 Issues Fixed](development/sonarqube-87-issues-fixed.md)** - Bulk issue resolution
-- **[PR Summary](development/pr-summary.md)** - Tauri migration implementation details
-- **[TODO](development/todo.txt)** - Planned features and improvements
+- **[Backend Modes](backend-modes.md)** — stdio and HTTP API documentation
+- **[SonarQube Setup](development/sonarqube-setup.md)** — Code quality scanning
+- **[Quality Improvements](development/quality-improvements.md)** — Python 3 migration and security fixes
+- **[Legacy Issues](issues/README.md)** — Issues from the original PyKaraoke project
 
 ### Historical
 
-- **[Changelog](changelog.txt)** - Historical version changes
-- **[Legacy README](readme-legacy.txt)** - Original project documentation
-- **[Legacy Issues](issues/README.md)** - Issues from the original PyKaraoke project
+- **[Changelog](changelog.txt)** — Version history (pre-NG)
+- **[Legacy README](readme-legacy.txt)** — Original project documentation
 
 ## License
 
-PyKaraoke-NG is licensed under [LGPL-2.1-or-later](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
-
+[LGPL-2.1-or-later](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)

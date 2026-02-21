@@ -10,7 +10,7 @@ Deploy and manage PyKaraoke-NG at scale.
 
 | 🐳 Docker | ☸️ Kubernetes | 🖥️ Desktop |
 |-----------|---------------|------------|
-| Containerized deployment | Scalable with kind or production | Electron for workstations |
+| Containerized deployment | Scalable with kind or production | Tauri for workstations |
 
 ---
 
@@ -369,12 +369,6 @@ kubectl get pvc -n pykaraoke
 
 ## Additional Resources
 
-### Architecture
-
-- [Repository Structure](architecture/structure.md) - Project organization
-- [Reorganization Summary](architecture/reorganization-summary.md) - Summary of changes made
-
-### Development
-
-- [SonarQube Setup](development/sonarqube-setup.md) - Code quality scanning setup
-- [SonarCloud HIGH Issues Fixed](development/sonarcloud-high-issues-fixed.md) - Security fixes
+- [Repository Structure](architecture/structure.md) — project layout
+- [Quality Improvements](development/quality-improvements.md) — code quality history
+- [SonarQube Setup](development/sonarqube-setup.md) — code quality scanning

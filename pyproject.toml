@@ -103,8 +103,11 @@ exclude = [
 ]
 
 # UV Configuration
-[tool.uv]
-dev-dependencies = [
+[tool.uv.sources]
+# Add any custom package sources here if needed
+
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",
@@ -113,9 +116,6 @@ dev-dependencies = [
     "pre-commit>=3.6.0",
     "selenium>=4.15.0",
 ]
-
-[tool.uv.sources]
-# Add any custom package sources here if needed
 
 # Ruff Configuration (modern Python linter/formatter)
 [tool.ruff]

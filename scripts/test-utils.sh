@@ -116,18 +116,6 @@ run_with_coverage() {
     fi
 }
 
-# Check for Python 2 (for legacy tests)
-check_python2() {
-    for candidate in python2 python2.7; do
-        if command -v "$candidate" >/dev/null 2>&1; then
-            print_success "Python 2 found: $(which $candidate)"
-            return 0
-        fi
-    done
-    print_warning "Python 2 not found - some legacy tests will be skipped"
-    return 1
-}
-
 # Check for pygame (required by main modules)
 check_pygame() {
     if python -c "import pygame" >/dev/null 2>&1; then
@@ -152,7 +140,6 @@ print_test_env() {
     
     check_pytest || true
     check_pygame || true
-    check_python2 || true
     echo ""
 }
 

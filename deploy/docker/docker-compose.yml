@@ -172,7 +172,7 @@ services:
       - pykaraoke-net
 
   # ==========================================================================
-  # Test Runner Service
+  # Test Runner Service (Unit Tests Only)
   # ==========================================================================
   test:
     build:
@@ -190,9 +190,10 @@ services:
       # Mount source for testing current code
       - ../../tests:/app/tests:ro
       - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../src:/app/src:ro
       # Mount for coverage output
       - ../../htmlcov:/app/htmlcov
-    command: ["pytest", "tests/", "-v", "--tb=short"]
+    command: ["pytest", "tests/", "-v", "--tb=short", "-m", "not integration"]
     networks:
       - pykaraoke-net
 
@@ -213,12 +214,135 @@ services:
     volumes:
       - ../../tests:/app/tests:ro
       - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../src:/app/src:ro
       - ../../htmlcov:/app/htmlcov
     command: >
       pytest tests/ -v
       --cov=/app
       --cov-report=term-missing
       --cov-report=html:/app/htmlcov
+      -m not integration
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Integration Test Backend Server
+  # ==========================================================================
+  backend-test:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: backend
+    image: pykaraoke-ng:backend
+    container_name: pykaraoke-backend-test
+    profiles:
+      - integration
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYKARAOKE_API_HOST=0.0.0.0
+      - PYKARAOKE_API_PORT=8080
+    volumes:
+      # Mount source for latest code
+      - ../../src/pykaraoke:/app/src/pykaraoke:ro
+      # Mount test songs if available
+      - ../../songs:/app/songs:ro
+    ports:
+      - "8080"
+    networks:
+      - pykaraoke-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 2s
+
+  # ==========================================================================
+  # Integration Test Runner
+  # ==========================================================================
+  test-integration:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test-integration
+    profiles:
+      - integration
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTEST_ADDOPTS=--color=yes
+      - PYKARAOKE_API_URL=http://backend-test:8080
+    volumes:
+      # Mount source for testing current code
+      - ../../tests:/app/tests:ro
+      - ../../src:/app/src:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+      # Mount for coverage output
+      - ../../htmlcov:/app/htmlcov
+    command: ["pytest", "tests/", "-v", "--tb=short", "-m", "integration"]
+    depends_on:
+      backend-test:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Full Test Suite (Unit + Integration)
+  # ==========================================================================
+  test-all:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test-all
+    profiles:
+      - test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTEST_ADDOPTS=--color=yes
+      - PYKARAOKE_API_URL=http://backend-test:8080
+    volumes:
+      - ../../tests:/app/tests:ro
+      - ../../src:/app/src:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../htmlcov:/app/htmlcov
+    command: ["pytest", "tests/", "-v", "--tb=short"]
+    depends_on:
+      backend-test:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Full Test Suite with Coverage
+  # ==========================================================================
+  test-all-coverage:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test-all-coverage
+    profiles:
+      - test
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYKARAOKE_API_URL=http://backend-test:8080
+    volumes:
+      - ../../tests:/app/tests:ro
+      - ../../src:/app/src:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+      - ../../htmlcov:/app/htmlcov
+    command: >
+      pytest tests/ -v
+      --cov=/app
+      --cov-report=term-missing
+      --cov-report=html:/app/htmlcov
+    depends_on:
+      backend-test:
+        condition: service_healthy
     networks:
       - pykaraoke-net
 

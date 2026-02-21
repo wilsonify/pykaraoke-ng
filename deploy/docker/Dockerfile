@@ -119,8 +119,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js for potential frontend tooling
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
+RUN curl -fsSL --proto '=https' https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Tauri CLI
@@ -229,8 +229,14 @@ COPY tests/ /app/tests/
 COPY scripts/ /app/scripts/
 COPY pyproject.toml /app/
 
-# Install dev dependencies
-RUN uv pip install --no-cache-dir pytest pytest-cov pytest-xdist ruff
+# Install dev dependencies including testing and integration test deps
+RUN uv pip install --no-cache-dir \
+    pytest \
+    pytest-cov \
+    pytest-xdist \
+    ruff \
+    fastapi \
+    uvicorn
 
 USER pykaraoke
 
