@@ -333,19 +333,15 @@ echo '{"action":"get_state","params":{}}' | python3 pykbackend.py
 
 ## Backward Compatibility
 
-The original wxPython code remains available in:
-- `pykaraoke.py` - Original GUI app
-- Can be run separately for legacy support
-- Migration is non-destructive
-
 ## Technical Decisions
 
-### Why Tauri vs Electron?
+### Why Tauri?
 
-- **Smaller bundle**: ~3MB vs ~100MB
+- **Smaller bundle**: ~3MB (compared to ~100MB for Electron)
 - **Better performance**: Rust runtime
-- **Lower memory**: System webview
+- **Lower memory**: System webview instead of bundled Chromium
 - **Security**: Built-in security features
+- **Cross-platform**: Native look and feel on all platforms
 
 ### Why stdio vs WebSocket?
 

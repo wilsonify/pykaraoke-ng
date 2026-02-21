@@ -245,7 +245,7 @@ cd tauri-app && cargo tauri dev
 ## FAQ
 
 **Q: Does this replace the original pykaraoke.py?**  
-A: No, it runs alongside. The original wxPython GUI is still available.
+A: Yes! The legacy wxPython GUI has been removed. Use the modern Tauri-based interface instead.
 
 **Q: Can I run just the backend?**  
 A: Yes! Run `python3 pykbackend.py` for headless operation.

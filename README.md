@@ -12,10 +12,24 @@ A free, open-source karaoke player for Linux, Windows, and macOS.
 - 🎵 **Multiple Formats**: CDG+MP3, MIDI/KAR, MPEG video karaoke files
 - 📚 **Song Database**: Automatically catalog and search your library
 - 🖥️ **Cross-Platform**: Linux, Windows, macOS support
-- 🚀 **Desktop Apps**: Modern Electron and Tauri runtimes
+- 🚀 **Modern Desktop App**: Tauri-based native application
 - 🐳 **Dual-Mode Backend**: stdio for desktop apps, HTTP API for containers and headless deployments
 
 ## Quick Start
+
+### Using the Tauri GUI (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/wilsonify/pykaraoke-ng.git
+cd pykaraoke-ng/src/runtimes/tauri
+
+# Install dependencies and run
+npm install
+npm run tauri dev
+```
+
+### Using Command Line Players
 
 ```bash
 # Install with pip
@@ -23,9 +37,6 @@ pip install pykaraoke-ng
 
 # Or using uv (recommended)
 uv pip install pykaraoke-ng
-
-# Run the GUI
-pykaraoke
 
 # Play specific files
 pycdg song.cdg
@@ -88,7 +99,7 @@ See [Backend Modes Documentation](docs/backend-modes.md) for complete API refere
 pykaraoke-ng/
 ├── src/
 │   ├── pykaraoke/         # Core Python package
-│   └── runtimes/          # Desktop apps (Electron, Tauri)
+│   └── runtimes/tauri/    # Modern Tauri desktop app
 ├── tests/                  # Test suite
 ├── docs/                   # Documentation
 ├── deploy/                 # Docker, Kubernetes, installers

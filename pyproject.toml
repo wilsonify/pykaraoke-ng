@@ -35,9 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = [
-    "wxPython>=4.2.0",
-]
 http = [
     "fastapi>=0.104.0",
     "uvicorn>=0.24.0",
@@ -60,7 +57,7 @@ docs = [
     "mkdocs-material>=9.5.0",
 ]
 all = [
-    "pykaraoke-ng[gui,http,dev,test,docs]",
+    "pykaraoke-ng[http,dev,test,docs]",
 ]
 
 [project.urls]
@@ -71,14 +68,9 @@ Issues = "https://github.com/wilsonify/pykaraoke-ng/issues"
 Changelog = "https://github.com/wilsonify/pykaraoke-ng/blob/main/ChangeLog"
 
 [project.scripts]
-pykaraoke = "pykaraoke:main"
-pykaraoke-mini = "pykaraoke_mini:main"
-pycdg = "pycdg:main"
-pykar = "pykar:main"
-pympg = "pympg:main"
-
-[project.gui-scripts]
-pykaraoke-gui = "pykaraoke:main"
+pycdg = "pykaraoke.players.cdg:main"
+pykar = "pykaraoke.players.kar:main"
+pympg = "pykaraoke.players.mpg:main"
 
 [build-system]
 requires = ["hatchling>=1.21.0"]

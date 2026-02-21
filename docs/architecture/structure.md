@@ -15,10 +15,8 @@ pykaraoke-ng/
 │   │   ├── players/       # Format-specific players (CDG, KAR, MPG)
 │   │   ├── core/          # Core business logic
 │   │   ├── config/        # Configuration and environment
-│   │   ├── legacy/        # Legacy wxPython implementations
 │   │   └── native/        # C extensions
 │   └── runtimes/          # Runtime-specific implementations
-│       ├── electron/      # Electron desktop runtime
 │       └── tauri/         # Tauri desktop runtime
 ├── tests/                  # Test suite
 │   ├── pykaraoke/         # Tests for core package
@@ -67,14 +65,7 @@ The core Python code is now organized as a proper package under `src/pykaraoke/`
   - `_cpuctrl.c`
   - `_pycdgAux.c`
 
-## Runtime Implementations
-
-Both Electron and Tauri runtimes are now under `src/runtimes/`:
-
-### Electron Runtime (`src/runtimes/electron/`)
-- Desktop application using Electron framework
-- Wraps Python backend via subprocess
-- Web-based UI
+## Runtime Implementation
 
 ### Tauri Runtime (`src/runtimes/tauri/`)
 - Desktop application using Tauri framework
@@ -96,9 +87,6 @@ Then run the desired component:
 ```bash
 # Run the backend service
 python -m pykaraoke.core.backend
-
-# Run legacy GUI
-python -m pykaraoke.legacy.pykaraoke
 
 # Run a specific player
 python -m pykaraoke.players.cdg somefile.cdg
@@ -137,24 +125,20 @@ python -m build
 # Build Docker image
 docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
 
-# Build Electron app
-cd src/runtimes/electron
-npm install
-npm run build
-
 # Build Tauri app
 cd src/runtimes/tauri
+npm install
 cargo build
 ```
 
 ## Benefits of New Structure
 
-1. **Clear Separation**: Core logic separated from runtime implementations
+1. **Clear Separation**: Core logic separated from runtime implementation
 2. **Proper Python Package**: Follows Python packaging best practices
-3. **Scalable**: Easy to add new players, runtimes, or features
+3. **Scalable**: Easy to add new players or features
 4. **Maintainable**: Related code is grouped logically
 5. **Testable**: Tests mirror source structure
-6. **Cross-Platform**: Multiple runtimes supported equally
+6. **Cross-Platform**: Tauri provides native performance on all platforms
 7. **Professional**: Standard structure familiar to developers
 
 ## Migration Notes
