@@ -435,7 +435,9 @@ class SongStruct:
         filelist = [self.ZipStoredName]
 
         root, ext = os.path.splitext(self.ZipStoredName)
-        prefix = os.path.basename(root + ".")
+        root, ext = os.path.splitext(self.ZipStoredName)
+        zip_prefix = os.path.basename(root + ".")
+        prefix = zip_prefix or prefix
 
         if self.Type == self.T_CDG:
             for name in zf.namelist():
