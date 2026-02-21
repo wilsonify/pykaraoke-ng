@@ -38,24 +38,6 @@ class TestBackendAPI:
         except Exception as e:
             pytest.skip(f"Backend initialization failed: {e}")
 
-    def test_get_state_command(self):
-        """Test get_state command returns valid state"""
-        try:
-            from pykaraoke.core import backend as backend_module
-
-            backend_instance = backend_module.PyKaraokeBackend()
-
-            command = {"action": "get_state", "params": {}}
-            response = backend_instance.handle_command(command)
-
-            assert response["status"] == "ok"
-            assert "data" in response
-            assert "playback_state" in response["data"]
-            assert "playlist" in response["data"]
-            assert "volume" in response["data"]
-        except Exception as e:
-            pytest.skip(f"Backend test failed: {e}")
-
     def test_unknown_command(self):
         """Test handling of unknown commands"""
         try:
@@ -68,47 +50,6 @@ class TestBackendAPI:
 
             assert response["status"] == "error"
             assert "message" in response
-        except Exception as e:
-            pytest.skip(f"Backend test failed: {e}")
-
-    def test_volume_command(self):
-        """Test volume control command"""
-        try:
-            from pykaraoke.core import backend as backend_module
-
-            backend_instance = backend_module.PyKaraokeBackend()
-
-            # Set volume to 0.5
-            command = {"action": "set_volume", "params": {"volume": 0.5}}
-            response = backend_instance.handle_command(command)
-
-            assert response["status"] == "ok"
-            assert backend_instance.volume == 0.5
-
-            # Set volume to invalid value (should clamp)
-            command = {"action": "set_volume", "params": {"volume": 1.5}}
-            response = backend_instance.handle_command(command)
-
-            assert response["status"] == "ok"
-            assert backend_instance.volume == 1.0  # Clamped to max
-        except Exception as e:
-            pytest.skip(f"Backend test failed: {e}")
-
-    def test_playlist_operations(self):
-        """Test playlist management commands"""
-        try:
-            from pykaraoke.core import backend as backend_module
-
-            backend_instance = backend_module.PyKaraokeBackend()
-
-            # Clear playlist
-            command = {"action": "clear_playlist", "params": {}}
-            response = backend_instance.handle_command(command)
-            assert response["status"] == "ok"
-            assert len(backend_instance.playlist) == 0
-
-            # Note: Adding to playlist would require valid song files
-            # So we just test the clear operation
         except Exception as e:
             pytest.skip(f"Backend test failed: {e}")
 
@@ -132,8 +73,81 @@ class TestBackendAPI:
             pytest.skip(f"Backend test failed: {e}")
 
 
-class TestBackendIntegration:
-    """Integration tests for backend service"""
+class TestBackendAPIIntegration:
+    """Integration tests for backend API that require full environment (pygame/mixer)"""
+
+    @pytest.mark.integration
+    def test_get_state_command(self):
+        """Test get_state command returns valid state"""
+        try:
+            from pykaraoke.core import backend as backend_module
+
+            backend_instance = backend_module.PyKaraokeBackend()
+
+            command = {"action": "get_state", "params": {}}
+            response = backend_instance.handle_command(command)
+
+            assert response["status"] == "ok"
+            assert "data" in response
+            assert "playback_state" in response["data"]
+            assert "playlist" in response["data"]
+            assert "volume" in response["data"]
+        except Exception as e:
+            pytest.skip(f"Integration test - requires full environment: {e}")
+
+    @pytest.mark.integration
+    def test_volume_command(self):
+        """Test volume control command (requires pygame mixer)"""
+        try:
+            from pykaraoke.core import backend as backend_module
+
+            backend_instance = backend_module.PyKaraokeBackend()
+
+            # Set volume to 0.5
+            command = {"action": "set_volume", "params": {"volume": 0.5}}
+            response = backend_instance.handle_command(command)
+
+            assert response["status"] == "ok"
+            assert backend_instance.volume == 0.5
+
+            # Set volume to out-of-range value (should clamp to 1.0)
+            command = {"action": "set_volume", "params": {"volume": 1.5}}
+            response = backend_instance.handle_command(command)
+
+            assert response["status"] == "ok"
+            assert backend_instance.volume == 1.0  # Clamped to max
+
+            # Set volume to negative (should clamp to 0.0)
+            command = {"action": "set_volume", "params": {"volume": -0.5}}
+            response = backend_instance.handle_command(command)
+
+            assert response["status"] == "ok"
+            assert backend_instance.volume == 0.0  # Clamped to min
+        except Exception as e:
+            pytest.skip(f"Integration test - requires full environment: {e}")
+
+    @pytest.mark.integration
+    def test_playlist_operations(self):
+        """Test playlist management commands"""
+        try:
+            from pykaraoke.core import backend as backend_module
+
+            backend_instance = backend_module.PyKaraokeBackend()
+
+            # Clear playlist
+            command = {"action": "clear_playlist", "params": {}}
+            response = backend_instance.handle_command(command)
+            assert response["status"] == "ok"
+            assert len(backend_instance.playlist) == 0
+
+            # Note: Adding to playlist would require valid song files
+            # So we just test the clear operation
+        except Exception as e:
+            pytest.skip(f"Integration test - requires full environment: {e}")
+
+
+class TestBackendProcessIntegration:
+    """Integration tests for backend subprocess communication"""
 
     @pytest.mark.integration
     def test_stdio_server_startup(self):
@@ -142,26 +156,26 @@ class TestBackendIntegration:
             from pykaraoke.core import backend as backend_module
             import subprocess
             import time
-            
+
             # Try to start backend in stdio mode as a subprocess
             proc = subprocess.Popen(
                 ["python", "-c", "from pykaraoke.core.backend import main; main()"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
-            
+
             # Give it a moment to start
             time.sleep(0.5)
-            
+
             # Check if it's still running
             poll_result = proc.poll()
-            
+
             # Clean up
             proc.terminate()
             proc.wait(timeout=2)
-            
+
             # If poll_result is None, process is running
             if poll_result is None:
                 assert True  # Server started successfully
@@ -177,26 +191,26 @@ class TestBackendIntegration:
             from pykaraoke.core import backend as backend_module
             import json
             import subprocess
-            
+
             # Start backend in stdio mode
             proc = subprocess.Popen(
                 ["python", "-c", "from pykaraoke.core.backend import main; main()"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True
+                text=True,
             )
-            
+
             try:
                 # Send a command
                 command = {"action": "get_state", "params": {}}
                 proc.stdin.write(json.dumps(command) + "\n")
                 proc.stdin.flush()
-                
+
                 # Try to read response
                 response_line = proc.stdout.readline()
                 response = json.loads(response_line)
-                
+
                 assert "status" in response
             finally:
                 proc.terminate()

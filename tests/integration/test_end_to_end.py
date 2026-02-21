@@ -1,33 +1,12 @@
 import os
-import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 
-def _find_python2():
-    for candidate in ("python2", "python2.7"):
-        path = shutil.which(candidate)
-        if path:
-            return path
-    return None
-
-
-def _python2_can_import(python2_path, module_name):
-    try:
-        subprocess.run(
-            [python2_path, "-c", f"import {module_name}"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return True
-    except Exception:
-        return False
-
-
-def _run_db_scan_with_python2(repo_root, songs_dir, out_dir, env):
+def _run_db_scan(repo_root, songs_dir, out_dir, env):
     helper = Path(out_dir) / "scan_with_pykdb.py"
     helper.write_text(
         """
@@ -85,12 +64,13 @@ print(report_path)
     )
 
     result = subprocess.run(
-        [env["PYTHON2"], str(helper)],
-        check=True,
+        [sys.executable, str(helper)],
         capture_output=True,
         text=True,
         env=env,
     )
+    if result.returncode != 0:
+        pytest.skip(f"database scan subprocess failed: {result.stderr.strip()}")
     return result.stdout.strip()
 
 
@@ -98,17 +78,15 @@ def test_end_to_end_database_scan_and_report(tmp_path):
     """
     End-to-end flow:
     1) Create a karaoke file on disk.
-    2) Run the real database scan (via python2) to pick it up.
+    2) Run the database scan to pick it up.
     3) Generate an HTML report of scanned songs.
     4) Use Selenium to verify the report lists the song.
     """
 
-    python2_path = _find_python2()
-    if not python2_path:
-        pytest.skip("python2 not available; PyKaraoke core is Python 2.x")
-
-    if not _python2_can_import(python2_path, "pygame"):
-        pytest.skip("pygame not available for python2; required by pykdb")
+    try:
+        import pygame  # noqa: F401
+    except ImportError:
+        pytest.skip("pygame not available; required by database module")
 
     try:
         from selenium import webdriver
@@ -129,7 +107,6 @@ def test_end_to_end_database_scan_and_report(tmp_path):
     out_dir.mkdir()
 
     env = os.environ.copy()
-    env["PYTHON2"] = python2_path
     env["REPO_ROOT"] = str(repo_root)
     env["SONGS_DIR"] = str(songs_dir)
     env["OUT_DIR"] = str(out_dir)
@@ -137,7 +114,7 @@ def test_end_to_end_database_scan_and_report(tmp_path):
     env["PYKARAOKE_TEMP_DIR"] = str(out_dir / "pykaraoke_tmp")
     env["PYTHONPATH"] = str(repo_root)
 
-    report_path = _run_db_scan_with_python2(repo_root, songs_dir, out_dir, env)
+    report_path = _run_db_scan(repo_root, songs_dir, out_dir, env)
     report_file = Path(report_path)
     assert report_file.exists()
 

@@ -51,6 +51,7 @@ python -m pytest -v
 **Cause**: Package not installed in the Python environment.
 
 **Solution**:
+
 ```bash
 # Activate virtual environment
 source .venv/bin/activate
@@ -67,6 +68,7 @@ python -m pytest -v
 **Cause**: Using Python < 3.10, but package requires Python 3.10+.
 
 **Solution**:
+
 ```bash
 # Check Python version in venv
 .venv/bin/python --version
@@ -83,6 +85,7 @@ pip install -e ".[dev,test]"
 **Cause**: `pyproject.toml` references wrong README filename.
 
 **Solution**: Already fixed in `pyproject.toml`. If you see this error:
+
 ```bash
 # Edit pyproject.toml line 5
 # Change: readme = "README.txt"
@@ -94,6 +97,7 @@ pip install -e ".[dev,test]"
 **Cause**: Virtual environment not activated or wrong Python interpreter.
 
 **Solution**:
+
 ```bash
 # Always use the virtual environment's Python
 source .venv/bin/activate
@@ -107,12 +111,12 @@ python -m pytest -v
 
 When all tests pass, you should see:
 
-```
+```bash
 ======================== 126 passed, 6 skipped in 0.63s ========================
 ```
 
 **Skipped tests** are normal and include:
-- Python 2.x integration tests (legacy support)
+
 - Platform-specific tests (Windows/macOS on Linux, etc.)
 - Tests requiring full pygame environment
 
@@ -157,7 +161,7 @@ If issues persist:
 
 ## Test Organization
 
-```
+```txt
 tests/
 ├── integration/          # End-to-end tests
 ├── pykaraoke/

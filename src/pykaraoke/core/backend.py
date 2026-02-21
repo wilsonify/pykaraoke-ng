@@ -31,8 +31,6 @@ from enum import Enum
 from typing import Any
 
 # Core pykaraoke imports (business logic only)
-# Note: These imports may fail in Python 3 due to legacy Python 2 syntax
-# This is expected and will be addressed separately
 try:
     from pykaraoke.config.constants import (  # noqa: F401 - Used for future expansion
         STATE_CLOSED,

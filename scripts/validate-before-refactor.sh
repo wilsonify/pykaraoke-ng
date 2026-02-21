@@ -102,10 +102,6 @@ if [[ $SYNTAX_ERRORS -eq 0 ]]; then
     check_pass "All test files have valid Python 3 syntax"
 fi
 
-# Note about Python 2 source files
-echo ""
-check_warn "Note: Main source files (*.py in root) are Python 2 - to be refactored"
-
 # 6. Run the test suite
 echo ""
 echo -e "${BLUE}6. Running test suite...${NC}"

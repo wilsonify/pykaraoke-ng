@@ -26,7 +26,6 @@ well as the user's settings file."""
 import os
 import sys
 import time
-import types
 import zipfile
 
 import pickle
