@@ -205,7 +205,10 @@ class SongStruct:
                 _parser = FilenameParser(
                     file_name_type=FileNameType(settings.CdgFileNameType)
                 )
-                _parsed = _parser.parse(Filepath)
+                # When the song lives inside a ZIP, parse the inner member
+                # name rather than the outer archive path.
+                _parse_path = ZipStoredName if ZipStoredName else Filepath
+                _parsed = _parser.parse(_parse_path)
                 # An empty artist means the filename did not match the
                 # configured naming scheme (equivalent to the legacy KeyError).
                 if not _parsed.artist:
@@ -243,11 +246,11 @@ class SongStruct:
 
         if ZipStoredName:
             self.DisplayFilename = os.path.basename(ZipStoredName)
-            if isinstance(self.DisplayFilename, types.StringType):
+            if isinstance(self.DisplayFilename, bytes):
                 self.DisplayFilename = self.DisplayFilename.decode(settings.ZipfileCoding)
         else:
             self.DisplayFilename = os.path.basename(Filepath)
-            if isinstance(self.DisplayFilename, types.StringType):
+            if isinstance(self.DisplayFilename, bytes):
                 self.DisplayFilename = self.DisplayFilename.decode(settings.FilesystemCoding)
 
         # Check the file type based on extension.
@@ -475,14 +478,16 @@ class SongStruct:
             for file in os.listdir(dir):
                 # Handle potential byte-strings with invalid characters
                 # that startswith() will not handle.
-                try:
-                    file = unicode(file)
-                except UnicodeDecodeError:
-                    file = file.decode("ascii", "replace")
-                try:
-                    prefix = unicode(prefix)
-                except UnicodeDecodeError:
-                    prefix = prefix.decode("ascii", "replace")
+                if isinstance(file, bytes):
+                    try:
+                        file = file.decode("utf-8")
+                    except UnicodeDecodeError:
+                        file = file.decode("ascii", "replace")
+                if isinstance(prefix, bytes):
+                    try:
+                        prefix = prefix.decode("utf-8")
+                    except UnicodeDecodeError:
+                        prefix = prefix.decode("ascii", "replace")
 
                 # Check for a file which matches the prefix
                 if file.startswith(prefix):
@@ -868,7 +873,7 @@ class SettingsStruct:
         self.FolderList = []
         self.CdgExtensions = [".cdg"]
         self.KarExtensions = [".kar", ".mid"]
-        self.MpgExtensions = [".mpg", ".mpeg", ".avi"]
+        self.MpgExtensions = [".mpg", ".mpeg", ".avi", ".divx", ".xvid"]
         self.IgnoredExtensions = []
         self.LookInsideZips = True
         self.ReadTitlesTxt = True
@@ -1509,10 +1514,11 @@ class SongDB:
             # Every so often, update the progress bar.
             basename = os.path.split(full_path)[1]
             # Sanitise byte-strings
-            try:
-                basename = unicode(basename)
-            except UnicodeDecodeError:
-                basename = basename.decode("ascii", "replace")
+            if isinstance(basename, bytes):
+                try:
+                    basename = basename.decode("utf-8")
+                except UnicodeDecodeError:
+                    basename = basename.decode("ascii", "replace")
             self.BusyDlg.SetProgress(
                 "Scanning %s" % basename, self.__computeProgressValue(progress)
             )
@@ -1556,10 +1562,11 @@ class SongDB:
                                 nextProgress = progress + [(i, len(namelist))]
                                 basename = os.path.split(full_path)[1]
                                 # Sanitise byte-strings
-                                try:
-                                    basename = unicode(basename)
-                                except UnicodeDecodeError:
-                                    basename = basename.decode("ascii", "replace")
+                                if isinstance(basename, bytes):
+                                    try:
+                                        basename = basename.decode("utf-8")
+                                    except UnicodeDecodeError:
+                                        basename = basename.decode("ascii", "replace")
                                 self.BusyDlg.SetProgress(
                                     "Scanning %s" % basename,
                                     self.__computeProgressValue(nextProgress),
