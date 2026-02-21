@@ -473,7 +473,7 @@ class PyKaraokeBackend:
     def _handle_update_settings(self, params: dict[str, Any]) -> dict[str, Any]:
         """Update settings"""
         # Update settings as needed
-        logger.info(f"Updating settings: {params}")
+        logger.info("Updating settings: %d key(s)", len(params))
         return {"status": "ok", "message": "Settings updated"}
 
     def poll(self):
