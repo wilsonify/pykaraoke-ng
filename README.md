@@ -1,5 +1,6 @@
 # 🎤 PyKaraoke-NG
 
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: LGPL-2.1](https://img.shields.io/badge/License-LGPL%202.1-green.svg)](https://opensource.org/licenses/LGPL-2.1)
 [![Tests](https://github.com/wilsonify/pykaraoke-ng/actions/workflows/test.yml/badge.svg)](https://github.com/wilsonify/pykaraoke-ng/actions)
