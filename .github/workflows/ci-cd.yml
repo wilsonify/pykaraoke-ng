@@ -28,10 +28,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Default to read-only; individual jobs escalate permissions as needed.
-permissions:
-  contents: read
-
 env:
   PYTHON_VERSION: '3.12'
   NODE_VERSION: '20'
@@ -45,6 +41,8 @@ jobs:
   unit-tests-python:
     name: Unit Tests / Python
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,6 +89,8 @@ jobs:
   unit-tests-rust:
     name: Unit Tests / Rust
     runs-on: ubuntu-22.04      # Tauri v1 requires webkit2gtk-4.0, only on 22.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -105,10 +105,10 @@ jobs:
             librsvg2-dev
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
       - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
           workspaces: src/runtimes/tauri/src-tauri
 
@@ -119,6 +119,8 @@ jobs:
   unit-tests-frontend:
     name: Unit Tests / Frontend
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -178,6 +180,8 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: [sonarqube]
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -226,6 +230,8 @@ jobs:
     name: Build / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     needs: [integration-tests]
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -264,10 +270,10 @@ jobs:
         shell: pwsh
 
       - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
       - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
           workspaces: src/runtimes/tauri/src-tauri
 
@@ -277,7 +283,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@1.6.3
+        run: npm install -g --ignore-scripts @tauri-apps/cli@1.6.3
 
       - name: Build Tauri application
         working-directory: src/runtimes/tauri
@@ -304,6 +310,8 @@ jobs:
     name: E2E Tests / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     needs: [build]
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -408,7 +416,7 @@ jobs:
       #   fix: / chore: / etc.    → patch bump (default)
       - name: Compute next semantic version and create tag
         id: tag
-        uses: mathieudutour/github-tag-action@v6.2
+        uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
@@ -423,7 +431,7 @@ jobs:
           merge-multiple: false
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2.0.8
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.0.8
         with:
           tag_name: ${{ steps.tag.outputs.new_tag }}
           name: PyKaraoke NG ${{ steps.tag.outputs.new_tag }}
