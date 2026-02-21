@@ -225,26 +225,7 @@ class cdgPlayer(pykPlayer):
 
         pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
 
-        # With the nomusic option no music will be played.
-        soundFileData = None
-        if not manager.options.nomusic:
-            # Check for a matching mp3 or ogg file.  Check extensions
-            # in the following order.
-            validexts = [".wav", ".ogg", ".mp3"]
-
-            for ext in validexts:
-                for data in self.SongDatas:
-                    if data.Ext == ext:
-                        # Found a match!
-                        soundFileData = data
-                        break
-                if soundFileData:
-                    break
-
-            if not soundFileData:
-                ErrorString = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
-                self.ErrorNotifyCallback(ErrorString)
-                raise FileNotFoundError("NoSoundFile")
+        soundFileData = self._findSoundFile()
 
         self.cdgFileData = self.SongDatas[0]
         self.soundFileData = soundFileData
@@ -281,36 +262,7 @@ class cdgPlayer(pykPlayer):
         self.packetReader = aux.CdgPacketReader(self.cdgFileData.GetData(), self.workingTile)
         manager.setCpuSpeed("cdg")
 
-        if self.soundFileData:
-            # Play the music normally.
-            audioProperties = None
-            if manager.settings.UseMp3Settings:
-                audioProperties = self.getAudioProperties(self.soundFileData)
-            if audioProperties is None:
-                audioProperties = (None, None, None)
-            try:
-                manager.OpenAudio(*audioProperties)
-                audio_path = self.soundFileData.GetFilepath()
-                if isinstance(audio_path, str):
-                    audio_path = audio_path.encode(sys.getfilesystemencoding())
-                pygame.mixer.music.load(audio_path)
-            except Exception:
-                self.Close()
-                raise
-
-            # Set an event for when the music finishes playing
-            pygame.mixer.music.set_endevent(pygame.USEREVENT)
-
-            # Account for the size of the playback buffer in the lyrics
-            # display.  Assume that the buffer will be mostly full.  On a
-            # slower computer that's struggling to keep up, this may not
-            # be the right amount of delay, but it should usually be
-            # pretty close.
-            self.InternalOffsetTime = -manager.GetAudioBufferMS()
-
-        else:
-            # Don't play anything.
-            self.InternalOffsetTime = 0
+        self._initAudio()
 
         # Set the CDG file at the beginning
         self.cdgReadPackets = 0
@@ -319,6 +271,45 @@ class cdgPlayer(pykPlayer):
 
         # Some session-wide constants.
         self.ms_per_update = 1000.0 / manager.options.fps
+
+    def _findSoundFile(self):
+        """Find a matching audio file (.wav, .ogg, .mp3) among the song data files."""
+        if manager.options.nomusic:
+            return None
+
+        validexts = [".wav", ".ogg", ".mp3"]
+        for ext in validexts:
+            for data in self.SongDatas:
+                if data.Ext == ext:
+                    return data
+
+        ErrorString = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
+        self.ErrorNotifyCallback(ErrorString)
+        raise FileNotFoundError("NoSoundFile")
+
+    def _initAudio(self):
+        """Initialise audio playback or set silent mode."""
+        if not self.soundFileData:
+            self.InternalOffsetTime = 0
+            return
+
+        audioProperties = None
+        if manager.settings.UseMp3Settings:
+            audioProperties = self.getAudioProperties(self.soundFileData)
+        if audioProperties is None:
+            audioProperties = (None, None, None)
+        try:
+            manager.OpenAudio(*audioProperties)
+            audio_path = self.soundFileData.GetFilepath()
+            if isinstance(audio_path, str):
+                audio_path = audio_path.encode(sys.getfilesystemencoding())
+            pygame.mixer.music.load(audio_path)
+        except Exception:
+            self.Close()
+            raise
+
+        pygame.mixer.music.set_endevent(pygame.USEREVENT)
+        self.InternalOffsetTime = -manager.GetAudioBufferMS()
 
     def doPlay(self):
         if self.soundFileData:

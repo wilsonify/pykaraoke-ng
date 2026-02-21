@@ -204,38 +204,7 @@ class SongStruct:
         self.Track = -1  # (optional) Track for display
 
         # Check to see if we are deriving song information from the filename
-        if settings.CdgDeriveSongInformation:
-            try:
-                _parser = FilenameParser(
-                    file_name_type=FileNameType(settings.CdgFileNameType)
-                )
-                # When the song lives inside a ZIP, use the inner member
-                # path for parsing (directory structure can provide the artist).
-                if ZipStoredName:
-                    _parsed = _parser.parse_zip_path(ZipStoredName)
-                else:
-                    _parsed = _parser.parse(Filepath)
-                # An empty artist means the filename did not match the
-                # configured naming scheme (equivalent to the legacy KeyError).
-                if not _parsed.artist:
-                    raise KeyError(f"Could not parse filename: {Filepath}")
-                self.Title = _parsed.title
-                self.Artist = _parsed.artist
-                self.Disc = _parsed.disc
-                self.Track = _parsed.track
-            except (ValueError, KeyError, IndexError):
-                # Filename did not match requested scheme, set the title to the filepath
-                # so that the structure is still created, but without any additional info
-                # print "Filename format does not match requested scheme: %s" % Filepath
-                self.Title = os.path.basename(Filepath)
-
-                # If this SongStruct is being used to add to the database, and we are
-                # configured to exclude non-matching files, raise an exception. Otherwise
-                # allow it through. For database adds where we are not excluding such
-                # files the song will still be added to the database. For non-database
-                # adds we don't care anyway, we just want a SongStruct for passing around.
-                if DatabaseAdd and settings.ExcludeNonMatchingFilenames:
-                    raise KeyError("Excluding non-matching file: %s" % self.Title) from None
+        self._deriveSongInfo(Filepath, settings, ZipStoredName, DatabaseAdd)
 
         # This is a list of other song files that share the same
         # artist and title data.
@@ -250,6 +219,38 @@ class SongStruct:
         if self.Filepath != "" and self.Filepath[-1] == ".":
             self.Filepath += "cdg"
 
+        self._resolveDisplayFilename(Filepath, settings, ZipStoredName)
+        self._resolveType(settings)
+
+    def _deriveSongInfo(self, Filepath, settings, ZipStoredName, DatabaseAdd):
+        """Derive title/artist/disc/track from the filename if configured."""
+        if not settings.CdgDeriveSongInformation:
+            return
+        try:
+            _parser = FilenameParser(
+                file_name_type=FileNameType(settings.CdgFileNameType)
+            )
+            # When the song lives inside a ZIP, use the inner member
+            # path for parsing (directory structure can provide the artist).
+            if ZipStoredName:
+                _parsed = _parser.parse_zip_path(ZipStoredName)
+            else:
+                _parsed = _parser.parse(Filepath)
+            # An empty artist means the filename did not match the
+            # configured naming scheme (equivalent to the legacy KeyError).
+            if not _parsed.artist:
+                raise KeyError(f"Could not parse filename: {Filepath}")
+            self.Title = _parsed.title
+            self.Artist = _parsed.artist
+            self.Disc = _parsed.disc
+            self.Track = _parsed.track
+        except (ValueError, KeyError, IndexError):
+            self.Title = os.path.basename(Filepath)
+            if DatabaseAdd and settings.ExcludeNonMatchingFilenames:
+                raise KeyError("Excluding non-matching file: %s" % self.Title) from None
+
+    def _resolveDisplayFilename(self, Filepath, settings, ZipStoredName):
+        """Set DisplayFilename from the zip member name or the file path."""
         if ZipStoredName:
             self.DisplayFilename = os.path.basename(ZipStoredName)
             if isinstance(self.DisplayFilename, bytes):
@@ -259,7 +260,8 @@ class SongStruct:
             if isinstance(self.DisplayFilename, bytes):
                 self.DisplayFilename = self.DisplayFilename.decode(settings.FilesystemCoding)
 
-        # Check the file type based on extension.
+    def _resolveType(self, settings):
+        """Determine the song type (KAR, CDG, MPG) from the file extension."""
         self.Type = None
         ext = os.path.splitext(self.DisplayFilename)[1].lower()
         if ext in settings.KarExtensions:
@@ -654,44 +656,50 @@ class TitleStruct:
 
         try:
             for line in catalogFile:
-                try:
-                    line = line.decode("utf-8").strip()
-                except UnicodeDecodeError:
-                    line = line.decode("utf-8", "replace")
-                    print("Invalid characters in %s:\n%s" % (repr(catalogPathname), line))
-
-                if line:
-                    parts = line.split("\t")
-                    if len(parts) == 2:
-                        filename, title = parts
-                        artist = ""
-                    elif len(parts) == 3:
-                        filename, title, artist = parts
-                    else:
-                        print("Invalid line in %s:\n%s" % (repr(catalogPathname), line))
-                        continue
-
-                    # Allow a forward slash in the file to stand in for
-                    # whatever the OS's path separator is.
-                    filename = filename.replace("/", os.path.sep)
-
-                    pathname = os.path.join(dirname, filename)
-                    song = songDb.filesByFullpath.get(pathname, None)
-                    if song is None:
-                        print("Unknown file in %s:\n%s" % (repr(catalogPathname), repr(filename)))
-                    else:
-                        song.titles = self
-                        self.songs.append(song)
-
-                        song.Title = title.strip()
-                        song.Artist = artist.strip()
-                        if song.Title:
-                            songDb.GotTitles = True
-                        if song.Artist:
-                            songDb.GotArtists = True
+                self.__processTitleLine(line, catalogPathname, dirname, songDb)
         finally:
             if should_close:
                 catalogFile.close()
+
+    def __processTitleLine(self, line, catalogPathname, dirname, songDb):
+        """Parse a single line from a titles file and update the song database."""
+        try:
+            line = line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            line = line.decode("utf-8", "replace")
+            print("Invalid characters in %s:\n%s" % (repr(catalogPathname), line))
+
+        if not line:
+            return
+
+        parts = line.split("\t")
+        if len(parts) == 2:
+            filename, title = parts
+            artist = ""
+        elif len(parts) == 3:
+            filename, title, artist = parts
+        else:
+            print("Invalid line in %s:\n%s" % (repr(catalogPathname), line))
+            return
+
+        # Allow a forward slash in the file to stand in for
+        # whatever the OS's path separator is.
+        filename = filename.replace("/", os.path.sep)
+
+        pathname = os.path.join(dirname, filename)
+        song = songDb.filesByFullpath.get(pathname, None)
+        if song is None:
+            print("Unknown file in %s:\n%s" % (repr(catalogPathname), repr(filename)))
+            return
+
+        song.titles = self
+        self.songs.append(song)
+        song.Title = title.strip()
+        song.Artist = artist.strip()
+        if song.Title:
+            songDb.GotTitles = True
+        if song.Artist:
+            songDb.GotArtists = True
 
     def __makeRelTo(self, filename, relTo):
         """Returns the filename expressed as a relative path to
@@ -1108,9 +1116,18 @@ class SongDB:
 
         relTo = os.path.normcase(os.path.normpath(songPath))
 
-        # Look for the titles file, in a directory above the song,
-        # with the longest prefix in common with the song.  This will
-        # be the best titles file.
+        bestTitles = self._findBestTitlesFile(relTo)
+
+        if not bestTitles:
+            bestTitles = self._createTitlesFile(song, relTo)
+
+        bestTitles.songs.append(song)
+        song.titles = bestTitles
+        bestTitles.dirty = True
+        self.databaseDirty = True
+
+    def _findBestTitlesFile(self, relTo):
+        """Find the titles file with the longest common prefix with the song path."""
         bestTitles = None
         bestPrefix = ""
         for titles in self.TitlesFiles:
@@ -1127,35 +1144,28 @@ class SongDB:
 
             norm = norm[len(prefix) :]
             if os.path.sep in norm:
-                # This titles file is in a subordinate directory.
-                # Skip it.
                 continue
 
             if len(prefix) > len(bestPrefix):
                 bestTitles = titles
                 bestPrefix = prefix
+        return bestTitles
 
-        if not bestTitles:
-            # Didn't find a good candidate.  Create a new titles file,
-            # in the root of whichever directory contains the song.
-            bestDir = None
-            for dir in self.Settings.FolderList:
-                norm = os.path.normcase(os.path.normpath(dir))
-                if relTo.startswith(norm):
-                    bestDir = dir
-                    break
+    def _createTitlesFile(self, song, relTo):
+        """Create a new titles file in the root directory containing the song."""
+        bestDir = None
+        for dir in self.Settings.FolderList:
+            norm = os.path.normcase(os.path.normpath(dir))
+            if relTo.startswith(norm):
+                bestDir = dir
+                break
 
-            if not bestDir:
-                # No folder!  Put it with the song itself.
-                bestDir = os.path.splitext(song.Filepath)[0]
+        if not bestDir:
+            bestDir = os.path.splitext(song.Filepath)[0]
 
-            bestTitles = TitleStruct(os.path.join(bestDir, _TITLES_FILENAME))
-            self.TitlesFiles.append(bestTitles)
-
-        bestTitles.songs.append(song)
-        song.titles = bestTitles
-        bestTitles.dirty = True
-        self.databaseDirty = True
+        bestTitles = TitleStruct(os.path.join(bestDir, _TITLES_FILENAME))
+        self.TitlesFiles.append(bestTitles)
+        return bestTitles
 
     def LoadSettings(self, errorCallback):
         """Load the personal settings (but not yet the database)."""
@@ -1853,7 +1863,6 @@ class SongDB:
         for i in range(numFiles):
             now = time.time()
             if now - self.lastBusyUpdate > 0.1:
-                # Every so often, update the progress bar.
                 label = "Checking file hashes"
                 if numDuplicates:
                     label = "%s duplicates found" % (numDuplicates)
@@ -1864,59 +1873,60 @@ class SongDB:
             if self.BusyDlg.Clicked:
                 return
 
-            # Calculate the SHA-256 hash of the songfile for duplicate detection.
-            m = sha256()
+            digest = self._computeSongHash(self.FullSongList[i])
+            if digest is None:
+                continue
+            hash_list = fileHashes.setdefault(digest, [])
+            if hash_list:
+                numDuplicates += 1
+            hash_list.append(i)
 
-            # Get details of the associated files
-            song = self.FullSongList[i]
-            datas = song.GetSongDatas()
-            if len(datas) > 0:
-                song_data = datas[0]
-                # If the data has already been read in, use it directly.
-                # Otherwise read the file off disk for temporary use.
-                if song_data.data is not None:
-                    m.update(song_data.data)
-                else:
-                    try:
-                        with open(song_data.filename, 'rb') as f:
-                            while True:
-                                data = f.read(64 * 1024)
-                                if not data:
-                                    break
-                                m.update(data)
-                    except (IOError, OSError):
-                        # Skip files that cannot be read
-                        continue
-                list = fileHashes.setdefault(m.digest(), [])
-                if list:
-                    numDuplicates += 1
-                list.append(i)
-
-        # Remove the identical files from the database.  If specified,
-        # remove them from disk too.
-        removeIndexes = {}
-        for list in fileHashes.values():
-            if len(list) > 1:
-                filenames = [self.FullSongList[i].DisplayFilename for i in list]
-                print("Identical songs: %s" % repr(', '.join(filenames)))
-                for i in list[1:]:
-                    extra = self.FullSongList[i]
-                    removeIndexes[i] = True
-                    if extra.titles:
-                        extra.titles.dirty = True
-                    if self.Settings.DeleteIdentical:
-                        if extra.ZipStoredName:
-                            # Can't delete a song within a zip, sorry.
-                            pass
-                        else:
-                            os.remove(extra.Filepath)
+        # Remove the identical files from the database.
+        removeIndexes = self._collectDuplicateIndexes(fileHashes)
 
         # Now rebuild the FullSongList without the removed files.
-        newSongList = []
-        for i in range(numFiles):
-            if i not in removeIndexes:
-                newSongList.append(self.FullSongList[i])
-        self.FullSongList = newSongList
+        self.FullSongList = [
+            self.FullSongList[i] for i in range(numFiles) if i not in removeIndexes
+        ]
+
+    @staticmethod
+    def _computeSongHash(song):
+        """Compute a SHA-256 hash of the first song data file. Returns the digest or None."""
+        datas = song.GetSongDatas()
+        if not datas:
+            return None
+        m = sha256()
+        song_data = datas[0]
+        if song_data.data is not None:
+            m.update(song_data.data)
+        else:
+            try:
+                with open(song_data.filename, 'rb') as f:
+                    while True:
+                        data = f.read(64 * 1024)
+                        if not data:
+                            break
+                        m.update(data)
+            except (IOError, OSError):
+                return None
+        return m.digest()
+
+    def _collectDuplicateIndexes(self, fileHashes):
+        """Identify duplicate songs and optionally delete them from disk."""
+        removeIndexes = {}
+        for hash_list in fileHashes.values():
+            if len(hash_list) <= 1:
+                continue
+            filenames = [self.FullSongList[i].DisplayFilename for i in hash_list]
+            print("Identical songs: %s" % repr(', '.join(filenames)))
+            for i in hash_list[1:]:
+                extra = self.FullSongList[i]
+                removeIndexes[i] = True
+                if extra.titles:
+                    extra.titles.dirty = True
+                if self.Settings.DeleteIdentical and not extra.ZipStoredName:
+                    os.remove(extra.Filepath)
+        return removeIndexes
 
     def makeUniqueSongs(self):
         """Walks through self.FullSongList, and builds up

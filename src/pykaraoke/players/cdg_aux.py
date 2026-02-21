@@ -370,20 +370,10 @@ class CdgPacketReader:
         vOffset = vScroll & 0x0F
 
         # Scroll Vertical - Calculate number of pixels
-        vScrollUpPixels = 0
-        vScrollDownPixels = 0
-        if vSCmd == 2:
-            vScrollUpPixels = 12
-        elif vSCmd == 1:
-            vScrollDownPixels = 12
+        vScrollPixels = self._calcVerticalScroll(vSCmd)
 
         # Scroll Horizontal- Calculate number of pixels
-        hScrollLeftPixels = 0
-        hScrollRightPixels = 0
-        if hSCmd == 2:
-            hScrollLeftPixels = 6
-        elif hSCmd == 1:
-            hScrollRightPixels = 6
+        hScrollPixels = self._calcHorizontalScroll(hSCmd)
 
         if hOffset != self.__hOffset or vOffset != self.__vOffset:
             # Changing the screen shift.
@@ -391,91 +381,100 @@ class CdgPacketReader:
             self.__vOffset = min(vOffset, 11)
             self.__updatedTiles = 0xFFFFFFFF
 
-        if (
-            hScrollLeftPixels == 0
-            and hScrollRightPixels == 0
-            and vScrollUpPixels == 0
-            and vScrollDownPixels == 0
-        ):
-            # Never mind.
+        if hScrollPixels == 0 and vScrollPixels == 0:
             return
 
-        # Perform the actual scroll. Use surfarray and slicing to make
-        # this efficient. A copy scroll (where the data scrolls round)
-        # can be achieved by slicing and concatenating again.
-        # For non-copy, the new slice is filled in with a new colour.
+        # Perform the actual scroll.
         if copy:
-            if vScrollUpPixels > 0:
-                self.__cdgPixelColours = N.concatenate(
-                    (
-                        self.__cdgPixelColours[:, vScrollUpPixels:],
-                        self.__cdgPixelColours[:, :vScrollUpPixels],
-                    ),
-                    1,
-                )
-            elif vScrollDownPixels > 0:
-                self.__cdgPixelColours = N.concatenate(
-                    (
-                        self.__cdgPixelColours[:, -vScrollDownPixels:],
-                        self.__cdgPixelColours[:, :-vScrollDownPixels],
-                    ),
-                    1,
-                )
-            elif hScrollLeftPixels > 0:
-                self.__cdgPixelColours = N.concatenate(
-                    (
-                        self.__cdgPixelColours[hScrollLeftPixels:, :],
-                        self.__cdgPixelColours[:hScrollLeftPixels, :],
-                    ),
-                    0,
-                )
-            elif hScrollRightPixels > 0:
-                self.__cdgPixelColours = N.concatenate(
-                    (
-                        self.__cdgPixelColours[-hScrollRightPixels:, :],
-                        self.__cdgPixelColours[:-hScrollRightPixels, :],
-                    ),
-                    0,
-                )
-        elif copy is False:
-            if vScrollUpPixels > 0:
-                copyBlockActualColour = (
-                    N.zeros([CDG_FULL_WIDTH, vScrollUpPixels]) + self.__cdgColourTable[colour]
-                )
-                copyBlockColourIndex = N.zeros([CDG_FULL_WIDTH, vScrollUpPixels]) + colour
-                self.__cdgPixelColours = N.concatenate(
-                    (self.__cdgPixelColours[:, vScrollUpPixels:], copyBlockColourIndex), 1
-                )
-            elif vScrollDownPixels > 0:
-                copyBlockActualColour = (
-                    N.zeros([CDG_FULL_WIDTH, vScrollDownPixels]) + self.__cdgColourTable[colour]
-                )
-                copyBlockColourIndex = N.zeros([CDG_FULL_WIDTH, vScrollDownPixels]) + colour
-                self.__cdgPixelColours = N.concatenate(
-                    (copyBlockColourIndex, self.__cdgPixelColours[:, :-vScrollDownPixels]), 1
-                )
-            elif hScrollLeftPixels > 0:
-                # copyBlockActualColour not used, only copyBlockColourIndex needed
-                copyBlockColourIndex = N.zeros([hScrollLeftPixels, CDG_FULL_HEIGHT]) + colour
-                self.__cdgPixelColours = N.concatenate(
-                    (self.__cdgPixelColours[hScrollLeftPixels:, :], copyBlockColourIndex), 0
-                )
-            elif hScrollRightPixels > 0:
-                # copyBlockActualColour not used, only copyBlockColourIndex needed
-                copyBlockColourIndex = N.zeros([hScrollRightPixels, CDG_FULL_HEIGHT]) + colour
-                self.__cdgPixelColours = N.concatenate(
-                    (copyBlockColourIndex, self.__cdgPixelColours[:-hScrollRightPixels, :]), 0
-                )
+            self.__applyScrollCopy(vScrollPixels, hScrollPixels)
+        else:
+            self.__applyScrollPreset(vScrollPixels, hScrollPixels, colour)
 
         # Now that we have scrolled the PixelColours, apply them to
         # the Surfarray.
-
         lookupTable = N.array(self.__cdgColourTable)
         self.__cdgSurfarray.flat[:] = N.take(lookupTable, N.ravel(self.__cdgPixelColours))
-
-        # We have modified our local cdgSurfarray. This will be blitted to
-        # the screen by cdgDisplayUpdate()
         self.__updatedTiles = 0xFFFFFFFF
+
+    @staticmethod
+    def _calcVerticalScroll(vSCmd):
+        """Return signed vertical scroll pixels (positive=up, negative=down)."""
+        if vSCmd == 2:
+            return 12
+        elif vSCmd == 1:
+            return -12
+        return 0
+
+    @staticmethod
+    def _calcHorizontalScroll(hSCmd):
+        """Return signed horizontal scroll pixels (positive=left, negative=right)."""
+        if hSCmd == 2:
+            return 6
+        elif hSCmd == 1:
+            return -6
+        return 0
+
+    def __applyScrollCopy(self, vScrollPixels, hScrollPixels):
+        """Copy-scroll: wrap the scrolled-out area into the opposite side."""
+        if vScrollPixels > 0:
+            self.__cdgPixelColours = N.concatenate(
+                (
+                    self.__cdgPixelColours[:, vScrollPixels:],
+                    self.__cdgPixelColours[:, :vScrollPixels],
+                ),
+                1,
+            )
+        elif vScrollPixels < 0:
+            px = -vScrollPixels
+            self.__cdgPixelColours = N.concatenate(
+                (
+                    self.__cdgPixelColours[:, -px:],
+                    self.__cdgPixelColours[:, :-px],
+                ),
+                1,
+            )
+        elif hScrollPixels > 0:
+            self.__cdgPixelColours = N.concatenate(
+                (
+                    self.__cdgPixelColours[hScrollPixels:, :],
+                    self.__cdgPixelColours[:hScrollPixels, :],
+                ),
+                0,
+            )
+        elif hScrollPixels < 0:
+            px = -hScrollPixels
+            self.__cdgPixelColours = N.concatenate(
+                (
+                    self.__cdgPixelColours[-px:, :],
+                    self.__cdgPixelColours[:-px, :],
+                ),
+                0,
+            )
+
+    def __applyScrollPreset(self, vScrollPixels, hScrollPixels, colour):
+        """Preset-scroll: fill the scrolled-in area with a fresh colour."""
+        if vScrollPixels > 0:
+            copyBlockColourIndex = N.zeros([CDG_FULL_WIDTH, vScrollPixels]) + colour
+            self.__cdgPixelColours = N.concatenate(
+                (self.__cdgPixelColours[:, vScrollPixels:], copyBlockColourIndex), 1
+            )
+        elif vScrollPixels < 0:
+            px = -vScrollPixels
+            copyBlockColourIndex = N.zeros([CDG_FULL_WIDTH, px]) + colour
+            self.__cdgPixelColours = N.concatenate(
+                (copyBlockColourIndex, self.__cdgPixelColours[:, :-px]), 1
+            )
+        elif hScrollPixels > 0:
+            copyBlockColourIndex = N.zeros([hScrollPixels, CDG_FULL_HEIGHT]) + colour
+            self.__cdgPixelColours = N.concatenate(
+                (self.__cdgPixelColours[hScrollPixels:, :], copyBlockColourIndex), 0
+            )
+        elif hScrollPixels < 0:
+            px = -hScrollPixels
+            copyBlockColourIndex = N.zeros([px, CDG_FULL_HEIGHT]) + colour
+            self.__cdgPixelColours = N.concatenate(
+                (copyBlockColourIndex, self.__cdgPixelColours[:-px, :]), 0
+            )
 
     # Set one of the colour indeces as transparent. Don't actually do anything with this
     # at the moment, as there is currently no mechanism for overlaying onto a movie file.
@@ -543,16 +542,17 @@ class CdgPacketReader:
         if row_index > (CDG_FULL_WIDTH - 6):
             row_index = CDG_FULL_WIDTH - 6
 
-        # Set the tile update bitmasks.
-        # Note that the screen update area only covers the non-border area
-        # excluding the left 6 columns, and top 12 rows. Therefore when
-        # calculating whether this block fits into a particular tile, we
-        # add 6 or 12 to the x,y positions. Note also that each tile is 6
-        # wide and 12 high, so if a block starts less than 6 columns to the
-        # left of a block, it will incorporate the adjacent block. Similarly
-        # any update starting less than 12 rows above a block, will also
-        # incorporate the block below.
+        self.__updateTileMask(row_index, column_index)
 
+        # Set the pixel array for each of the pixels in the 12x6 tile.
+        self.__setTilePixels(data_block, row_index, column_index, colour0, colour1, xor)
+
+        # Now the screen has some data on it, so a subsequent clear
+        # should be respected.
+        self.__justClearedColourIndex = -1
+
+    def __updateTileMask(self, row_index, column_index):
+        """Update the tile bitmask for the affected screen region."""
         firstRow = max((row_index - 6 - self.__hOffset) / TILE_WIDTH, 0)
         lastRow = (row_index - 1 - self.__hOffset) / TILE_WIDTH
 
@@ -563,40 +563,24 @@ class CdgPacketReader:
             for row in range(firstRow, lastRow + 1):
                 self.__updatedTiles |= (1 << row) << (col * 8)
 
-        # Set the pixel array for each of the pixels in the 12x6 tile.
-        # Normal = Set the colour to either colour0 or colour1 depending
-        #          on whether the pixel value is 0 or 1.
-        # XOR    = XOR the colour with the colour index currently there.
+    def __setTilePixels(self, data_block, row_index, column_index, colour0, colour1, xor):
+        """Set pixel colours for a 12x6 tile region."""
         for i in range(12):
             byte = data_block[4 + i] & 0x3F
             for j in range(6):
                 pixel = (byte >> (5 - j)) & 0x01
-                if xor:
-                    # Tile Block XOR
-                    if pixel == 0:
-                        xor_col = colour0
-                    else:
-                        xor_col = colour1
-                    # Get the colour index currently at this location, and xor with it
-                    currentColourIndex = self.__cdgPixelColours[(row_index + j), (column_index + i)]
-                    new_col = currentColourIndex ^ xor_col
-                else:
-                    # Tile Block Normal
-                    if pixel == 0:
-                        new_col = colour0
-                    else:
-                        new_col = colour1
-                # Set the pixel with the new colour. We set both the surfarray
-                # containing actual RGB values, as well as our array containing
-                # the colour indeces into our colour table.
+                new_col = self.__resolvePixelColour(
+                    pixel, colour0, colour1, xor, row_index + j, column_index + i
+                )
                 self.__cdgSurfarray[(row_index + j), (column_index + i)] = self.__cdgColourTable[
                     new_col
                 ]
                 self.__cdgPixelColours[(row_index + j), (column_index + i)] = new_col
 
-        # Now the screen has some data on it, so a subsequent clear
-        # should be respected.
-        self.__justClearedColourIndex = -1
-
-        # The changes to cdgSurfarray will be blitted on the next screen update
-        return
+    def __resolvePixelColour(self, pixel, colour0, colour1, xor, row, col):
+        """Determine the final colour index for a single pixel."""
+        if xor:
+            xor_col = colour1 if pixel else colour0
+            currentColourIndex = self.__cdgPixelColours[row, col]
+            return currentColourIndex ^ xor_col
+        return colour1 if pixel else colour0
