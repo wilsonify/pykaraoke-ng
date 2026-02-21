@@ -167,12 +167,12 @@ class TestSongStructBasic:
         except (KeyError, ValueError):
             pass
 
-    def test_song_identity(self):
-        """Two SongStruct objects with same path should have same identity."""
+    def test_song_mark_key(self):
+        """SongStruct.getMarkKey() should return (Filepath, ZipStoredName)."""
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/song.cdg", settings)
-            assert song1.GetIdentifier() == ("/path/to/song.cdg", None)
+            assert song1.getMarkKey() == ("/path/to/song.cdg", None)
         except (KeyError, ValueError):
             pass
 
@@ -304,26 +304,37 @@ class TestSongStructParsing:
             pass
 
     def test_lt_comparison(self):
-        """SongStruct should support < comparison for sorting."""
+        """SongStruct should support < comparison for sorting when fileSortKey is set."""
+        import pykaraoke.core.database as db_module
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/a_song.cdg", settings)
             song2 = SongStruct("/path/to/b_song.cdg", settings)
-            # Should not raise - tests __lt__ method
-            result = song1 < song2
-            assert isinstance(result, bool)
+            # Set the global fileSortKey function
+            old_key = db_module.fileSortKey
+            db_module.fileSortKey = lambda s: s.DisplayFilename.lower()
+            try:
+                result = song1 < song2
+                assert isinstance(result, bool)
+            finally:
+                db_module.fileSortKey = old_key
         except (KeyError, ValueError):
             pass
 
     def test_eq_comparison(self):
-        """SongStruct should support == comparison."""
+        """SongStruct should support == comparison when fileSortKey is set."""
+        import pykaraoke.core.database as db_module
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/song.cdg", settings)
             song2 = SongStruct("/path/to/song.cdg", settings)
-            # Should not raise - tests __eq__ method
-            result = song1 == song2
-            assert isinstance(result, bool)
+            old_key = db_module.fileSortKey
+            db_module.fileSortKey = lambda s: s.DisplayFilename.lower()
+            try:
+                result = song1 == song2
+                assert isinstance(result, bool)
+            finally:
+                db_module.fileSortKey = old_key
         except (KeyError, ValueError):
             pass
 

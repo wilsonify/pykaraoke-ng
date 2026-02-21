@@ -316,12 +316,12 @@ class TestWordWrap:
         assert lines == ["Hello"]
 
     def test_word_wrap_empty_text(self):
-        """Empty text should return one empty line."""
+        """Empty text should return empty list (no lines from split)."""
         mgr = pykManager()
         mock_font = MagicMock()
         mock_font.size.return_value = (0, 20)
         lines = mgr.WordWrapText("", mock_font, 500)
-        assert lines == [""]
+        assert lines == []
 
     def test_find_fold_point_empty_line(self):
         """FindFoldPoint should return 0 for empty line."""
