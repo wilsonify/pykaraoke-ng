@@ -142,11 +142,11 @@ import codecs
 import copy
 import os
 import random
+import pickle
 import string
 import time
 import types
 
-import cPickle
 import wx
 
 from pykaraoke.core import performer_prompt as PerformerPrompt
@@ -1872,7 +1872,7 @@ class SongStructDataObject(wx.PyDataObjectSimple):
         self.extra_data = extra_data
 
         # Pickle both songs and extra_data
-        self.data = cPickle.dumps((self.songs, self.extra_data))
+        self.data = pickle.dumps((self.songs, self.extra_data))
 
     def GetDataSize(self):
         """Returns number of bytes required to store the data in the
@@ -1895,7 +1895,7 @@ class SongStructDataObject(wx.PyDataObjectSimple):
         # Cast the data object explicitly to a str type, in case the
         # drag-and-drop operation elevated it to a unicode string.
         self.data = str(data)
-        self.songs, self.extra_data = cPickle.loads(self.data)
+        self.songs, self.extra_data = pickle.loads(self.data)
 
 
 # We store the object currently being dragged here, to work around an
