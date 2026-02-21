@@ -154,3 +154,208 @@ fn main() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── CommandRequest serialization ──────────────────────────────
+
+    #[test]
+    fn command_request_serializes_with_action_only() {
+        let req = CommandRequest {
+            action: "play".to_string(),
+            params: None,
+        };
+        let j = serde_json::to_value(&req).unwrap();
+        assert_eq!(j["action"], "play");
+        assert!(j["params"].is_null());
+    }
+
+    #[test]
+    fn command_request_serializes_with_params() {
+        let req = CommandRequest {
+            action: "set_volume".to_string(),
+            params: Some(json!({"volume": 0.5})),
+        };
+        let j = serde_json::to_value(&req).unwrap();
+        assert_eq!(j["action"], "set_volume");
+        assert_eq!(j["params"]["volume"], 0.5);
+    }
+
+    #[test]
+    fn command_request_roundtrips_through_json() {
+        let original = CommandRequest {
+            action: "search_songs".to_string(),
+            params: Some(json!({"query": "hello world"})),
+        };
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: CommandRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.action, "search_songs");
+        assert_eq!(deserialized.params.unwrap()["query"], "hello world");
+    }
+
+    #[test]
+    fn command_request_deserializes_without_params_key() {
+        let raw = r#"{"action":"stop"}"#;
+        let req: CommandRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.action, "stop");
+        assert!(req.params.is_none());
+    }
+
+    #[test]
+    fn command_request_deserializes_with_nested_params() {
+        let raw = r#"{"action":"play","params":{"playlist_index":3}}"#;
+        let req: CommandRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.action, "play");
+        assert_eq!(req.params.unwrap()["playlist_index"], 3);
+    }
+
+    // ── CommandResponse serialization ────────────────────────────
+
+    #[test]
+    fn command_response_ok_without_data() {
+        let resp = CommandResponse {
+            status: "ok".to_string(),
+            message: Some("done".to_string()),
+            data: None,
+        };
+        let j = serde_json::to_value(&resp).unwrap();
+        assert_eq!(j["status"], "ok");
+        assert_eq!(j["message"], "done");
+        assert!(j["data"].is_null());
+    }
+
+    #[test]
+    fn command_response_error_with_message() {
+        let resp = CommandResponse {
+            status: "error".to_string(),
+            message: Some("Backend not running".to_string()),
+            data: None,
+        };
+        let j = serde_json::to_value(&resp).unwrap();
+        assert_eq!(j["status"], "error");
+        assert_eq!(j["message"], "Backend not running");
+    }
+
+    #[test]
+    fn command_response_with_data_payload() {
+        let resp = CommandResponse {
+            status: "ok".to_string(),
+            message: None,
+            data: Some(json!({
+                "playback_state": "playing",
+                "volume": 0.75,
+                "playlist": []
+            })),
+        };
+        let j = serde_json::to_value(&resp).unwrap();
+        assert_eq!(j["data"]["playback_state"], "playing");
+        assert_eq!(j["data"]["volume"], 0.75);
+    }
+
+    #[test]
+    fn command_response_roundtrips_through_json() {
+        let original = CommandResponse {
+            status: "ok".to_string(),
+            message: Some("Command sent".to_string()),
+            data: Some(json!({"results": [{"title": "Test"}]})),
+        };
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: CommandResponse = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.status, "ok");
+        assert_eq!(deserialized.data.unwrap()["results"][0]["title"], "Test");
+    }
+
+    // ── BackendState management ──────────────────────────────────
+
+    #[test]
+    fn backend_state_initializes_with_no_process() {
+        let state = BackendState {
+            process: None,
+            stdin: None,
+        };
+        assert!(state.process.is_none());
+        assert!(state.stdin.is_none());
+    }
+
+    #[test]
+    fn safe_backend_state_is_mutex_lockable() {
+        let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
+            process: None,
+            stdin: None,
+        }));
+        let guard = state.lock().unwrap();
+        assert!(guard.process.is_none());
+    }
+
+    #[test]
+    fn safe_backend_state_clone_shares_data() {
+        let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
+            process: None,
+            stdin: None,
+        }));
+        let clone = state.clone();
+        assert!(Arc::ptr_eq(&state, &clone));
+    }
+
+    // ── JSON protocol contract tests ─────────────────────────────
+
+    #[test]
+    fn frontend_play_command_matches_expected_shape() {
+        // Mirrors the JSON the JS frontend sends via invoke('send_command', ...)
+        let raw = r#"{"action":"play","params":{"playlist_index":0}}"#;
+        let req: CommandRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.action, "play");
+    }
+
+    #[test]
+    fn frontend_search_command_matches_expected_shape() {
+        let raw = r#"{"action":"search_songs","params":{"query":"bohemian"}}"#;
+        let req: CommandRequest = serde_json::from_str(raw).unwrap();
+        assert_eq!(req.action, "search_songs");
+        assert_eq!(req.params.unwrap()["query"], "bohemian");
+    }
+
+    #[test]
+    fn frontend_volume_command_matches_expected_shape() {
+        let raw = r#"{"action":"set_volume","params":{"volume":0.42}}"#;
+        let req: CommandRequest = serde_json::from_str(raw).unwrap();
+        let vol = req.params.unwrap()["volume"].as_f64().unwrap();
+        assert!((vol - 0.42).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn all_known_actions_deserialize() {
+        let actions = vec![
+            "play", "pause", "stop", "next", "previous", "seek",
+            "set_volume", "load_song", "add_to_playlist",
+            "remove_from_playlist", "clear_playlist", "get_state",
+            "search_songs", "get_library", "scan_library",
+            "add_folder", "get_settings", "update_settings",
+        ];
+        for action in actions {
+            let raw = format!(r#"{{"action":"{}"}}"#, action);
+            let req: CommandRequest = serde_json::from_str(&raw).unwrap();
+            assert_eq!(req.action, action);
+        }
+    }
+
+    #[test]
+    fn backend_event_envelope_shape() {
+        // The Rust backend wraps Python output in {"type":"event","event":...}
+        let raw = r#"{"type":"event","event":{"type":"state_changed","data":{}}}"#;
+        let parsed: serde_json::Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(parsed["type"], "event");
+        assert_eq!(parsed["event"]["type"], "state_changed");
+    }
+
+    #[test]
+    fn backend_response_envelope_shape() {
+        let raw = r#"{"type":"response","response":{"status":"ok","message":"done"}}"#;
+        let parsed: serde_json::Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(parsed["type"], "response");
+        assert_eq!(parsed["response"]["status"], "ok");
+    }
+}
