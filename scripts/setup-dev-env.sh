@@ -79,6 +79,8 @@ if [[ $LEGACY_MODE -eq 1 ]]; then
     source "$VENV_DIR/bin/activate"
     
     python -m pip install --upgrade pip setuptools wheel
+    
+    # Install package in editable mode (required for tests to import pykaraoke)
     python -m pip install -e ".[dev,test]"
     
     if [[ $FULL_INSTALL -eq 1 ]]; then
@@ -129,6 +131,10 @@ else
     echo -e "${YELLOW}Standard install: dev + test dependencies${NC}"
     uv sync --extra dev --extra test
 fi
+
+# Ensure package is installed in editable mode for tests
+echo -e "${BLUE}Installing package in editable mode...${NC}"
+uv pip install -e .
 
 echo ""
 echo -e "${GREEN}✓ Dependencies installed${NC}"

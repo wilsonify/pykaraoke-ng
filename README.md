@@ -91,6 +91,8 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+**Having trouble with tests?** See [Test Troubleshooting Guide](scripts/troubleshooting-tests.md).
+
 See [Developer Guide](docs/developers.md) for complete setup instructions.
 
 ## License

@@ -2,7 +2,7 @@
 name = "pykaraoke-ng"
 version = "0.7.5"
 description = "PyKaraoke - CD+G/MPEG/KAR Karaoke Player (Next Generation)"
-readme = "README.txt"
+readme = "README.md"
 license = { text = "LGPL-2.1-or-later" }
 requires-python = ">=3.10"
 authors = [
