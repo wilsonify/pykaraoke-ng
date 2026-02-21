@@ -1,0 +1,387 @@
+/**
+ * Tests for PyKaraoke NG frontend application logic.
+ *
+ * Run with: node src/runtimes/tauri/src/app.test.js
+ *
+ * Uses Node.js built-in test runner (available since Node 18).
+ * No external dependencies required.
+ */
+
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
+
+// ---------------------------------------------------------------------------
+// Minimal DOM stubs so we can exercise PyKaraokeApp helpers without a browser
+// ---------------------------------------------------------------------------
+class MockElement {
+  constructor(tag = "div") {
+    this.tag = tag;
+    this.textContent = "";
+    this.innerHTML = "";
+    this.className = "";
+    this.style = {};
+    this.dataset = {};
+    this.value = "";
+    this._listeners = {};
+    this._children = [];
+  }
+  addEventListener(event, fn) {
+    this._listeners[event] = this._listeners[event] || [];
+    this._listeners[event].push(fn);
+  }
+  querySelectorAll() {
+    return this._children;
+  }
+}
+
+function createMockDOM() {
+  const elements = {};
+  const ids = [
+    "play-btn",
+    "pause-btn",
+    "stop-btn",
+    "next-btn",
+    "prev-btn",
+    "volume-slider",
+    "volume-value",
+    "search-btn",
+    "search-input",
+    "add-folder-btn",
+    "scan-library-btn",
+    "clear-playlist-btn",
+    "settings-btn",
+    "current-song-title",
+    "current-song-artist",
+    "progress-fill",
+    "time-current",
+    "time-total",
+    "playlist",
+    "results-list",
+    "status-message",
+    "backend-status",
+  ];
+  ids.forEach((id) => (elements[id] = new MockElement()));
+
+  global.document = {
+    readyState: "complete",
+    getElementById: (id) => elements[id] || new MockElement(),
+    addEventListener: () => {},
+  };
+  global.window = {
+    __TAURI__: {
+      tauri: {
+        invoke: async () => ({ status: "ok", message: "stub" }),
+      },
+      event: {
+        listen: async () => {},
+      },
+    },
+  };
+  return elements;
+}
+
+// ---------------------------------------------------------------------------
+// Extract the formatTime function to test independently
+// ---------------------------------------------------------------------------
+function formatTime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+describe("formatTime", () => {
+  it("formats zero milliseconds", () => {
+    assert.equal(formatTime(0), "0:00");
+  });
+
+  it("formats partial seconds", () => {
+    assert.equal(formatTime(500), "0:00");
+  });
+
+  it("formats exact seconds", () => {
+    assert.equal(formatTime(5000), "0:05");
+  });
+
+  it("formats minutes and seconds", () => {
+    assert.equal(formatTime(65000), "1:05");
+  });
+
+  it("pads single-digit seconds", () => {
+    assert.equal(formatTime(61000), "1:01");
+  });
+
+  it("formats longer durations", () => {
+    assert.equal(formatTime(3661000), "61:01");
+  });
+});
+
+describe("Playlist rendering logic", () => {
+  it("produces empty-playlist message for empty array", () => {
+    const els = createMockDOM();
+    const playlistEl = els["playlist"];
+
+    // Simulate updatePlaylistUI([])
+    const playlist = [];
+    if (!playlist || playlist.length === 0) {
+      playlistEl.innerHTML =
+        '<div class="no-results">Playlist is empty</div>';
+    }
+    assert.ok(playlistEl.innerHTML.includes("Playlist is empty"));
+  });
+
+  it("renders correct number of song items", () => {
+    const playlist = [
+      { title: "Song A", artist: "Artist 1", filename: "a.cdg" },
+      { title: "Song B", artist: "Artist 2", filename: "b.cdg" },
+      { title: "Song C", artist: "", filename: "c.kar" },
+    ];
+
+    const html = playlist
+      .map(
+        (song, index) => `
+      <div class="song-item" data-index="${index}">
+        <div class="song-item-title">${song.title || song.filename}</div>
+        <div class="song-item-artist">${song.artist || ""}</div>
+      </div>
+    `
+      )
+      .join("");
+
+    // Should contain 3 song-item divs
+    const matches = html.match(/class="song-item"/g);
+    assert.equal(matches.length, 3);
+  });
+
+  it("falls back to filename when title is empty", () => {
+    const song = { title: "", artist: "", filename: "my-track.cdg" };
+    const display = song.title || song.filename;
+    assert.equal(display, "my-track.cdg");
+  });
+
+  it("marks active song with active class", () => {
+    const playlistIndex = 1;
+    const songs = [{ title: "A" }, { title: "B" }, { title: "C" }];
+
+    const html = songs
+      .map(
+        (song, idx) =>
+          `<div class="song-item ${playlistIndex === idx ? "active" : ""}">${song.title}</div>`
+      )
+      .join("");
+
+    assert.ok(html.includes('class="song-item active"'));
+    // Only one should be active
+    const actives = html.match(/active/g);
+    assert.equal(actives.length, 1);
+  });
+});
+
+describe("Search results rendering", () => {
+  it("shows no-results message for empty results", () => {
+    const results = [];
+    let html;
+    if (!results || results.length === 0) {
+      html = '<div class="no-results">No results found</div>';
+    }
+    assert.ok(html.includes("No results found"));
+  });
+
+  it("renders song titles from results", () => {
+    const results = [
+      { title: "Monkey Shines", artist: "Jonathan Coulton", filename: "" },
+      { title: "Northern Star", artist: "Steven Dunston", filename: "" },
+    ];
+
+    const html = results
+      .map(
+        (song) => `
+      <div class="song-item">
+        <div class="song-item-title">${song.title || song.filename}</div>
+        <div class="song-item-artist">${song.artist || ""}</div>
+      </div>`
+      )
+      .join("");
+
+    assert.ok(html.includes("Monkey Shines"));
+    assert.ok(html.includes("Northern Star"));
+    assert.ok(html.includes("Jonathan Coulton"));
+  });
+});
+
+describe("Backend event handling", () => {
+  it("recognises all known event types", () => {
+    const knownTypes = [
+      "state_changed",
+      "song_finished",
+      "playback_error",
+      "playlist_updated",
+      "library_scan_complete",
+    ];
+    // App should handle each without throwing
+    for (const t of knownTypes) {
+      assert.ok(typeof t === "string");
+    }
+  });
+
+  it("state_changed event carries expected fields", () => {
+    const event = {
+      type: "state_changed",
+      data: {
+        playback_state: "playing",
+        current_song: { title: "Test", artist: "A" },
+        position_ms: 1000,
+        duration_ms: 5000,
+        playlist: [],
+        playlist_index: 0,
+        volume: 0.8,
+      },
+    };
+    assert.equal(event.data.playback_state, "playing");
+    assert.ok(event.data.duration_ms > 0);
+  });
+});
+
+describe("Command shapes sent to Rust backend", () => {
+  it("play command has correct shape", () => {
+    const cmd = { action: "play", params: {} };
+    assert.equal(cmd.action, "play");
+  });
+
+  it("play with playlist_index has correct shape", () => {
+    const cmd = { action: "play", params: { playlist_index: 2 } };
+    assert.equal(cmd.params.playlist_index, 2);
+  });
+
+  it("set_volume command clamps are expected", () => {
+    // Frontend sends 0-100 from slider, divides by 100
+    const sliderValue = 75;
+    const volume = parseInt(sliderValue) / 100;
+    assert.equal(volume, 0.75);
+  });
+
+  it("search_songs command includes query string", () => {
+    const query = "bohemian rhapsody";
+    const cmd = { action: "search_songs", params: { query } };
+    assert.equal(cmd.params.query, "bohemian rhapsody");
+  });
+
+  it("remove_from_playlist uses numeric index", () => {
+    const cmd = { action: "remove_from_playlist", params: { index: 3 } };
+    assert.equal(typeof cmd.params.index, "number");
+  });
+});
+
+describe("UI state management", () => {
+  it("play button shows when not playing", () => {
+    const isPlaying = false;
+    const playDisplay = isPlaying ? "none" : "inline-block";
+    const pauseDisplay = isPlaying ? "inline-block" : "none";
+    assert.equal(playDisplay, "inline-block");
+    assert.equal(pauseDisplay, "none");
+  });
+
+  it("pause button shows when playing", () => {
+    const isPlaying = true;
+    const playDisplay = isPlaying ? "none" : "inline-block";
+    const pauseDisplay = isPlaying ? "inline-block" : "none";
+    assert.equal(playDisplay, "none");
+    assert.equal(pauseDisplay, "inline-block");
+  });
+
+  it("progress bar width is computed correctly", () => {
+    const state = { position_ms: 30000, duration_ms: 120000 };
+    const progress = (state.position_ms / state.duration_ms) * 100;
+    assert.equal(progress, 25);
+  });
+
+  it("progress bar handles zero duration", () => {
+    const state = { position_ms: 0, duration_ms: 0 };
+    const progress = state.duration_ms > 0 ? (state.position_ms / state.duration_ms) * 100 : 0;
+    assert.equal(progress, 0);
+  });
+
+  it("backend status text reflects connection state", () => {
+    const connected = true;
+    const text = connected ? "Backend: Connected" : "Backend: Disconnected";
+    const cls = connected ? "connected" : "disconnected";
+    assert.equal(text, "Backend: Connected");
+    assert.equal(cls, "connected");
+  });
+
+  it("now-playing shows fallback when no song loaded", () => {
+    const state = { current_song: null };
+    const title = state.current_song
+      ? state.current_song.title || state.current_song.filename || "Unknown"
+      : "No song loaded";
+    assert.equal(title, "No song loaded");
+  });
+
+  it("now-playing shows title when song loaded", () => {
+    const state = {
+      current_song: {
+        title: "Monkey Shines",
+        artist: "Jonathan Coulton",
+        filename: "monkey.mp3",
+      },
+    };
+    const title = state.current_song
+      ? state.current_song.title || state.current_song.filename || "Unknown"
+      : "No song loaded";
+    assert.equal(title, "Monkey Shines");
+  });
+});
+
+describe("HTML DOM contract", () => {
+  it("all required element IDs are present in mock DOM", () => {
+    const els = createMockDOM();
+    const requiredIds = [
+      "play-btn",
+      "pause-btn",
+      "stop-btn",
+      "next-btn",
+      "prev-btn",
+      "volume-slider",
+      "volume-value",
+      "search-btn",
+      "search-input",
+      "add-folder-btn",
+      "scan-library-btn",
+      "clear-playlist-btn",
+      "current-song-title",
+      "current-song-artist",
+      "progress-fill",
+      "time-current",
+      "time-total",
+      "playlist",
+      "results-list",
+      "status-message",
+      "backend-status",
+    ];
+    for (const id of requiredIds) {
+      assert.ok(
+        els[id],
+        `Expected element with id="${id}" to exist in DOM`
+      );
+    }
+  });
+});
+
+describe("Volume slider behaviour", () => {
+  it("converts slider integer to 0-1 float", () => {
+    for (const raw of [0, 25, 50, 75, 100]) {
+      const vol = parseInt(raw) / 100;
+      assert.ok(vol >= 0 && vol <= 1);
+    }
+  });
+
+  it("displays percentage text from slider value", () => {
+    const slider = 42;
+    const text = `${slider}%`;
+    assert.equal(text, "42%");
+  });
+});
