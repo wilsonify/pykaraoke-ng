@@ -74,6 +74,7 @@ For detailed setup after cloning, see the **[Quick Start Guide](quickstart.md)**
 
 - **[Changelog](changelog.txt)** - Historical version changes
 - **[Legacy README](readme-legacy.txt)** - Original project documentation
+- **[Legacy Issues](issues/README.md)** - Issues from the original PyKaraoke project
 
 ## License
 
