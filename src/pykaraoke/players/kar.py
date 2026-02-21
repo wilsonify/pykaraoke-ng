@@ -185,7 +185,6 @@ TEXT_TITLE = 2
 
 # Debug out MIDI messages as text
 debug = False
-# debug = True
 
 
 class midiFile:
@@ -197,7 +196,6 @@ class midiFile:
         # (ms, text).
         self.lyrics = []
 
-        # self.text_encoding = "iso-8859-13"
         self.text_encoding = ""  # The encoding of text in midi file
 
         self.ClickUnitsPerSMPTE = None
@@ -332,10 +330,10 @@ class Lyrics:
         if text[0] == "@":
             if text[1] == "T":
                 # A title.
-                type = TEXT_TITLE
+                text_type = TEXT_TITLE
             elif text[1] == "I":
                 # An info line.
-                type = TEXT_INFO
+                text_type = TEXT_INFO
             else:
                 # Any other comment we ignore.
                 return
@@ -344,7 +342,7 @@ class Lyrics:
             for line in text[2:].split("\n"):
                 line = line.strip()
                 self.line += 1
-                self.list.append(LyricSyllable(click, line, self.line, type))
+                self.list.append(LyricSyllable(click, line, self.line, text_type))
             return
 
         if text[0] == "\\":

@@ -310,8 +310,8 @@ class pykManager:
         completely empty a full audio buffer with the current
         settings."""
         if self.audioProps:
-            frequency, size, channels, bufferSamples = self.audioProps
-            return bufferSamples * 1000 / (frequency * channels)
+            frequency, _, channels, buffer_samples = self.audioProps
+            return buffer_samples * 1000 / (frequency * channels)
         return 0
 
     def Quit(self):
@@ -510,7 +510,7 @@ class pykManager:
             type="choice",
             choices=settings.Zoom,
             help="specify the way in which graphics are scaled to fit the window.  The choices are %s."
-            % (", ".join(map(lambda z: '"%s"' % z, settings.Zoom))),
+            % (", ".join('"%s"' % z for z in settings.Zoom)),
             default=settings.CdgZoom,
         )
 

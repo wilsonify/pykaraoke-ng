@@ -674,9 +674,10 @@ class TitleStruct:
 
         should_close = False
         if catalogFile is None:
-            # Open the file for reading.
+            # Open the file for reading in binary mode, since the
+            # loop below calls .decode() on each line.
             try:
-                catalogFile = open(catalogPathname)
+                catalogFile = open(catalogPathname, "rb")
                 should_close = True
             except (OSError, IOError):
                 print("Could not open titles file %s" % (repr(catalogPathname)))
