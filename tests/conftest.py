@@ -5,7 +5,14 @@ Provides pygame mocking infrastructure so tests can run without
 a display or audio device.
 """
 
+import os
 import sys
+
+# Ensure project root is on sys.path so that `from tests.conftest import ...`
+# works regardless of how pytest is invoked (e.g. `pytest tests/pykaraoke/`).
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 from unittest.mock import MagicMock
 
 
