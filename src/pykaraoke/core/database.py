@@ -327,7 +327,7 @@ class SongStruct:
             if settings.CdgFileNameType == 0:  # Disc-Track-Artist-Title.Ext
                 disc = filepath.split("-")[0]  # Find the Disc in the filename
             elif settings.CdgFileNameType == 1:  # DiscTrack-Artist-Title.Ext
-                disc = filepath.mid(0, filepath.length - 2)  # Find the Disc in the filename
+                disc = filepath[: len(filepath) - 2]  # Find the Disc in the filename
             elif settings.CdgFileNameType == 2:  # Disc-Artist-Title.Ext
                 disc = filepath.split("-")[0]  # Find the Disc in the filename
             elif settings.CdgFileNameType == 3:  # Artist-Title.Ext
@@ -349,7 +349,7 @@ class SongStruct:
             if settings.CdgFileNameType == 0:  # Disc-Track-Artist-Title.Ext
                 track = filepath.split("-")[1]  # Find the Track in the filename
             elif settings.CdgFileNameType == 1:  # DiscTrack-Artist-Title.Ext
-                track = filepath.mid(filepath.length - 2, 2)  # Find the Track in the filename
+                track = filepath[-2:]  # Find the Track in the filename
             elif settings.CdgFileNameType == 2 or settings.CdgFileNameType == 3:  # Disc-Artist-Title.Ext
                 track = ""
             else:
@@ -359,24 +359,24 @@ class SongStruct:
         # print "Track parsed: %s" % track
         return track
 
-    def MakeSortKey(self, str):
+    def MakeSortKey(self, text):
         """Returns a suitable key to use for sorting, by lowercasing
         and removing articles from the indicated string."""
-        str = str.strip().lower()
-        if str:
+        text = text.strip().lower()
+        if text:
             # Remove a leading parenthetical phrase.
-            if str[0] == "(":
-                rparen = str.index(")")
+            if text[0] == "(":
+                rparen = text.index(")")
                 if rparen != ")":
-                    str = str[rparen + 1 :].strip()
+                    text = text[rparen + 1 :].strip()
 
-        if str:
+        if text:
             # Remove a leading article.
-            firstWord = str.split()[0]
+            firstWord = text.split()[0]
             if firstWord in ["a", "an", "the"]:
-                str = str[len(firstWord) :].strip()
+                text = text[len(firstWord) :].strip()
 
-        return str
+        return text
 
     def MakePlayer(self, songDb, errorNotifyCallback, doneCallback):
         """Creates and returns a player of the appropriate type to
@@ -434,15 +434,15 @@ class SongStruct:
             error = "No such file: %s" % (self.Filepath)
             raise ValueError(error)
 
-        dir = os.path.dirname(self.Filepath)
-        if dir == "":
-            dir = "."
+        directory = os.path.dirname(self.Filepath)
+        if directory == "":
+            directory = "."
         root, ext = os.path.splitext(self.Filepath)
         prefix = os.path.basename(root + ".")
 
         if self.ZipStoredName:
             # It's in a ZIP file; unpack it.
-            zip = globalSongDB.GetZipFile(self.Filepath)
+            zf = globalSongDB.GetZipFile(self.Filepath)
             filelist = [self.ZipStoredName]
 
             root, ext = os.path.splitext(self.ZipStoredName)
@@ -453,7 +453,7 @@ class SongStruct:
                 # out the mp3/ogg/whatever audio file that comes with
                 # the .cdg file.  Just extract out any files that have
                 # the same basename.
-                for name in zip.namelist():
+                for name in zf.namelist():
                     if name != self.ZipStoredName and name.startswith(prefix):
                         filelist.append(name)
 
@@ -462,7 +462,7 @@ class SongStruct:
 
             for file in filelist:
                 try:
-                    data = zip.read(file)
+                    data = zf.read(file)
                     songDatas.append(SongData(file, data))
                 except (KeyError, zipfile.BadZipFile):
                     print("Error in ZIP containing ")
@@ -476,7 +476,7 @@ class SongStruct:
             # file, just as above, when we were pulling them out of
             # the zip file.  This time we are just looking for loose
             # files on the disk.
-            for file in os.listdir(dir):
+            for file in os.listdir(directory):
                 # Handle potential byte-strings with invalid characters
                 # that startswith() will not handle.
                 if isinstance(file, bytes):
@@ -492,7 +492,7 @@ class SongStruct:
 
                 # Check for a file which matches the prefix
                 if file.startswith(prefix):
-                    path = os.path.join(dir, file)
+                    path = os.path.join(directory, file)
                     if path != self.Filepath:
                         songDatas.append(SongData(path, None))
 
@@ -570,7 +570,7 @@ class SongStruct:
         identifying this particular song file."""
         return (self.Filepath, self.ZipStoredName)
 
-    def __cmp__(self, other):
+    def __lt__(self, other):
         """Define a sorting order between SongStruct objects.  This is
         used in bisect, to quickly search for a SongStruct in a sorted
         list.  It relies on fileSortKey (above) having being filled in
@@ -580,10 +580,13 @@ class SongStruct:
         a = fileSortKey(self)
         b = fileSortKey(other)
         if a == b:
-            return cmp(id(self), id(other))
-        if a < b:
-            return -1
-        return 1
+            return id(self) < id(other)
+        return a < b
+
+    def __eq__(self, other):
+        """Define equality between SongStruct objects based on sort key."""
+        global fileSortKey
+        return fileSortKey(self) == fileSortKey(other) and id(self) == id(other)
 
 
 class TitleStruct:
@@ -606,8 +609,8 @@ class TitleStruct:
         scan."""
 
         if self.ZipStoredName is not None:
-            zip = songDb.GetZipFile(self.Filepath)
-            unzipped_data = zip.read(self.ZipStoredName)
+            zf = songDb.GetZipFile(self.Filepath)
+            unzipped_data = zf.read(self.ZipStoredName)
             sfile = BytesIO(unzipped_data)
             self.__readTitles(songDb, sfile, os.path.join(self.Filepath, self.ZipStoredName))
         else:
@@ -620,19 +623,19 @@ class TitleStruct:
             self.__writeTitles(songDb, sfile, os.path.join(self.Filepath, self.ZipStoredName))
             unzipped_data = sfile.getvalue()
             songDb.DropZipFile(self.Filepath)
-            zip = zipfile.ZipFile(self.Filepath, "a", zipfile.ZIP_DEFLATED)
+            zf = zipfile.ZipFile(self.Filepath, "a", zipfile.ZIP_DEFLATED)
 
             # Since the lame Python zipfile.py implementation won't
             # replace an existing file, we have to rename it out of
             # the way.
-            self.__renameZipElement(zip, self.ZipStoredName)
+            self.__renameZipElement(zf, self.ZipStoredName)
 
-            zip.writestr(self.ZipStoredName, unzipped_data)
-            zip.close()
+            zf.writestr(self.ZipStoredName, unzipped_data)
+            zf.close()
         else:
             self.__writeTitles(songDb, None, self.Filepath)
 
-    def __renameZipElement(self, zip, name1, name2=None):
+    def __renameZipElement(self, zf, name1, name2=None):
         """Renames the file within the archive named "name1" to
         "name2".  To avoid major rewriting of the archive, it is
         required that len(name1) == len(name2).
@@ -641,15 +644,15 @@ class TitleStruct:
         generated based on the old name.
         """
 
-        zinfo = zip.getinfo(name1)
-        zip._writecheck(zinfo)
+        zinfo = zf.getinfo(name1)
+        zf._writecheck(zinfo)
 
         if name2 is None:
             # Replace the last letters with digits.
             i = 0
             n = str(i)
             name2 = name1[: -len(n)] + n
-            while name2 in zip.NameToInfo:
+            while name2 in zf.NameToInfo:
                 i += 1
                 n = str(i)
                 name2 = name1[: -len(n)] + n
@@ -657,17 +660,17 @@ class TitleStruct:
         if len(name1) != len(name2):
             raise RuntimeError("Cannot change length of name with rename().")
 
-        filepos = zip.fp.tell()
+        filepos = zf.fp.tell()
 
-        zip.fp.seek(zinfo.header_offset + 30, 0)
-        zip.fp.write(name2)
+        zf.fp.seek(zinfo.header_offset + 30, 0)
+        zf.fp.write(name2)
         zinfo.filename = name2
 
-        zip.fp.seek(filepos, 0)
+        zf.fp.seek(filepos, 0)
 
     def __readTitles(self, songDb, catalogFile, catalogPathname):
         self.songs = []
-        _dirname = os.path.split(catalogPathname)[0]
+        dirname = os.path.split(catalogPathname)[0]
 
         should_close = False
         if catalogFile is None:
@@ -688,12 +691,12 @@ class TitleStruct:
                     print("Invalid characters in %s:\n%s" % (repr(catalogPathname), line))
 
                 if line:
-                    tuple = line.split("\t")
-                    if len(tuple) == 2:
-                        filename, title = tuple
+                    parts = line.split("\t")
+                    if len(parts) == 2:
+                        filename, title = parts
                         artist = ""
-                    elif len(tuple) == 3:
-                        filename, title, artist = tuple
+                    elif len(parts) == 3:
+                        filename, title, artist = parts
                     else:
                         print("Invalid line in %s:\n%s" % (repr(catalogPathname), line))
                         continue
@@ -1036,9 +1039,9 @@ class SongDB:
         be saved."""
 
         # If we have PYKARAOKE_DIR defined, use it.
-        dir = os.getenv("PYKARAOKE_DIR")
-        if dir:
-            return dir
+        save_dir = os.getenv("PYKARAOKE_DIR")
+        if save_dir:
+            return save_dir
 
         if env == ENV_GP2X:
             # On the GP2X, just save db files in the root directory.
@@ -1054,13 +1057,13 @@ class SongDB:
     def getTempDirectory(self):
         """Returns the directory in which temporary files should be
         saved."""
-        dir = os.getenv("PYKARAOKE_TEMP_DIR")
-        if dir:
-            return dir
+        temp_env = os.getenv("PYKARAOKE_TEMP_DIR")
+        if temp_env:
+            return temp_env
 
-        dir = os.getenv("TEMP")
-        if dir:
-            return os.path.join(dir, "pykaraoke")
+        temp_env = os.getenv("TEMP")
+        if temp_env:
+            return os.path.join(temp_env, "pykaraoke")
 
         if env != ENV_WINDOWS:
             # Use tempfile module for secure temp directory
@@ -1291,8 +1294,7 @@ class SongDB:
             # We don't use pickle to dump out the settings anymore.
             # Instead, we write them in this human-readable and
             # human-editable format.
-            keys = self.Settings.__dict__.keys()
-            keys.sort()
+            keys = sorted(self.Settings.__dict__.keys())
             for k in keys:
                 if not k.startswith("__"):
                     value = getattr(self.Settings, k)
@@ -1360,30 +1362,30 @@ class SongDB:
         instead, saving on load time from repeatedly loading the same
         zip file."""
 
-        for tuple in self.ZipFiles:
-            cacheFilename, cacheZip = tuple
+        for entry in self.ZipFiles:
+            cacheFilename, cacheZip = entry
             if cacheFilename == filename:
                 # Here is a zip file in the cache; move it to the
                 # front of the list.
-                self.ZipFiles.remove(tuple)
-                self.ZipFiles.insert(0, tuple)
+                self.ZipFiles.remove(entry)
+                self.ZipFiles.insert(0, entry)
                 return cacheZip
 
         # The zip file was not in the cache, create a new one and cache it.
-        zip = zipfile.ZipFile(filename)
+        zf = zipfile.ZipFile(filename)
         if len(self.ZipFiles) >= MAX_ZIP_FILES:
             del self.ZipFiles[-1]
-        self.ZipFiles.insert(0, (filename, zip))
-        return zip
+        self.ZipFiles.insert(0, (filename, zf))
+        return zf
 
     def DropZipFile(self, filename):
         """Releases an opened zip file by the indicated filename, if any."""
 
-        for tuple in self.ZipFiles:
-            cacheFilename, cacheZip = tuple
+        for entry in self.ZipFiles:
+            cacheFilename, cacheZip = entry
             if cacheFilename == filename:
                 # Here is the zip file in the cache; remove it.
-                self.ZipFiles.remove(tuple)
+                self.ZipFiles.remove(entry)
                 return
 
     def doSearch(self, fileList, yielder, busyDlg):
@@ -1501,12 +1503,12 @@ class SongDB:
         # We need to boil this down into a single nondecreasing
         # number.  A simple mathematical series.
 
-        range = 1.0
+        span = 1.0
         result = 0.0
-        for i, len in progress:
-            if len > 1:
-                result += range * (float(i) / float(len))
-                range = range * (1.0 / float(len))
+        for i, count in progress:
+            if count > 1:
+                result += span * (float(i) / float(count))
+                span = span * (1.0 / float(count))
         return result
 
     def fileScan(self, full_path, progress, yielder):
@@ -1552,8 +1554,8 @@ class SongDB:
             elif self.Settings.LookInsideZips and ext.lower() == ".zip":
                 try:
                     if zipfile.is_zipfile(full_path):
-                        zip = self.GetZipFile(full_path)
-                        namelist = zip.namelist()
+                        zf = self.GetZipFile(full_path)
+                        namelist = zf.namelist()
                         for i in range(len(namelist)):
                             filename = namelist[i]
 
@@ -1599,7 +1601,7 @@ class SongDB:
                                             )
                                         )
                                     except KeyError:
-                                        print("Excluding filename with unexpected format: %s " % repr(zippath))
+                                        print("Excluding filename with unexpected format: %s " % repr(filename))
                                 else:
                                     print(
                                         "ZIP member compressed with unsupported type (%d): %s"

@@ -105,7 +105,6 @@ class pykManager:
             self.OpenCPUControl()
             if env == ENV_GP2X:
                 cpuctrl.set_FCLK(speed)
-                pass
 
     def VolumeUp(self):
         try:
@@ -129,9 +128,9 @@ class pykManager:
 
     def GetVolume(self):
         """Gives the current volume level."""
-        if "music" in vars():
+        try:
             return pygame.mixer.music.get_volume()
-        else:
+        except pygame.error:
             return 0.50  # 75% is the industry recommended maximum value
 
     def SetVolume(self, volume):

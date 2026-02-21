@@ -102,6 +102,28 @@ class PyKaraokeBackend:
         # Event callback for notifying frontend of state changes
         self.event_callback: Callable[[dict[str, Any]], None] | None = None
 
+        # Command dispatch table to reduce handle_command complexity
+        self._command_handlers: dict[str, Callable] = {
+            "play": self._handle_play,
+            "pause": lambda _: self._handle_pause(),
+            "stop": lambda _: self._handle_stop(),
+            "next": lambda _: self._handle_next(),
+            "previous": lambda _: self._handle_previous(),
+            "seek": self._handle_seek,
+            "set_volume": self._handle_set_volume,
+            "load_song": self._handle_load_song,
+            "add_to_playlist": self._handle_add_to_playlist,
+            "remove_from_playlist": self._handle_remove_from_playlist,
+            "clear_playlist": lambda _: self._handle_clear_playlist(),
+            "get_state": lambda _: {"status": "ok", "data": self.get_state()},
+            "search_songs": self._handle_search_songs,
+            "get_library": self._handle_get_library,
+            "scan_library": self._handle_scan_library,
+            "add_folder": self._handle_add_folder,
+            "get_settings": lambda _: self._handle_get_settings(),
+            "update_settings": self._handle_update_settings,
+        }
+
         # Initialize the song database
         self._init_database()
 
@@ -114,7 +136,7 @@ class PyKaraokeBackend:
             self.song_db.LoadSettings(None)
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:
-            logger.error(f"Failed to initialize database: {e}")
+            logger.error("Failed to initialize database: %s", e)
             self.error_message = str(e)
 
     def set_event_callback(self, callback: Callable[[dict[str, Any]], None]):
@@ -128,7 +150,7 @@ class PyKaraokeBackend:
             try:
                 self.event_callback(event)
             except (TypeError, ValueError, RuntimeError) as e:
-                logger.error(f"Error emitting event: {e}")
+                logger.error("Error emitting event: %s", e)
 
     def _emit_state_change(self):
         """Emit a state change event"""
@@ -147,50 +169,15 @@ class PyKaraokeBackend:
         action = command.get("action")
         params = command.get("params", {})
 
-        logger.debug(f"Handling command: {action}")
+        logger.debug("Handling command: %s", action)
 
         try:
-            # Route to appropriate handler
-            if action == "play":
-                return self._handle_play(params)
-            elif action == "pause":
-                return self._handle_pause()
-            elif action == "stop":
-                return self._handle_stop()
-            elif action == "next":
-                return self._handle_next()
-            elif action == "previous":
-                return self._handle_previous()
-            elif action == "seek":
-                return self._handle_seek(params)
-            elif action == "set_volume":
-                return self._handle_set_volume(params)
-            elif action == "load_song":
-                return self._handle_load_song(params)
-            elif action == "add_to_playlist":
-                return self._handle_add_to_playlist(params)
-            elif action == "remove_from_playlist":
-                return self._handle_remove_from_playlist(params)
-            elif action == "clear_playlist":
-                return self._handle_clear_playlist()
-            elif action == "get_state":
-                return {"status": "ok", "data": self.get_state()}
-            elif action == "search_songs":
-                return self._handle_search_songs(params)
-            elif action == "get_library":
-                return self._handle_get_library(params)
-            elif action == "scan_library":
-                return self._handle_scan_library(params)
-            elif action == "add_folder":
-                return self._handle_add_folder(params)
-            elif action == "get_settings":
-                return self._handle_get_settings()
-            elif action == "update_settings":
-                return self._handle_update_settings(params)
-            else:
+            handler = self._command_handlers.get(action)
+            if handler is None:
                 return {"status": "error", "message": f"Unknown action: {action}"}
-        except Exception as e:
-            logger.error(f"Error handling command {action}: {e}", exc_info=True)
+            return handler(params)
+        except (RuntimeError, OSError, ValueError, TypeError, AttributeError) as e:
+            logger.error("Error handling command %s: %s", action, e, exc_info=True)
             return {"status": "error", "message": str(e)}
 
     def get_state(self) -> dict[str, Any]:
@@ -318,7 +305,7 @@ class PyKaraokeBackend:
             )
 
             if not self.current_player:
-                raise Exception("Failed to create player")
+                raise RuntimeError("Failed to create player")
 
             # Start playback
             self.current_player.Play()
@@ -329,7 +316,7 @@ class PyKaraokeBackend:
             return {"status": "ok"}
 
         except (RuntimeError, OSError, ValueError) as e:
-            logger.error(f"Playback error: {e}")
+            logger.error("Playback error: %s", e)
             self.state = BackendState.ERROR
             self.error_message = str(e)
             self._emit_state_change()
@@ -337,7 +324,7 @@ class PyKaraokeBackend:
 
     def _on_player_error(self, error: str):
         """Callback when player encounters an error"""
-        logger.error(f"Player error: {error}")
+        logger.error("Player error: %s", error)
         self.error_message = error
         self.state = BackendState.ERROR
         self._emit_event("playback_error", {"error": error})
@@ -423,7 +410,7 @@ class PyKaraokeBackend:
         except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
-    def _handle_get_library(self, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG002
+    def _handle_get_library(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Get library contents"""
         try:
             songs = self.song_db.SongList if hasattr(self.song_db, "SongList") else []
@@ -431,7 +418,7 @@ class PyKaraokeBackend:
         except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
-    def _handle_scan_library(self, params: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG002
+    def _handle_scan_library(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Scan library folders"""
         # This is a long-running operation that should be async
         logger.info("Starting library scan")
@@ -582,15 +569,7 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
         return backend.get_state()
 
     # Execute a command
-    @app.post("/api/command")
-    async def execute_command(command: dict[str, Any]):
-        """Execute a command on the backend"""
-        try:
-            response = backend.handle_command(command)
-            return response
-        except Exception as e:
-            logger.error(f"Error executing command: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e)) from e
+    @app.post(\"/api/command\", responses={500: {\"description\": \"Internal server error from command execution\"}})\n    async def execute_command(command: dict[str, Any]):\n        \"\"\"Execute a command on the backend\"\"\"\n        try:\n            response = backend.handle_command(command)\n            return response\n        except (RuntimeError, OSError, ValueError, TypeError) as e:\n            logger.error(\"Error executing command: %s\", e, exc_info=True)\n            raise HTTPException(status_code=500, detail=str(e)) from e
 
     # Get events (polling endpoint)
     @app.get("/api/events")
@@ -682,7 +661,7 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     # Graceful shutdown handling
     def handle_shutdown(signum, frame):  # noqa: ARG001
         """Handle shutdown signals"""
-        logger.info(f"Received signal {signum}, shutting down gracefully...")
+        logger.info("Received signal %s, shutting down gracefully...", signum)
         # Use uvicorn's documented shutdown mechanism
         server.should_exit = True
 
@@ -699,7 +678,7 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     )
     server = uvicorn.Server(config)
 
-    logger.info(f"Starting HTTP server on {host}:{port}")
+    logger.info("Starting HTTP server on %s:%d", host, port)
 
     try:
         # Run server
@@ -779,7 +758,7 @@ Examples:
         if port_env:
             default_port = int(port_env)
     except ValueError:
-        logger.warning(f"Invalid PYKARAOKE_API_PORT value, using default: {default_port}")
+        logger.warning("Invalid PYKARAOKE_API_PORT value, using default: %d", default_port)
 
     parser.add_argument(
         "--port",
@@ -793,7 +772,7 @@ Examples:
     # Determine mode from args or environment
     mode = args.mode or os.getenv("BACKEND_MODE", "stdio")
 
-    logger.info(f"PyKaraoke Backend starting in {mode} mode")
+    logger.info("PyKaraoke Backend starting in %s mode", mode)
 
     # Create backend instance
     backend = PyKaraokeBackend()
