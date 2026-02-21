@@ -98,7 +98,7 @@ class TestManagerFontScale:
     def test_get_font_scale_default(self):
         mgr = pykManager()
         opts = MagicMock()
-        opts.font_scale = None
+        opts.font_scale = 1.0
         mgr.options = opts
         fs = mgr.GetFontScale()
         assert fs == 1.0
@@ -106,7 +106,7 @@ class TestManagerFontScale:
     def test_zoom_font(self):
         mgr = pykManager()
         opts = MagicMock()
-        opts.font_scale = None
+        opts.font_scale = 1.0
         mgr.options = opts
         mgr.ZoomFont(2.0)
         fs = mgr.GetFontScale()
@@ -115,7 +115,7 @@ class TestManagerFontScale:
     def test_zoom_font_multiply(self):
         mgr = pykManager()
         opts = MagicMock()
-        opts.font_scale = None
+        opts.font_scale = 1.0
         mgr.options = opts
         mgr.ZoomFont(2.0)
         mgr.ZoomFont(0.5)

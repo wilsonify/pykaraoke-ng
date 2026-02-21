@@ -71,7 +71,10 @@ print(report_path)
     )
     if result.returncode != 0:
         pytest.skip(f"database scan subprocess failed: {result.stderr.strip()}")
-    return result.stdout.strip()
+    # The last non-empty line of stdout is the report path.
+    # Earlier lines may contain pygame greeting or other output.
+    lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+    return lines[-1].strip() if lines else result.stdout.strip()
 
 
 def test_end_to_end_database_scan_and_report(tmp_path):
