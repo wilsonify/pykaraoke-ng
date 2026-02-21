@@ -45,6 +45,8 @@ from pykaraoke.config.environment import env
 
 from hashlib import sha256  # Use SHA-256 instead of MD5 for file hashing (security)
 
+from pykaraoke.core.filename_parser import FileNameType, FilenameParser
+
 # The amount of time to wait, in milliseconds, before yielding to the
 # app for windowing updates during a long update process.
 YIELD_INTERVAL = 1000
@@ -200,10 +202,18 @@ class SongStruct:
         # Check to see if we are deriving song information from the filename
         if settings.CdgDeriveSongInformation:
             try:
-                self.Title = self.ParseTitle(Filepath, settings)  # Title for display in playlist
-                self.Artist = self.ParseArtist(Filepath, settings)  # Artist for display
-                self.Disc = self.ParseDisc(Filepath, settings)  # Disc for display
-                self.Track = self.ParseTrack(Filepath, settings)  # Track for display
+                _parser = FilenameParser(
+                    file_name_type=FileNameType(settings.CdgFileNameType)
+                )
+                _parsed = _parser.parse(Filepath)
+                # An empty artist means the filename did not match the
+                # configured naming scheme (equivalent to the legacy KeyError).
+                if not _parsed.artist:
+                    raise KeyError(f"Could not parse filename: {Filepath}")
+                self.Title = _parsed.title
+                self.Artist = _parsed.artist
+                self.Disc = _parsed.disc
+                self.Track = _parsed.track
             except (ValueError, KeyError, IndexError):
                 # Filename did not match requested scheme, set the title to the filepath
                 # so that the structure is still created, but without any additional info
