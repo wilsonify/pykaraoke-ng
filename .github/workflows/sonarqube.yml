@@ -1,13 +1,10 @@
-name: SonarQube Analysis
+name: SonarQube Analysis (Manual)
+# NOTE: Automated SonarQube scanning is handled by the CI/CD Pipeline workflow
+# (.github/workflows/ci-cd.yml) as part of the quality gate stage.
+# This workflow exists for on-demand standalone scans only.
 
 on:
-  push:
-    branches:
-      - master
-      - main
-      - develop
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   sonarqube:
@@ -36,7 +33,8 @@ jobs:
       
       - name: Run tests with coverage
         run: |
-          pytest --cov=. --cov-report=xml --cov-report=html --junitxml=pytest-junit.xml tests/ || true
+          pytest --cov=src/pykaraoke --cov-report=xml:coverage.xml --cov-report=html \
+            --junitxml=pytest-junit.xml tests/pykaraoke/ || true
         continue-on-error: true
       
       - name: SonarQube Scan
