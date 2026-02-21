@@ -28,6 +28,13 @@ import pygame
 from pykaraoke.config.constants import (
     ENV_GP2X,
     ENV_WINDOWS,
+    GP2X_BUTTON_L,
+    GP2X_BUTTON_LEFT,
+    GP2X_BUTTON_R,
+    GP2X_BUTTON_RIGHT,
+    GP2X_BUTTON_SELECT,
+    GP2X_BUTTON_START,
+    STATE_CAPTURING,
     STATE_CLOSED,
     STATE_CLOSING,
     STATE_INIT,
