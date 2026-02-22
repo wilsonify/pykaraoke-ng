@@ -196,11 +196,11 @@ class PyKaraokeBackend:
     def _song_to_dict(self, song: Any) -> dict[str, Any]:
         """Convert a SongStruct to a dictionary"""
         return {
-            "title": getattr(song, "Title", ""),
-            "artist": getattr(song, "Artist", ""),
-            "filename": getattr(song, "DisplayFilename", ""),
-            "filepath": getattr(song, "Filepath", ""),
-            "zip_name": getattr(song, "ZipStoredName", None),
+            "title": getattr(song, "title", ""),
+            "artist": getattr(song, "artist", ""),
+            "filename": getattr(song, "display_filename", ""),
+            "filepath": getattr(song, "filepath", ""),
+            "zip_name": getattr(song, "zip_stored_name", None),
         }
 
     # Playback control handlers

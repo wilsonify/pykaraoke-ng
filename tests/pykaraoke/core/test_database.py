@@ -79,33 +79,33 @@ class TestSongSettings:
 
     def test_default_sample_rate(self):
         settings = SongSettings()
-        assert hasattr(settings, "SampleRate")
+        assert hasattr(settings, "sample_rate")
         assert settings.sample_rate > 0
 
     def test_default_player_size(self):
         settings = SongSettings()
-        assert hasattr(settings, "PlayerSize")
+        assert hasattr(settings, "player_size")
         assert len(settings.player_size) == 2
 
     def test_default_zoom_modes(self):
         settings = SongSettings()
-        assert hasattr(settings, "Zoom")
+        assert hasattr(settings, "zoom")
         assert isinstance(settings.zoom, (list, tuple))
         assert len(settings.zoom) > 0
 
     def test_default_fullscreen(self):
         settings = SongSettings()
-        assert hasattr(settings, "FullScreen")
+        assert hasattr(settings, "full_screen")
         assert isinstance(settings.full_screen, bool)
 
     def test_default_buffer_ms(self):
         settings = SongSettings()
-        assert hasattr(settings, "BufferMs")
+        assert hasattr(settings, "buffer_ms")
         assert settings.buffer_ms > 0
 
     def test_default_num_channels(self):
         settings = SongSettings()
-        assert hasattr(settings, "NumChannels")
+        assert hasattr(settings, "num_channels")
         assert settings.num_channels in (1, 2)
 
     def test_default_extensions(self):
