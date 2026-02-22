@@ -154,9 +154,10 @@ jobs:
       - name: Validate spec completion
         run: |
           chmod +x specs/ci/validate-spec-completion.sh
-          # Extract branch name from PR head ref
+          # Extract branch name from PR head ref and sanitize it
           BRANCH="${{ github.head_ref }}"
-          ./specs/ci/validate-spec-completion.sh "$BRANCH"
+          SAFE_BRANCH=$(echo "$BRANCH" | tr -cd '[:alnum:]._-/')
+          ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 2: SonarQube — static analysis + quality gate enforcement.
