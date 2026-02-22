@@ -434,8 +434,7 @@ class SongStruct:
         zf = globalSongDB.get_zip_file(self.filepath)
         filelist = [self.zip_stored_name]
 
-        root, ext = os.path.splitext(self.zip_stored_name)
-        root, ext = os.path.splitext(self.zip_stored_name)
+        root, _ = os.path.splitext(self.zip_stored_name)
         zip_prefix = os.path.basename(root + ".")
         prefix = zip_prefix or prefix
 
