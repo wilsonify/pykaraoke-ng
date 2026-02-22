@@ -135,6 +135,30 @@ jobs:
         run: node --test app.test.js index.test.js
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 1.5: Spec Kit Validation — enforce spec-driven development.
+  #            Runs in parallel with unit tests on PRs only.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  spec-validation:
+    name: Spec Kit Validation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate spec completion
+        run: |
+          chmod +x specs/ci/validate-spec-completion.sh
+          # Extract branch name from PR head ref
+          BRANCH="${{ github.head_ref }}"
+          ./specs/ci/validate-spec-completion.sh "$BRANCH"
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 2: SonarQube — static analysis + quality gate enforcement.
   #          Runs only after ALL unit-test jobs succeed.
   # ═══════════════════════════════════════════════════════════════════════════
@@ -142,7 +166,8 @@ jobs:
   sonarqube:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend]
+    needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend, spec-validation]
+    if: always() && needs.unit-tests-python.result == 'success' && needs.unit-tests-rust.result == 'success' && needs.unit-tests-frontend.result == 'success' && (needs.spec-validation.result == 'success' || needs.spec-validation.result == 'skipped')
     permissions:
       contents: read
       pull-requests: read
