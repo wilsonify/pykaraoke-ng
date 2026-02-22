@@ -127,14 +127,14 @@ class pykManager:
 
         pygame.mixer.music.set_volume(volume)
 
-    def GetVolume(self):
+    def get_volume(self):
         """Gives the current volume level."""
         try:
             return pygame.mixer.music.get_volume()
         except pygame.error:
             return 0.50  # 75% is the industry recommended maximum value
 
-    def SetVolume(self, volume):
+    def set_volume(self, volume):
         """Sets the volume of the music playback."""
         volume = min(volume, 1.0)
         volume = max(volume, 0.0)
@@ -338,7 +338,7 @@ class pykManager:
         are playable and contain lyrics."""
 
         self.CloseDisplay()
-        invalidFile = open("invalid.txt", "w")
+        invalid_file = open("invalid.txt", "w")
 
         songDb.SelectSort("filename")
         for song in songDb.SongList[:1074]:
@@ -354,8 +354,8 @@ class pykManager:
                 print("%s ok" % (song.DisplayFilename))
             else:
                 print("%s invalid" % (song.DisplayFilename))
-                print("%s\t%s" % (song.Filepath, song.ZipStoredName), file=invalidFile)
-                invalidFile.flush()
+                print("%s\t%s" % (song.Filepath, song.ZipStoredName), file=invalid_file)
+                invalid_file.flush()
 
     def Poll(self):
         """Your application must call this method from time to

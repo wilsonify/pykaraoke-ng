@@ -275,7 +275,7 @@ class SongStruct:
             else:
                 self.MpgType = ext[1:]
 
-    def ParseTitle(self, filepath, settings):
+    def parse_title(self, filepath, settings):
         """Parses the file path and returns the title of the song. If the filepath cannot be parsed a KeyError exception is thrown. If the settings contains a file naming scheme that we do not support a KeyError exception is thrown."""
         if not settings.CdgDeriveSongInformation:
             return ""
@@ -294,7 +294,7 @@ class SongStruct:
         title = parts[title_index].strip()
         return os.path.splitext(title)[0]
 
-    def ParseArtist(self, filepath, settings):
+    def parse_artist(self, filepath, settings):
         """Parses the filepath and returns the artist of the song."""
         if not settings.CdgDeriveSongInformation:
             return ""
@@ -359,13 +359,13 @@ class SongStruct:
 
         return text
 
-    def MakePlayer(self, songDb, errorNotifyCallback, doneCallback):
+    def MakePlayer(self, song_db, error_notify_callback, done_callback):
         """Creates and returns a player of the appropriate type to
         play this file, if possible; or returns None if the file
-        cannot be played (in which case, the errorNotifyCallback will
+        cannot be played (in which case, the error_notify_callback will
         have already been called with the error message)."""
 
-        settings = songDb.Settings
+        settings = song_db.Settings
         constructor = None
 
         if self.Type == self.T_CDG:
@@ -381,14 +381,14 @@ class SongStruct:
                 constructor = mpg.externalPlayer
         else:
             ext = os.path.splitext(self.DisplayFilename)[1]
-            errorNotifyCallback("Unsupported file format " + ext)
+            error_notify_callback("Unsupported file format " + ext)
             return None
 
         # Try to open the song file.
         try:
-            player = constructor(self, songDb, errorNotifyCallback, doneCallback)
+            player = constructor(self, song_db, error_notify_callback, done_callback)
         except (RuntimeError, OSError, ImportError) as e:
-            errorNotifyCallback(
+            error_notify_callback(
                 "Error opening file.\n%s\n%s" % (type(e).__name__, str(e))
             )
             return None
@@ -608,7 +608,7 @@ class TitleStruct:
         else:
             self.__writeTitles(songDb, None, self.Filepath)
 
-    def __renameZipElement(self, zf, name1, name2=None):
+    def __rename_zip_element(self, zf, name1, name2=None):
         """Renames the file within the archive named "name1" to
         "name2".  To avoid major rewriting of the archive, it is
         required that len(name1) == len(name2).
@@ -1306,7 +1306,7 @@ class SongDB:
             print(message)
         self.databaseDirty = False
 
-    def GetSong(self, index):
+    def get_song(self, index):
         """This returns the song stored in index in the database."""
         return self.FullSongList[index]
 
@@ -1714,7 +1714,7 @@ class SongDB:
 
         return True
 
-    def _resolveSortConfig(self, sort):
+    def _resolve_sort_config(self, sort):
         """Resolve sort type to (getSongTuple, sortKeys, getSortKey, sort)."""
         if sort == "title" and self.GotTitles:
             if self.GotArtists:
@@ -1837,7 +1837,7 @@ class SongDB:
                 fullpath = os.path.join(fullpath, name)
             self.filesByFullpath[fullpath] = file
 
-    def checkFileHashes(self, yielder):
+    def check_file_hashes(self, yielder):
         """Walks through self.FullSongList, checking for file hashes
         to see if any files are duplicated."""
 

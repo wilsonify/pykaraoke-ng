@@ -117,30 +117,30 @@ class TestVolumeControl:
         assert args[0] >= 0.0
 
     def test_get_volume(self):
-        """GetVolume should return current volume."""
+        """get_volume should return current volume."""
         mgr = pykManager()
         mock_pygame.mixer.music.get_volume.return_value = 0.75
-        volume = mgr.GetVolume()
+        volume = mgr.get_volume()
         assert isinstance(volume, float)
 
     def test_set_volume(self):
-        """SetVolume should set volume to specified level."""
+        """set_volume should set volume to specified level."""
         mgr = pykManager()
-        mgr.SetVolume(0.6)
+        mgr.set_volume(0.6)
         mock_pygame.mixer.music.set_volume.assert_called_with(0.6)
 
     def test_set_volume_clamp_high(self):
-        """SetVolume should clamp volume above 1.0."""
+        """set_volume should clamp volume above 1.0."""
         mgr = pykManager()
-        mgr.SetVolume(1.5)
+        mgr.set_volume(1.5)
         mock_pygame.mixer.music.set_volume.assert_called()
         args = mock_pygame.mixer.music.set_volume.call_args[0]
         assert args[0] <= 1.0
 
     def test_set_volume_clamp_low(self):
-        """SetVolume should clamp volume below 0.0."""
+        """set_volume should clamp volume below 0.0."""
         mgr = pykManager()
-        mgr.SetVolume(-0.5)
+        mgr.set_volume(-0.5)
         mock_pygame.mixer.music.set_volume.assert_called()
         args = mock_pygame.mixer.music.set_volume.call_args[0]
         assert args[0] >= 0.0

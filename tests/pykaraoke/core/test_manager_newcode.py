@@ -23,13 +23,13 @@ from pykaraoke.core.manager import pykManager
 
 
 class TestGetVolumeNewCode:
-    """Tests the refactored GetVolume with try/except pygame.error."""
+    """Tests the refactored get_volume with try/except pygame.error."""
 
     def test_get_volume_success(self):
         """Line 134: get_volume() succeeds → returns its value."""
         mgr = pykManager()
         # The mock's get_volume returns 0.75 by default
-        vol = mgr.GetVolume()
+        vol = mgr.get_volume()
         assert vol == 0.75
 
     def test_get_volume_pygame_error_fallback(self):
@@ -43,16 +43,16 @@ class TestGetVolumeNewCode:
             side_effect=pygame_mod.error("no mixer")
         )
         try:
-            vol = mgr.GetVolume()
+            vol = mgr.get_volume()
             assert vol == 0.50
         finally:
             pygame_mod.mixer.music.get_volume = original_get_volume
 
     def test_get_volume_after_set_volume(self):
         mgr = pykManager()
-        mgr.SetVolume(0.8)
+        mgr.set_volume(0.8)
         # After set, get should work (mock always returns 0.75 though)
-        vol = mgr.GetVolume()
+        vol = mgr.get_volume()
         assert isinstance(vol, (int, float))
 
 

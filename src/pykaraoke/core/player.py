@@ -50,16 +50,16 @@ _SYNC_MSG = "sync %s"
 
 
 class pykPlayer:
-    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None, windowTitle=None):
+    def __init__(self, song, song_db, error_notify_callback=None, done_callback=None, window_title=None):
         """The first parameter, song, may be either a database.SongStruct
         instance, or it may be a filename."""
 
-        if songDb is None:
+        if song_db is None:
             from pykaraoke.core import database
 
-            songDb = database.globalSongDB
-            songDb.load_settings(None)
-        self.songDb = songDb
+            song_db = database.globalSongDB
+            song_db.load_settings(None)
+        self.songDb = song_db
 
         # Set the global command-line options if they have not already
         # been set.
@@ -93,24 +93,24 @@ class pykPlayer:
 
         # Store the parameters
         self.Song = song
-        self.WindowTitle = windowTitle
+        self.WindowTitle = window_title
 
         # And look up the actual files corresponding to this SongStruct.
         self.SongDatas = song.GetSongDatas()
-        if windowTitle is None:
+        if window_title is None:
             self.WindowTitle = song.DisplayFilename
 
         # Caller can register a callback by which we
         # print out error information, use stdout if none registered
-        if errorNotifyCallback:
-            self.ErrorNotifyCallback = errorNotifyCallback
+        if error_notify_callback:
+            self.ErrorNotifyCallback = error_notify_callback
         else:
             self.ErrorNotifyCallback = self.__defaultErrorPrint
 
         # Caller can register a callback by which we
         # let them know when the song is finished
-        if doneCallback:
-            self.SongFinishedCallback = doneCallback
+        if done_callback:
+            self.SongFinishedCallback = done_callback
         else:
             self.SongFinishedCallback = None
 
@@ -237,7 +237,7 @@ class pykPlayer:
             # on-the-fly.
             import pymedia.video.vcodec as vcodec
 
-            self.dumpFile = open(filename, "wb")
+            self.dump_file = open(filename, "wb")
             frameRate = int(self.dumpFrameRate * 100 + 0.5)
             self.dumpFrameRate = float(frameRate) / 100.0
 
@@ -257,7 +257,7 @@ class pykPlayer:
             return
 
         # Don't dump a video file; dump a sequence of frames instead.
-        self.dumpPPM = ext_lower == ".ppm" or ext_lower == ".pnm"
+        self.dump_ppm = ext_lower == ".ppm" or ext_lower == ".pnm"
         self.dumpAppend = False
 
         # Convert the filename to a pattern.
@@ -270,7 +270,7 @@ class pykPlayer:
             filename = filename[:hash_pos] + "%0" + str(count) + "d" + filename[end:]
         else:
             # There's no hash in the filename.
-            if self.dumpPPM:
+            if self.dump_ppm:
                 # We can dump a series of frames all to the same file,
                 # if we're dumping ppm frames.  Mjpegtools likes this.
                 self.dumpAppend = True
@@ -294,7 +294,7 @@ class pykPlayer:
             )
             yuvFrame = bmpFrame.convert(vcodec.formats.PIX_FMT_YUV420P)
             d = self.dumpEncoder.encode(yuvFrame)
-            self.dumpFile.write(d.data)
+            self.dump_file.write(d.data)
             return
 
         if self.dumpAppend:
@@ -303,7 +303,7 @@ class pykPlayer:
             filename = self.dumpFilename % self.PlayFrame
             print(filename)
 
-        if self.dumpPPM:
+        if self.dump_ppm:
             # Dump a PPM file.  We do PPM by hand since pygame
             # doesn't support it directly, but it's so easy and
             # useful.
@@ -383,15 +383,15 @@ class pykPlayer:
         if event.type == pygame.USEREVENT:
             self.Close()
         elif event.type == pygame.KEYDOWN:
-            self._handleKeyDown(event)
+            self._handle_key_down(event)
         elif event.type == pygame.QUIT:
             self.Close()
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONDOWN:
-            self._handleJoyButtonDown(event)
+            self._handle_joy_button_down(event)
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONUP:
-            self._handleJoyButtonUp(event)
+            self._handle_joy_button_up(event)
 
-    def _handleKeyDown(self, event):
+    def _handle_key_down(self, event):
         """Handle keyboard events, extracted to reduce cognitive complexity."""
         if event.key == pygame.K_ESCAPE:
             self.Close()
@@ -401,12 +401,12 @@ class pykPlayer:
             self.Rewind()
             self.Play()
         elif self.State == STATE_PLAYING and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
-            self._handleCtrlArrow(event)
+            self._handle_ctrl_arrow(event)
 
         if self.SupportsFontZoom:
-            self._handleFontZoomKey(event)
+            self._handle_font_zoom_key(event)
 
-    def _handleCtrlArrow(self, event):
+    def _handle_ctrl_arrow(self, event):
         """Handle ctrl+arrow keys for sync delay adjustment."""
         if event.key == pygame.K_RIGHT:
             manager.settings.SyncDelayMs += 250
@@ -418,14 +418,14 @@ class pykPlayer:
             manager.settings.SyncDelayMs = 0
             print(_SYNC_MSG % manager.settings.SyncDelayMs)
 
-    def _handleFontZoomKey(self, event):
+    def _handle_font_zoom_key(self, event):
         """Handle font zoom keyboard shortcuts."""
         if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
             manager.ZoomFont(1.0 / 0.9)
         elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
             manager.ZoomFont(0.9)
 
-    def _handleJoyButtonDown(self, event):
+    def _handle_joy_button_down(self, event):
         """Handle GP2X joystick button down events."""
         if event.button == GP2X_BUTTON_SELECT:
             self.Close()
@@ -442,7 +442,7 @@ class pykPlayer:
             elif event.button == GP2X_BUTTON_LEFT:
                 manager.ZoomFont(0.9)
 
-    def _handleJoyButtonUp(self, event):
+    def _handle_joy_button_up(self, event):
         """Handle GP2X joystick button up events."""
         if event.button == GP2X_BUTTON_L:
             self.ShoulderLHeld = False

@@ -59,9 +59,9 @@ def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, win
     return pykPlayer(
         song_filepath,
         mock_db,
-        errorNotifyCallback=error_cb,
-        doneCallback=done_cb,
-        windowTitle=window_title,
+        error_notify_callback=error_cb,
+        done_callback=done_cb,
+        window_title=window_title,
     )
 
 

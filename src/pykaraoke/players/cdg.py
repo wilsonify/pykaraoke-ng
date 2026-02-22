@@ -219,16 +219,16 @@ TILE_HEIGHT = CDG_DISPLAY_HEIGHT // TILES_PER_COL
 # cdgPlayer Class
 class cdgPlayer(pykPlayer):
     # Initialise the player instace
-    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
+    def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
+        pykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
 
-        soundFileData = self._findSoundFile()
+        sound_file_data = self._findSoundFile()
 
         self.cdgFileData = self.SongDatas[0]
-        self.soundFileData = soundFileData
+        self.soundFileData = sound_file_data
         self.soundLength = 0
 
         # Handle a bug in pygame (pre-1.7) which means that the position
@@ -513,8 +513,8 @@ class cdgPlayer(pykPlayer):
             channels = 1
 
         # Put the channels and sample rate together in a tuple and return
-        audioProperties = (m.info.sample_rate, -16, channels)
-        return audioProperties
+        audio_properties = (m.info.sample_rate, -16, channels)
+        return audio_properties
 
     # Actually update/refresh the video output
     def cdgDisplayUpdate(self):
@@ -630,8 +630,8 @@ class cdgPlayer(pykPlayer):
             manager.Flip()
 
 
-def default_error_print(ErrorString):
-    print(ErrorString)
+def default_error_print(error_string):
+    print(error_string)
 
 
 # Can be called from the command line with the CDG filepath as parameter

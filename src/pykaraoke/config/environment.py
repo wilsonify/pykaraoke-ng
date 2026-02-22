@@ -32,7 +32,7 @@ if os.name == "posix":
     (uname, host, release, version, machine) = os.uname()
     if host == "gp2x":
         env = ENV_GP2X
-    elif uname.lower()[:6] == "darwin":
+    elif uname.lower().startswith("darwin"):
         env = ENV_OSX
     else:
         env = ENV_POSIX

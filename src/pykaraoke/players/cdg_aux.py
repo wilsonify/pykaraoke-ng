@@ -128,7 +128,7 @@ class CdgPacketReader:
         self.__cdgBorderColourIndex = -1
         # Support only one transparent colour
         # Note: Currently unused - reserved for future overlay support on movie files
-        self._cdgTransparentColour = -1
+        self._cdg_transparent_colour = -1
 
         # These values are used to implement screen shifting.  The CDG
         # specification allows the entire screen to be shifted, up to
@@ -150,13 +150,13 @@ class CdgPacketReader:
         self.__cdgSurfarray = N.zeros((CDG_FULL_WIDTH, CDG_FULL_HEIGHT))
 
         # Start with all tiles requiring update
-        self.__updatedTiles = 0xFFFFFFFF
+        self.__updated_tiles = 0xFFFFFFFF
 
     def MarkTilesDirty(self):
         """Marks all the tiles dirty, so that the next call to
         GetDirtyTiles() will return the complete list of tiles."""
 
-        self.__updatedTiles = 0xFFFFFFFF
+        self.__updated_tiles = 0xFFFFFFFF
 
     def GetDirtyTiles(self):
         """Returns a list of (row, col) tuples, corresponding to all
@@ -220,10 +220,10 @@ class CdgPacketReader:
 
     # Read the next CDG command from the file (24 bytes each)
     def __getNextPacket(self):
-        packetData = list(map(ord, self.__cdgData[self.__cdgDataPos : self.__cdgDataPos + 24]))
+        packet_data = list(map(ord, self.__cdgData[self.__cdgDataPos : self.__cdgDataPos + 24]))
         self.__cdgDataPos += 24
-        if len(packetData) == 24:
-            return CdgPacket(packetData)
+        if len(packet_data) == 24:
+            return CdgPacket(packet_data)
         else:
             self.__cdgDataPos = len(self.__cdgData)
             return None
@@ -307,7 +307,7 @@ class CdgPacketReader:
         self.__cdgSurfarray = N.zeros([CDG_FULL_WIDTH, CDG_FULL_HEIGHT])
         self.__cdgSurfarray[:, :] = self.__cdgSurfarray[:, :] + self.__cdgColourTable[colour]
 
-        self.__updatedTiles = 0xFFFFFFFF
+        self.__updated_tiles = 0xFFFFFFFF
 
     # Border Preset (clear the border area only)
     def __cdgBorderPreset(self, packd):
@@ -363,9 +363,9 @@ class CdgPacketReader:
         hScroll = data_block[1] & 0x3F
         vScroll = data_block[2] & 0x3F
         hSCmd = (hScroll & 0x30) >> 4
-        hOffset = hScroll & 0x07
+        h_offset = hScroll & 0x07
         vSCmd = (vScroll & 0x30) >> 4
-        vOffset = vScroll & 0x0F
+        v_offset = vScroll & 0x0F
 
         # Scroll Vertical - Calculate number of pixels
         vScrollPixels = self._calcVerticalScroll(vSCmd)
@@ -373,11 +373,11 @@ class CdgPacketReader:
         # Scroll Horizontal- Calculate number of pixels
         hScrollPixels = self._calcHorizontalScroll(hSCmd)
 
-        if hOffset != self.__hOffset or vOffset != self.__vOffset:
+        if h_offset != self.__hOffset or v_offset != self.__vOffset:
             # Changing the screen shift.
-            self.__hOffset = min(hOffset, 5)
-            self.__vOffset = min(vOffset, 11)
-            self.__updatedTiles = 0xFFFFFFFF
+            self.__hOffset = min(h_offset, 5)
+            self.__vOffset = min(v_offset, 11)
+            self.__updated_tiles = 0xFFFFFFFF
 
         if hScrollPixels == 0 and vScrollPixels == 0:
             return
@@ -392,7 +392,7 @@ class CdgPacketReader:
         # the Surfarray.
         lookupTable = N.array(self.__cdgColourTable)
         self.__cdgSurfarray.flat[:] = N.take(lookupTable, N.ravel(self.__cdgPixelColours))
-        self.__updatedTiles = 0xFFFFFFFF
+        self.__updated_tiles = 0xFFFFFFFF
 
     @staticmethod
     def _calcVerticalScroll(vSCmd):
@@ -479,7 +479,7 @@ class CdgPacketReader:
     def __cdgDefineTransparentColour(self, packd):
         data_block = packd.data
         colour = data_block[0] & 0x0F
-        self._cdgTransparentColour = colour
+        self._cdg_transparent_colour = colour
         return
 
     # Load the RGB value for colours 0..7 or 8..15 in the lookup table
@@ -489,12 +489,12 @@ class CdgPacketReader:
         else:
             colourTableStart = 8
         for i in range(8):
-            colourEntry = (packd.data[2 * i] & CDG_MASK) << 8
-            colourEntry = colourEntry + (packd.data[(2 * i) + 1] & CDG_MASK)
-            colourEntry = ((colourEntry & 0x3F00) >> 2) | (colourEntry & 0x003F)
-            red = ((colourEntry & 0x0F00) >> 8) * 17
-            green = ((colourEntry & 0x00F0) >> 4) * 17
-            blue = (colourEntry & 0x000F) * 17
+            colour_entry = (packd.data[2 * i] & CDG_MASK) << 8
+            colour_entry = colour_entry + (packd.data[(2 * i) + 1] & CDG_MASK)
+            colour_entry = ((colour_entry & 0x3F00) >> 2) | (colour_entry & 0x003F)
+            red = ((colour_entry & 0x0F00) >> 8) * 17
+            green = ((colour_entry & 0x00F0) >> 4) * 17
+            blue = (colour_entry & 0x000F) * 17
             self.__cdgColourTable[i + colourTableStart] = self.__mapperSurface.map_rgb(
                 red, green, blue
             )
@@ -515,7 +515,7 @@ class CdgPacketReader:
         # self.__cdgSurfarray.flat[:] =  map(self.__cdgColourTable.__getitem__, self.__cdgPixelColours.flat)
 
         # Update the screen for any colour changes
-        self.__updatedTiles = 0xFFFFFFFF
+        self.__updated_tiles = 0xFFFFFFFF
         return
 
     # Set the colours for a 12x6 tile. The main CDG command for display data
@@ -559,7 +559,7 @@ class CdgPacketReader:
 
         for col in range(firstCol, lastCol + 1):
             for row in range(firstRow, lastRow + 1):
-                self.__updatedTiles |= (1 << row) << (col * 8)
+                self.__updated_tiles |= (1 << row) << (col * 8)
 
     def __setTilePixels(self, data_block, row_index, column_index, colour0, colour1, xor):
         """Set pixel colours for a 12x6 tile region."""

@@ -65,26 +65,26 @@ class TestManagerVolume:
 
     def test_set_volume(self):
         mgr = pykManager()
-        mgr.SetVolume(0.5)
+        mgr.set_volume(0.5)
 
     def test_set_volume_clamp_high(self):
         mgr = pykManager()
-        mgr.SetVolume(1.5)  # Should clamp to 1.0
+        mgr.set_volume(1.5)  # Should clamp to 1.0
 
     def test_set_volume_clamp_low(self):
         mgr = pykManager()
-        mgr.SetVolume(-0.5)  # Should clamp to 0.0
+        mgr.set_volume(-0.5)  # Should clamp to 0.0
 
     def test_get_volume(self):
         mgr = pykManager()
-        v = mgr.GetVolume()
+        v = mgr.get_volume()
         assert isinstance(v, (int, float))
 
     def test_volume_up(self):
         mgr = pykManager()
-        mgr.SetVolume(0.5)
+        mgr.set_volume(0.5)
         mgr.VolumeUp()
-        v = mgr.GetVolume()
+        v = mgr.get_volume()
         assert v >= 0.5  # Should have gone up
 
     def test_volume_down(self):

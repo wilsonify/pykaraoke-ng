@@ -280,7 +280,7 @@ class PyKaraokeBackend:
         volume = params.get("volume", 0.75)
         volume = max(0.0, min(1.0, volume))  # Clamp to [0, 1]
         self.volume = volume
-        manager.SetVolume(volume)
+        manager.set_volume(volume)
         self._emit_event("volume_changed", {"volume": volume})
         return {"status": "ok"}
 
@@ -300,8 +300,8 @@ class PyKaraokeBackend:
             # Create new player for the song
             self.current_player = self.current_song.MakePlayer(
                 self.song_db,
-                errorNotifyCallback=self._on_player_error,
-                doneCallback=self._on_song_finished,
+                error_notify_callback=self._on_player_error,
+                done_callback=self._on_song_finished,
             )
 
             if not self.current_player:
@@ -310,7 +310,7 @@ class PyKaraokeBackend:
             # Start playback
             self.current_player.Play()
             self.state = BackendState.PLAYING
-            manager.SetVolume(self.volume)
+            manager.set_volume(self.volume)
 
             self._emit_state_change()
             return {"status": "ok"}
