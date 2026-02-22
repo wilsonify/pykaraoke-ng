@@ -434,7 +434,7 @@ class TestSongDBOperations:
         db.SaveDir = "/nonexistent/path/that/does/not/exist"
         # Should not raise
         try:
-            db.LoadSettings(None)
+            db.load_settings(None)
         except (OSError, FileNotFoundError):
             pass  # Expected for nonexistent path
 

@@ -348,7 +348,7 @@ class TestSongDBMethodsExtended:
             # Load into a new DB
             db2 = SongDB()
             db2.SaveDir = tmpdir
-            db2.LoadSettings(None)
+            db2.load_settings(None)
             assert db2.Settings.SampleRate == 22050
 
 

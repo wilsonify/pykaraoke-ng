@@ -37,19 +37,19 @@ class TestInitDatabaseError:
 
     def test_init_database_oserror(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = OSError("disk fail")
+            mock_db.globalSongDB.load_settings.side_effect = OSError("disk fail")
             backend = PyKaraokeBackend()
             assert backend.error_message == "disk fail"
 
     def test_init_database_runtime_error(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = RuntimeError("corrupt")
+            mock_db.globalSongDB.load_settings.side_effect = RuntimeError("corrupt")
             backend = PyKaraokeBackend()
             assert backend.error_message == "corrupt"
 
     def test_init_database_value_error(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = ValueError("bad val")
+            mock_db.globalSongDB.load_settings.side_effect = ValueError("bad val")
             backend = PyKaraokeBackend()
             assert backend.error_message == "bad val"
 

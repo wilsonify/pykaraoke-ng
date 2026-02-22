@@ -133,7 +133,7 @@ class PyKaraokeBackend:
         """Initialize the song database"""
         try:
             self.song_db = database.globalSongDB
-            self.song_db.LoadSettings(None)
+            self.song_db.load_settings(None)
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:
             logger.error("Failed to initialize database: %s", e)

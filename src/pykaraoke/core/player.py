@@ -58,7 +58,7 @@ class pykPlayer:
             from pykaraoke.core import database
 
             songDb = database.globalSongDB
-            songDb.LoadSettings(None)
+            songDb.load_settings(None)
         self.songDb = songDb
 
         # Set the global command-line options if they have not already
