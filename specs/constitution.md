@@ -1,236 +1,248 @@
 # PyKaraoke-NG — Project Constitution
 
-> **Version:** 1.0.0
+> **Version:** 2.0.0
 > **Ratified:** 2026-02-22
-> **Governance scope:** All code contributed to `wilsonify/pykaraoke-ng`.
+> **Governance scope:** All contributions to `wilsonify/pykaraoke-ng`.
 
 ---
 
 ## 1. Purpose
 
-PyKaraoke-NG is a modern, cross-platform karaoke desktop application built on
-a **Tauri** (Rust + Web UI) frontend and a **Python** backend. This
-constitution defines the non-negotiable engineering invariants that every
-contributor, every pull request, and every CI pipeline run must uphold.
+PyKaraoke-NG is a cross-platform desktop karaoke application.
+
+This constitution defines the engineering invariants that govern architecture,
+quality, testing, specification workflow, continuous integration, and release
+management for the project.
+
+Technology choices are derived from these constraints — not the reverse.
 
 ---
 
 ## 2. Development Methodology
 
-### 2.1 Test-First Development (TDD) — Mandatory
+### 2.1 Test-First Development
 
-- **Every** behavioral change begins with a **failing test**.
+Every behavioural change follows the **Red → Green → Refactor** cycle:
+
+- Every new behaviour begins with a **failing test**.
 - Production code exists only to make a failing test pass.
-- Refactoring happens only when all tests are green.
-- The Red → Green → Refactor cycle is not optional — it is policy.
+- Refactoring occurs only when all tests are green.
+- No code ships without corresponding test coverage.
 
-### 2.2 Spec-Driven Development
+This is policy, not preference.
 
-- Every feature begins with a written specification (`/speckit.specify`).
-- No implementation may start without a completed spec, clarification, and
-  technical plan.
-- Feature branches must contain their spec artifacts in
-  `specs/features/NNN-feature-name/`.
+### 2.2 Specification-Driven Development
 
----
+Every feature begins with a written specification before any code is written.
 
-## 3. Language and Type Safety
+**Required lifecycle:**
 
-### 3.1 Python
+1. **Specify** — define WHAT and WHY (no implementation details).
+2. **Clarify** — resolve ambiguities, surface risks.
+3. **Plan** — define HOW (technology decisions live here).
+4. **Tasks** — break the plan into ordered, atomic work items.
+5. **Implement** — TDD: failing test → pass → refactor.
+6. **Checklist** — verify all criteria before merge.
 
-- **Minimum version:** Python 3.13+.
-- **Full type annotations** on every public function, method, class, and
-  module-level variable. `Any` is forbidden except in explicitly justified
-  legacy-interop layers.
-- **mypy strict mode** must pass (`--strict` flag, no untyped defs).
-- **Ruff** enforces style and lint rules defined in `pyproject.toml`.
-
-### 3.2 Rust (Tauri backend)
-
-- Rust `stable` channel, latest release.
-- `#[deny(clippy::all, clippy::pedantic)]` in CI.
-- `cargo fmt --check` must pass.
-- No `unsafe` without a `// SAFETY:` comment and review approval.
-
-### 3.3 Frontend (Web UI)
-
-- Vanilla JS/HTML/CSS — no framework churn.
-- All frontend test files run under `node --test`.
+No implementation may begin before specification artefacts exist.
 
 ---
 
-## 4. Architectural Invariants
+## 3. Architectural Constraints
 
-### 4.1 No Global Mutable State
+### 3.1 Desktop-First, Offline-Capable
+
+- The application runs locally. No external service is required for core
+  functionality.
+- Offline operation is a first-class requirement.
+- Behaviour must be deterministic without cloud dependencies.
+
+### 3.2 Cross-Platform Determinism
+
+- The application must behave identically on Windows, macOS, and Linux.
+- Platform differences must be abstracted behind clean interfaces.
+- Hardcoded platform assumptions (path separators, line endings, locale
+  defaults, filename length limits) are prohibited.
+- Identical input must produce byte-identical output on every platform.
+
+### 3.3 Strongly Typed Interfaces
+
+- All public interfaces must carry complete, statically verifiable type
+  declarations.
+- Untyped or dynamically typed escape hatches are prohibited unless
+  explicitly justified and approved.
+- Static analysis must verify type correctness without runtime execution.
+
+### 3.4 Separation of Concerns
+
+Clear boundaries must exist between the following layers:
+
+| Layer | Responsibility |
+|-------|---------------|
+| **Core** | Parsing, domain logic, validation, data access |
+| **Configuration** | Settings, environment, constants |
+| **Playback** | Format-specific audio/video engines |
+| **Runtime Shell** | UI, OS integration, platform bindings |
+
+Rules:
+
+- No user-interface logic inside core modules.
+- No domain logic inside user-interface modules.
+- Layers communicate only through well-defined contracts (APIs, messages,
+  or function signatures).
+
+### 3.5 No Global Mutable State
 
 - No module-level mutable variables.
-- All state must be encapsulated in classes or passed via function parameters.
-- Singletons require explicit justification and review approval.
+- All state must be injected via parameters or encapsulated in instances.
+- Singleton patterns require explicit justification and review approval.
 
-### 4.2 No GUI Logic in Backend Modules
+### 3.6 Structured Observability
 
-- `src/pykaraoke/` contains **zero** GUI/rendering/display code.
-- All presentation lives in `src/runtimes/tauri/`.
-- The backend communicates with frontends only via well-defined APIs (HTTP,
-  IPC, CLI).
-
-### 4.3 Separation of Concerns
-
-| Layer | Responsibility | Location |
-|-------|---------------|----------|
-| **Core** | Parsing, database, playlist, file I/O | `src/pykaraoke/core/` |
-| **Config** | Settings, environment, constants | `src/pykaraoke/config/` |
-| **Players** | Format-specific playback engines | `src/pykaraoke/players/` |
-| **Native** | Platform-specific C extensions | `src/pykaraoke/native/` |
-| **Runtime** | Tauri shell, web UI | `src/runtimes/tauri/` |
-
-### 4.4 No Legacy wxPython
-
-- wxPython is **permanently removed**. No imports, no conditional imports, no
-  compatibility shims.
-
-### 4.5 Cross-Platform Compatibility
-
-- All file paths must use `pathlib.Path` or `os.path` — never hardcoded
-  separators.
-- All filename handling must normalise `\\` → `/` before parsing.
-- Tests must pass on Linux, macOS, and Windows (CI matrix).
+- No ad-hoc output to standard streams in production code.
+- All runtime diagnostics must use structured, levelled logging.
+- Log entries must carry contextual metadata sufficient to diagnose the
+  triggering condition.
+- Failure states must be observable without requiring a debugger.
 
 ---
 
-## 5. Structured Logging
+## 4. Static Analysis and Code Quality
 
-- All logging uses Python `logging` module with structured context.
-- **No** `print()` statements in production code.
-- Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` — used correctly.
-- Every module defines `logger = logging.getLogger(__name__)` at the top.
+Implementation languages may evolve. The following invariants hold regardless:
 
----
-
-## 6. Testing Requirements
-
-### 6.1 Coverage
-
-- **Unit test coverage ≥ 90%** for `src/pykaraoke/` (enforced in CI).
-- **Per-feature coverage ≥ 95%** for new code in each PR.
-- `pytest-cov` with branch coverage enabled.
-
-### 6.2 Test Organization
-
-| Path | Scope |
-|------|-------|
-| `tests/pykaraoke/` | Unit tests (fast, no I/O) |
-| `tests/integration/` | Integration tests (services, filesystem) |
-| `tests/manual/` | Manual verification scripts |
-
-### 6.3 Test Markers
-
-All tests must carry an appropriate pytest marker:
-`slow`, `requires_pygame`, `requires_display`, `integration`, `e2e`.
-
-### 6.4 Parameterized Tests
-
-- Edge cases must be tested via `@pytest.mark.parametrize`, not copy-pasted
-  test functions.
+- **Strong typing** enforced via static analysis tooling.
+- **Linting and formatting** checks must pass in CI.
+- **Unsafe or unchecked operations** require an explicit justification
+  comment and review approval.
+- **All public interfaces** must be fully typed and documented.
 
 ---
 
-## 7. CI/CD Pipeline
+## 5. Testing Standards
 
-### 7.1 Pipeline Stages (in order)
+### 5.1 Coverage Thresholds
 
-1. **Unit Tests** — Python + Rust + Frontend (parallel)
-2. **SonarQube Analysis** — static analysis + quality gate
-3. **Integration Tests**
-4. **Platform Build Matrix** — Linux, Windows, macOS
-5. **End-to-End Tests** — per-platform artifact validation
-6. **Release** — semantic version tag + GitHub Release (main only)
+- Core module coverage ≥ **90%** (enforced in CI).
+- New code per feature ≥ **95%**.
+- Branch coverage is required (not just line coverage).
 
-### 7.2 Merge Requirements
+### 5.2 Test Categories
 
-A pull request **may not merge** unless ALL of the following are true:
+| Category | Purpose |
+|----------|---------|
+| **Unit** | Pure logic — no I/O, no side effects |
+| **Integration** | Filesystem, services, cross-module interactions |
+| **End-to-End** | Built-artefact validation on target platforms |
+| **Manual** | Exploratory or diagnostic verification |
 
-- [ ] All unit tests pass on all platforms.
-- [ ] SonarQube quality gate passes (no new bugs, no new vulnerabilities,
-      no new code smells, coverage ≥ threshold).
-- [ ] Integration tests pass.
-- [ ] Spec checklist (`/speckit.checklist`) is complete.
-- [ ] At least one approving review from a maintainer.
-- [ ] Branch name matches `NNN-feature-name` format.
-- [ ] No merge commits — rebase only.
+All tests must be labelled with their category.
 
-### 7.3 SonarQube Quality Gate
+### 5.3 Edge-Case Discipline
 
-- **Zero** new bugs.
-- **Zero** new vulnerabilities.
-- **Zero** new security hotspots (unreviewed).
-- New code coverage ≥ 80%.
-- Duplication on new code ≤ 3%.
+Every feature must include tests for:
+
+- Malformed and unexpected input.
+- Boundary conditions.
+- Cross-platform variance.
+- Defined failure modes.
+
+Parameterised tests are preferred over duplicated test functions.
 
 ---
 
-## 8. Versioning and Releases
+## 6. Continuous Integration
 
-### 8.1 Semantic Versioning
+### 6.1 Pipeline Stages (ordered)
 
-- Strictly follows [SemVer 2.0.0](https://semver.org/).
-- `BREAKING CHANGE` / `feat!:` → major bump.
-- `feat:` → minor bump.
-- `fix:` / `chore:` / others → patch bump.
+1. Unit tests (all languages, parallel).
+2. Static analysis and quality gate.
+3. Integration tests.
+4. Platform build matrix (all supported operating systems).
+5. End-to-end validation (per-platform artefacts).
+6. Release (main branch only, after all prior stages pass).
 
-### 8.2 Backward Compatibility
+Each stage gates the next. No stage may run until its predecessor succeeds.
 
-- **Public API** (function signatures, CLI arguments, config file format,
-  database schema) changes require a **deprecation period of at least one
-  minor release**.
-- Deprecated APIs must emit a `DeprecationWarning` with a migration message.
-- Removing a deprecated API is a **breaking change** → major version bump.
+### 6.2 Merge Requirements
 
-### 8.3 Changelog
+A pull request may not merge unless **all** of the following are satisfied:
 
-- Auto-generated from conventional commit messages.
-- Every PR title must follow
-  [Conventional Commits](https://www.conventionalcommits.org/).
+- All tests pass on every supported platform.
+- Static-analysis quality gate passes (zero new defects).
+- Specification checklist is complete (all items checked).
+- Branch name matches the required `NNN-feature-name` format.
+- At least one maintainer has approved.
+- History is linear (rebase only — no merge commits).
 
 ---
 
-## 9. Dependencies
+## 7. Backward Compatibility
 
-- **No third-party library** may be added without explicit justification in
-  the PR description.
-- Runtime dependencies must be cross-platform and maintained.
-- Current approved runtime dependencies:
-  - `pygame>=2.5.0`
-  - `numpy>=1.24.0`
-  - `mutagen>=1.47.0`
-  - `fastapi>=0.104.0` (optional, HTTP backend)
-  - `uvicorn>=0.24.0` (optional, HTTP backend)
+Public interfaces include: function signatures, CLI contracts,
+configuration schema, data-storage schema, and file-format expectations.
+
+- **Breaking changes** require a major version increment.
+- **Deprecations** must persist for at least one minor release before
+  removal.
+- Deprecated interfaces must emit a runtime warning with migration
+  guidance.
+- Removing a deprecated interface is a breaking change.
+
+---
+
+## 8. Versioning
+
+The project follows [Semantic Versioning 2.0.0](https://semver.org/):
+
+| Change type | Version bump |
+|-------------|-------------|
+| Breaking change | Major |
+| New feature | Minor |
+| Bug fix / chore | Patch |
+
+Conventional Commit format is mandatory for all commit messages and PR titles.
+
+---
+
+## 9. Dependency Governance
+
+No external dependency may be added without:
+
+- A written justification in the pull request.
+- Evaluation of maintenance status and community health.
+- Verification of cross-platform compatibility.
+- Security review.
+
+Dependencies must not compromise determinism, portability, or offline
+operation.
 
 ---
 
 ## 10. Feature Branch Governance
 
-### 10.1 Naming
+### 10.1 Naming Convention
 
 ```
 NNN-short-kebab-case-description
 ```
 
-Sequential three-digit prefix. The counter is tracked in
-`specs/features/.next-id`.
+`NNN` is a zero-padded, sequentially assigned three-digit identifier.
 
-### 10.2 Required Artifacts
+### 10.2 Required Artefacts
 
-Before any code is written, the feature branch must contain:
+**Before implementation begins:**
 
-1. `specs/features/NNN-name/spec.md` — Specification
-2. `specs/features/NNN-name/clarify.md` — Clarification
-3. `specs/features/NNN-name/plan.md` — Technical plan
-4. `specs/features/NNN-name/tasks.md` — Task breakdown
+- `spec.md` — Specification (WHAT and WHY).
+- `clarify.md` — Clarification (risks and ambiguities resolved).
+- `plan.md` — Technical plan (HOW).
+- `tasks.md` — Task breakdown (ordered implementation steps).
 
-Before merge:
+**Before merge:**
 
-5. `specs/features/NNN-name/checklist.md` — Completion checklist (all items ✅)
+- `checklist.md` — Completion checklist (every item checked).
+
+Missing artefacts block merge.
 
 ---
 
@@ -238,8 +250,8 @@ Before merge:
 
 This constitution may be amended by a pull request that:
 
-1. Clearly describes the proposed change and rationale.
+1. Describes the proposed change and its rationale.
 2. Receives approval from **all** active maintainers.
 3. Passes all CI checks.
 
-The amendment PR title must begin with `constitution:`.
+Amendment PR titles must begin with `constitution:`.
