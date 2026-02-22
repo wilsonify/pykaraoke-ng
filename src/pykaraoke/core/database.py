@@ -76,19 +76,19 @@ class AppYielder:
     take a while to perform.
 
     This class is just an abstract base class and does nothing.  Apps
-    should subclass it and override Yield() to make any use from
+    should subclass it and override do_yield() to make any use from
     it."""
 
     def __init__(self):
-        self.lastYield = pygame.time.get_ticks()
+        self.last_yield = pygame.time.get_ticks()
 
-    def ConsiderYield(self):
+    def consider_yield(self):
         now = pygame.time.get_ticks()
-        if now - self.lastYield >= YIELD_INTERVAL:
-            self.Yield()
-            self.lastYield = now
+        if now - self.last_yield >= YIELD_INTERVAL:
+            self.do_yield()
+            self.last_yield = now
 
-    def Yield(self):
+    def do_yield(self):
         """Override this method to actually yield control to the
         windowing system."""
         pass
@@ -101,17 +101,17 @@ class BusyCancelDialog:
     does nothing.  Apps should subclass from it."""
 
     def __init__(self):
-        self.Clicked = False
+        self.clicked = False
 
-    def Show(self):
+    def show(self):
         # Abstract method - subclasses should override to display the dialog
         pass
 
-    def SetProgress(self, label, progress):
+    def set_progress(self, label, progress):
         # Abstract method - subclasses should override to update progress display
         pass
 
-    def Destroy(self):
+    def destroy(self):
         # Abstract method - subclasses should override to clean up dialog resources
         pass
 
@@ -124,9 +124,9 @@ class SongData:
 
     def __init__(self, filename, data):
         self.filename = filename
-        self.tempFilename = None
+        self.temp_filename = None
         self.data = data
-        self.Ext = os.path.splitext(filename)[1].lower()
+        self.ext = os.path.splitext(filename)[1].lower()
 
         # By convention, if data is passed as None to the constructor,
         # that means this file is a true file that exists on disk.  On
@@ -134,7 +134,7 @@ class SongData:
         # file, and data contains its contents.
         self.trueFile = data is None
 
-    def GetData(self):
+    def get_data(self):
         """Returns the actual data of the file.  If the file has not
         yet been read, this will read it and return the data."""
 
@@ -147,7 +147,7 @@ class SongData:
             self.data = f.read()
         return self.data
 
-    def GetFilepath(self):
+    def get_filepath(self):
         """Returns a full pathname to the file.  If the file does not
         exist on disk, this will write it to a temporary file and
         return the name of that file."""
@@ -157,21 +157,21 @@ class SongData:
             # pathname.
             return self.filename
 
-        if not self.tempFilename:
+        if not self.temp_filename:
             # The file does not exist on disk already; we have to write it
             # to a temporary file.
-            prefix = globalSongDB.CreateTempFileNamePrefix()
+            prefix = globalSongDB.create_temp_file_name_prefix()
             basename = os.path.basename(self.filename)
             # Add the tempfile prefix as well as the time to make the
             # filename unique. This works around a bug
             # in pygame.mixer.music on Windows which stops us deleting
             # temp files until another song is loaded, preventing the
             # same song from being played twice in a row.
-            self.tempFilename = prefix + str(time.time()) + basename
-            with open(self.tempFilename, "wb") as f:
+            self.temp_filename = prefix + str(time.time()) + basename
+            with open(self.temp_filename, "wb") as f:
                 f.write(self.data)
 
-        return self.tempFilename
+        return self.temp_filename
 
 
 # This functor is declared globally.  It is assigned by
@@ -359,7 +359,7 @@ class SongStruct:
 
         return text
 
-    def MakePlayer(self, song_db, error_notify_callback, done_callback):
+    def make_player(self, song_db, error_notify_callback, done_callback):
         """Creates and returns a player of the appropriate type to
         play this file, if possible; or returns None if the file
         cannot be played (in which case, the error_notify_callback will
@@ -369,16 +369,16 @@ class SongStruct:
         constructor = None
 
         if self.Type == self.T_CDG:
-            constructor = cdg.cdgPlayer
+            constructor = cdg.CdgPlayer
         elif self.Type == self.T_KAR:
-            constructor = kar.midPlayer
+            constructor = kar.MidPlayer
         elif self.Type == self.T_MPG:
             if self.MpgType == "mpg" and settings.MpgNative and mpg.movie:
                 # Mpg files can be played internally.
-                constructor = mpg.mpgPlayer
+                constructor = mpg.MpgPlayer
             else:
                 # Other kinds of movies require an external player.
-                constructor = mpg.externalPlayer
+                constructor = mpg.ExternalPlayer
         else:
             ext = os.path.splitext(self.DisplayFilename)[1]
             error_notify_callback("Unsupported file format " + ext)
@@ -416,11 +416,11 @@ class SongStruct:
             raise ValueError(error)
 
         directory = os.path.dirname(self.Filepath) or "."
-        root, ext = os.path.splitext(self.Filepath)
+        root, _ = os.path.splitext(self.Filepath)
         prefix = os.path.basename(root + ".")
 
         if self.ZipStoredName:
-            song_datas = self._getSongDatasFromZip(prefix, song_datas)
+            song_datas = self._get_song_datas_from_zip(prefix, song_datas)
         else:
             song_datas.append(SongData(self.Filepath, None))
 
@@ -429,7 +429,7 @@ class SongStruct:
 
         return song_datas
 
-    def _getSongDatasFromZip(self, prefix, song_datas):
+    def _get_song_datas_from_zip(self, prefix, song_datas):
         """Extract song data files from a ZIP archive."""
         zf = globalSongDB.get_zip_file(self.Filepath)
         filelist = [self.ZipStoredName]
@@ -496,7 +496,7 @@ class SongStruct:
 
         return fg
 
-    def getBackgroundColour(self, selected):
+    def get_background_colour(self, selected):
         """Returns a suitable colour to use when rendering the
         background of this song line in the pykaraoke_mini song
         index."""
@@ -585,15 +585,15 @@ class TitleStruct:
             zf = song_db.get_zip_file(self.Filepath)
             unzipped_data = zf.read(self.ZipStoredName)
             sfile = BytesIO(unzipped_data)
-            self.__readTitles(song_db, sfile, os.path.join(self.Filepath, self.ZipStoredName))
+            self.__read_titles(song_db, sfile, os.path.join(self.Filepath, self.ZipStoredName))
         else:
-            self.__readTitles(song_db, None, self.Filepath)
+            self.__read_titles(song_db, None, self.Filepath)
 
     def rewrite(self, song_db):
         """Rewrites the titles.txt file with the current data."""
         if self.ZipStoredName is not None:
             sfile = BytesIO()
-            self.__writeTitles(song_db, sfile, os.path.join(self.Filepath, self.ZipStoredName))
+            self.__write_titles(song_db, sfile, os.path.join(self.Filepath, self.ZipStoredName))
             unzipped_data = sfile.getvalue()
             song_db.drop_zip_file(self.Filepath)
             zf = zipfile.ZipFile(self.Filepath, "a", zipfile.ZIP_DEFLATED)
@@ -606,7 +606,7 @@ class TitleStruct:
             zf.writestr(self.ZipStoredName, unzipped_data)
             zf.close()
         else:
-            self.__writeTitles(song_db, None, self.Filepath)
+            self.__write_titles(song_db, None, self.Filepath)
 
     def __rename_zip_element(self, zf, name1, name2=None):
         """Renames the file within the archive named "name1" to
@@ -641,7 +641,7 @@ class TitleStruct:
 
         zf.fp.seek(filepos, 0)
 
-    def __readTitles(self, song_db, catalog_file, catalog_pathname):
+    def __read_titles(self, song_db, catalog_file, catalog_pathname):
         self.songs = []
         dirname = os.path.split(catalog_pathname)[0]
 
@@ -658,12 +658,12 @@ class TitleStruct:
 
         try:
             for line in catalog_file:
-                self.__processTitleLine(line, catalog_pathname, dirname, song_db)
+                self.__process_title_line(line, catalog_pathname, dirname, song_db)
         finally:
             if should_close:
                 catalog_file.close()
 
-    def __processTitleLine(self, line, catalog_pathname, dirname, song_db):
+    def __process_title_line(self, line, catalog_pathname, dirname, song_db):
         """Parse a single line from a titles file and update the song database."""
         try:
             line = line.decode("utf-8").strip()
@@ -689,7 +689,7 @@ class TitleStruct:
         filename = filename.replace("/", os.path.sep)
 
         pathname = os.path.join(dirname, filename)
-        song = song_db.filesByFullpath.get(pathname, None)
+        song = song_db.files_by_fullpath.get(pathname, None)
         if song is None:
             print("Unknown file in %s:\n%s" % (repr(catalog_pathname), repr(filename)))
             return
@@ -699,11 +699,11 @@ class TitleStruct:
         song.Title = title.strip()
         song.Artist = artist.strip()
         if song.Title:
-            song_db.GotTitles = True
+            song_db.got_titles = True
         if song.Artist:
-            song_db.GotArtists = True
+            song_db.got_artists = True
 
-    def __makeRelTo(self, filename, rel_to):
+    def __make_rel_to(self, filename, rel_to):
         """Returns the filename expressed as a relative path to
         relTo.  Both file paths should be full paths; relTo should
         already have had normcase and normpath applied to it, and
@@ -728,7 +728,7 @@ class TitleStruct:
 
         return filename
 
-    def __writeTitles(self, song_db, catalog_file, catalog_pathname):
+    def __write_titles(self, song_db, catalog_file, catalog_pathname):
         _dirname = os.path.split(catalog_pathname)[0]
 
         if catalog_file is None:
@@ -748,16 +748,16 @@ class TitleStruct:
             if song.ZipStoredName:
                 filename = os.path.join(filename, song.ZipStoredName)
 
-            filename = self.__makeRelTo(filename, rel_to)
+            filename = self.__make_rel_to(filename, rel_to)
 
             # Use forward slashes instead of the native separator, to
             # make a more platform-independent titles.txt file.
             filename = filename.replace(os.sep, "/")
 
             line = filename
-            if song_db.GotTitles or song_db.GotArtists:
+            if song_db.got_titles or song_db.got_artists:
                 line += "\t" + song.Title
-            if song_db.GotArtists:
+            if song_db.got_artists:
                 line += "\t" + song.Artist
 
             line = line.encode("utf-8")
@@ -788,7 +788,7 @@ class FontData:
                 repr(self.italic),
             )
 
-    def getDescription(self):
+    def get_description(self):
         desc = self.name
         if self.size:
             desc += ",%spt" % (self.size)
@@ -854,13 +854,13 @@ class SettingsStruct:
         self.Version = SETTINGS_VERSION
 
         # Set the default settings, in case none are stored on disk
-        self.FolderList = []
+        self.folder_list = []
         self.CdgExtensions = [".cdg"]
         self.KarExtensions = [".kar", ".mid"]
         self.MpgExtensions = [".mpg", ".mpeg", ".avi", ".divx", ".xvid"]
         self.IgnoredExtensions = []
-        self.LookInsideZips = True
-        self.ReadTitlesTxt = True
+        self.look_inside_zips = True
+        self.read_titles_txt = True
         self.CheckHashes = False
         self.DeleteIdentical = False
         if env == ENV_WINDOWS:
@@ -986,13 +986,13 @@ class SongDB:
 
         # And this is just the currently-active song list, according
         # to selected sort.
-        self.SongList = []
+        self.song_list = []
 
-        # The list of TitlesFiles we have found in our scan.
-        self.TitlesFiles = []
+        # The list of titles_files we have found in our scan.
+        self.titles_files = []
 
         # A cache of zip files.
-        self.ZipFiles = []
+        self.zip_files = []
 
         # Set true if there are local changes to the database that
         # need to be saved to disk.
@@ -1000,21 +1000,21 @@ class SongDB:
 
         # Some databases may omit either or both of titles and
         # artists, relying on filenames instead.
-        self.GotTitles = False
-        self.GotArtists = False
+        self.got_titles = False
+        self.got_artists = False
 
         # Create a SettingsStruct instance for storing settings
         # in case none are stored.
         self.Settings = SettingsStruct()
 
         # All temporary files use this prefix
-        self.TempFilePrefix = "00Pykar__"
+        self.temp_file_prefix = "00Pykar__"
 
-        self.SaveDir = self.getSaveDirectory()
-        self.TempDir = self.getTempDirectory()
-        self.CleanupTempFiles()
+        self.save_dir = self.get_save_directory()
+        self.temp_dir = self.get_temp_directory()
+        self.cleanup_temp_files()
 
-    def getSaveDirectory(self):
+    def get_save_directory(self):
         """Returns the directory in which the settings files should
         be saved."""
 
@@ -1031,10 +1031,10 @@ class SongDB:
 
         # Without PYKARAOKE_DIR, use ~/.pykaraoke.  Try to figure that
         # out.
-        home_dir = self.getHomeDirectory()
+        home_dir = self.get_home_directory()
         return os.path.join(home_dir, ".pykaraoke")
 
-    def getTempDirectory(self):
+    def get_temp_directory(self):
         """Returns the directory in which temporary files should be
         saved."""
         temp_env = os.getenv("PYKARAOKE_TEMP_DIR")
@@ -1062,9 +1062,9 @@ class SongDB:
                 return os.path.join(temp_dir, "pykaraoke")
 
         # If we can't find a good temp directory, use our save directory.
-        return self.getSaveDirectory()
+        return self.get_save_directory()
 
-    def getHomeDirectory(self):
+    def get_home_directory(self):
         """Returns the user's home directory, if we can figure that
         out."""
 
@@ -1086,7 +1086,7 @@ class SongDB:
         # Give up and return the current directory.
         return "."
 
-    def makeSongStruct(self, filename):
+    def make_song_struct(self, filename):
         """Creates a quick SongStruct representing the indicated
         filename.  The file may be embedded within a zip file; treat
         the zip filename as a directory in this case."""
@@ -1103,7 +1103,7 @@ class SongDB:
         song = SongStruct(filename, self.Settings, zip_stored_name=zip_stored_name)
         return song
 
-    def chooseTitles(self, song):
+    def choose_titles(self, song):
         """Chooses an appropriate titles file to represent the
         indicated song file.  If there is no appropriate titles file,
         creates one.  Applies the song to the new titles file."""
@@ -1132,7 +1132,7 @@ class SongDB:
         """Find the titles file with the longest common prefix with the song path."""
         best_titles = None
         best_prefix = ""
-        for titles in self.TitlesFiles:
+        for titles in self.titles_files:
             titles_path = titles.Filepath
             if titles.ZipStoredName:
                 titles_path = os.path.join(titles_path, titles.ZipStoredName)
@@ -1156,7 +1156,7 @@ class SongDB:
     def _createTitlesFile(self, song, rel_to):
         """Create a new titles file in the root directory containing the song."""
         best_dir = None
-        for dir in self.Settings.FolderList:
+        for dir in self.Settings.folder_list:
             norm = os.path.normcase(os.path.normpath(dir))
             if rel_to.startswith(norm):
                 best_dir = dir
@@ -1166,12 +1166,12 @@ class SongDB:
             best_dir = os.path.splitext(song.Filepath)[0]
 
         best_titles = TitleStruct(os.path.join(best_dir, _TITLES_FILENAME))
-        self.TitlesFiles.append(best_titles)
+        self.titles_files.append(best_titles)
         return best_titles
 
     def load_settings(self, error_callback):
         """Load the personal settings (but not yet the database)."""
-        settings_filepath = os.path.join(self.SaveDir, "settings.dat")
+        settings_filepath = os.path.join(self.save_dir, "settings.dat")
         if not os.path.exists(settings_filepath):
             return
         loadsettings = self._parse_settings_file(settings_filepath)
@@ -1209,17 +1209,17 @@ class SongDB:
             return "New version of PyKaraoke, clearing settings"
         return None
 
-    def LoadDatabase(self, errorCallback):
+    def load_database(self, error_callback):
         """Load the saved database."""
 
         self.FullSongList = []
         self.UniqueSongList = []
-        self.TitlesFiles = []
-        self.GotTitles = False
-        self.GotArtists = False
+        self.titles_files = []
+        self.got_titles = False
+        self.got_artists = False
 
         # Load the database file
-        db_filepath = os.path.join(self.SaveDir, "songdb.dat")
+        db_filepath = os.path.join(self.save_dir, "songdb.dat")
         if os.path.exists(db_filepath):
             file = open(db_filepath, "rb")
             loaddb = None
@@ -1230,32 +1230,32 @@ class SongDB:
                 pass
             if getattr(loaddb, "Version", None) == DATABASE_VERSION:
                 self.FullSongList = loaddb.FullSongList
-                self.SongList = loaddb.FullSongList
+                self.song_list = loaddb.FullSongList
                 self.UniqueSongList = loaddb.UniqueSongList
-                self.TitlesFiles = loaddb.TitlesFiles
-                self.GotTitles = loaddb.GotTitles
-                self.GotArtists = loaddb.GotArtists
+                self.titles_files = loaddb.titles_files
+                self.got_titles = loaddb.got_titles
+                self.got_artists = loaddb.got_artists
             else:
-                if errorCallback:
-                    errorCallback("New version of PyKaraoke, clearing database")
+                if error_callback:
+                    error_callback("New version of PyKaraoke, clearing database")
 
         self.databaseDirty = False
 
     ##         # This forces the titles files to be rewritten at the next
     ##         # "save" operation.
-    ##         for titles in self.TitlesFiles:
+    ##         for titles in self.titles_files:
     ##             titles.dirty = True
     ##         self.databaseDirty = True
 
-    def SaveSettings(self):
+    def save_settings(self):
         """Save user settings to the home directory."""
 
         # Create the temp directory if it doesn't exist already
-        if not os.path.exists(self.SaveDir):
-            os.mkdir(self.SaveDir)
+        if not os.path.exists(self.save_dir):
+            os.mkdir(self.save_dir)
 
         # Save the settings file
-        settings_filepath = os.path.join(self.SaveDir, "settings.dat")
+        settings_filepath = os.path.join(self.save_dir, "settings.dat")
         try:
             file = open(settings_filepath, "w")
         except OSError as message:
@@ -1278,28 +1278,28 @@ class SongDB:
 
         try:
             # Create the temp directory if it doesn't exist already
-            if not os.path.exists(self.SaveDir):
-                os.mkdir(self.SaveDir)
+            if not os.path.exists(self.save_dir):
+                os.mkdir(self.save_dir)
 
             # Write out any titles files that have changed.
-            for titles in self.TitlesFiles:
+            for titles in self.titles_files:
                 if titles.dirty:
                     titles.rewrite(self)
                     titles.dirty = False
 
             # Check for newly unique files
-            self.makeUniqueSongs()
+            self.make_unique_songs()
 
             # Save the database file
-            db_filepath = os.path.join(self.SaveDir, "songdb.dat")
+            db_filepath = os.path.join(self.save_dir, "songdb.dat")
             file = open(db_filepath, "wb")
 
             loaddb = DBStruct()
             loaddb.FullSongList = self.FullSongList
             loaddb.UniqueSongList = self.UniqueSongList
-            loaddb.TitlesFiles = self.TitlesFiles
-            loaddb.GotTitles = self.GotTitles
-            loaddb.GotArtists = self.GotArtists
+            loaddb.titles_files = self.titles_files
+            loaddb.got_titles = self.got_titles
+            loaddb.got_artists = self.got_artists
 
             pickle.dump(loaddb, file, pickle.HIGHEST_PROTOCOL)
         except OSError as message:
@@ -1314,16 +1314,16 @@ class SongDB:
         # Zap the database and build again from scratch. Return True
         # if was cancelled.
         self.FullSongList = []
-        self.TitlesFiles = []
+        self.titles_files = []
 
-        return self.doSearch(self.Settings.FolderList, yielder, busy_dlg)
+        return self.do_search(self.Settings.folder_list, yielder, busy_dlg)
 
     def add_file(self, filename):
         """Adds just the indicated file to the DB.  If the file is a
         directory or a zip file, recursively scans within it and adds
         all the sub-files."""
 
-        self.doSearch([filename], AppYielder(), BusyCancelDialog())
+        self.do_search([filename], AppYielder(), BusyCancelDialog())
 
     def get_zip_file(self, filename):
         """Creates a ZipFile object corresponding to the indicated zip
@@ -1332,43 +1332,43 @@ class SongDB:
         instead, saving on load time from repeatedly loading the same
         zip file."""
 
-        for entry in self.ZipFiles:
+        for entry in self.zip_files:
             cache_filename, cache_zip = entry
             if cache_filename == filename:
                 # Here is a zip file in the cache; move it to the
                 # front of the list.
-                self.ZipFiles.remove(entry)
-                self.ZipFiles.insert(0, entry)
+                self.zip_files.remove(entry)
+                self.zip_files.insert(0, entry)
                 return cache_zip
 
         # The zip file was not in the cache, create a new one and cache it.
         zf = zipfile.ZipFile(filename)
-        if len(self.ZipFiles) >= MAX_ZIP_FILES:
-            del self.ZipFiles[-1]
-        self.ZipFiles.insert(0, (filename, zf))
+        if len(self.zip_files) >= MAX_ZIP_FILES:
+            del self.zip_files[-1]
+        self.zip_files.insert(0, (filename, zf))
         return zf
 
     def drop_zip_file(self, filename):
         """Releases an opened zip file by the indicated filename, if any."""
 
-        for entry in self.ZipFiles:
+        for entry in self.zip_files:
             cache_filename, _ = entry
             if cache_filename == filename:
                 # Here is the zip file in the cache; remove it.
-                self.ZipFiles.remove(entry)
+                self.zip_files.remove(entry)
                 return
 
-    def doSearch(self, file_list, yielder, busy_dlg):
+    def do_search(self, file_list, yielder, busy_dlg):
         """This is the actual implementation of BuildSearchDatabase()
         and AddFile()."""
 
-        self.BusyDlg = busy_dlg
-        self.BusyDlg.SetProgress("Scanning", 0.0)
-        yielder.Yield()
-        self.BusyDlg.Show()
+        self.busy_dlg = busy_dlg
+        self.busy_dlg.set_progress("Scanning", 0.0)
+        yielder.do_yield()
+        self.busy_dlg.show()
 
-        self.lastBusyUpdate = time.time()
-        self.filesByFullpath = {}
+        self.last_busy_update = time.time()
+        self.files_by_fullpath = {}
 
         for i in range(len(file_list)):
             root_path = file_list[i]
@@ -1379,50 +1379,50 @@ class SongDB:
             # going to traverse.  We give each directory equal weight
             # regardless of the number of files within it.
             progress = [(i, len(file_list))]
-            self.fileScan(root_path, progress, yielder)
-            if self.BusyDlg.Clicked:
+            self.file_scan(root_path, progress, yielder)
+            if self.busy_dlg.clicked:
                 break
 
-        if self.TitlesFiles and not self.BusyDlg.Clicked:
-            self.BusyDlg.SetProgress("Reading titles files", 0.0)
-            yielder.Yield()
-            self.lastBusyUpdate = time.time()
+        if self.titles_files and not self.busy_dlg.clicked:
+            self.busy_dlg.set_progress("Reading titles files", 0.0)
+            yielder.do_yield()
+            self.last_busy_update = time.time()
 
             # Now go back and read any titles.txt files we came across.
             # These will have meta-information about the files, such as
             # the title and/or artist.
-            for i in range(len(self.TitlesFiles)):
-                if self.BusyDlg.Clicked:
+            for i in range(len(self.titles_files)):
+                if self.busy_dlg.clicked:
                     break
                 now = time.time()
-                if now - self.lastBusyUpdate > 0.1:
+                if now - self.last_busy_update > 0.1:
                     # Every so often, update the current path on the display.
-                    self.BusyDlg.SetProgress(
-                        "Reading titles files", float(i) / float(len(self.TitlesFiles))
+                    self.busy_dlg.set_progress(
+                        "Reading titles files", float(i) / float(len(self.titles_files))
                     )
-                    yielder.Yield()
-                    self.lastBusyUpdate = now
-                self.TitlesFiles[i].read(self)
+                    yielder.do_yield()
+                    self.last_busy_update = now
+                self.titles_files[i].read(self)
 
         if self.Settings.CheckHashes:
             self.check_file_hashes(yielder)
 
-        self.BusyDlg.SetProgress("Finalizing", 1.0)
-        yielder.Yield()
+        self.busy_dlg.set_progress("Finalizing", 1.0)
+        yielder.do_yield()
 
         # This structure was just temporary, for use just while
         # scanning the directories.  Remove it now.
-        del self.filesByFullpath
+        del self.files_by_fullpath
 
-        self.makeUniqueSongs()
+        self.make_unique_songs()
         self.databaseDirty = True
 
-        cancelled = self.BusyDlg.Clicked
-        self.BusyDlg.Destroy()
+        cancelled = self.busy_dlg.clicked
+        self.busy_dlg.destroy()
 
         return cancelled
 
-    def folderScan(self, folder_to_scan, progress, yielder):
+    def folder_scan(self, folder_to_scan, progress, yielder):
         # Search for karaoke files inside the folder, looking inside ZIPs if
         # configured to do so. Function is recursive for subfolders.
         try:
@@ -1439,11 +1439,11 @@ class SongDB:
         # Loop through the list
         for i in range(len(filedir_list)):
             item = filedir_list[i]
-            if self.BusyDlg.Clicked:
+            if self.busy_dlg.clicked:
                 return True
 
             # Allow windows to refresh now and again while scanning
-            yielder.ConsiderYield()
+            yielder.consider_yield()
 
             # Build the full file path. Check file types match, as
             # os.listdir() can return non-unicode while the folder
@@ -1455,11 +1455,11 @@ class SongDB:
                 full_path = os.path.join(folder_to_scan, item)
 
             next_progress = progress + [(i, len(filedir_list))]
-            self.fileScan(full_path, next_progress, yielder)
-            if self.BusyDlg.Clicked:
+            self.file_scan(full_path, next_progress, yielder)
+            if self.busy_dlg.clicked:
                 return
 
-    def __computeProgressValue(self, progress):
+    def __compute_progress_value(self, progress):
         """Returns a floating-point value in the range 0 to 1 that
         corresponds to the progress list we have built up while
         traversing the directory structure hierarchically.  This is
@@ -1481,31 +1481,31 @@ class SongDB:
                 span = span * (1.0 / float(count))
         return result
 
-    def fileScan(self, full_path, progress, yielder):
-        self._updateProgressIfNeeded(full_path, progress, yielder)
+    def file_scan(self, full_path, progress, yielder):
+        self._update_progress_if_needed(full_path, progress, yielder)
 
         # Recurse into subdirectories
         if os.path.isdir(full_path):
             basename = os.path.split(full_path)[1]
             if basename not in ("CVS", ".svn"):
-                self.folderScan(full_path, progress, yielder)
-            if self.BusyDlg.Clicked:
+                self.folder_scan(full_path, progress, yielder)
+            if self.busy_dlg.clicked:
                 return
             return
 
         # Store file details if it's a file type we're interested in
-        root, ext = os.path.splitext(full_path)
-        if self.Settings.ReadTitlesTxt and full_path.endswith(_TITLES_FILENAME):
-            self.TitlesFiles.append(TitleStruct(full_path))
+        _, ext = os.path.splitext(full_path)
+        if self.Settings.read_titles_txt and full_path.endswith(_TITLES_FILENAME):
+            self.titles_files.append(TitleStruct(full_path))
         elif self.is_extension_valid(ext):
-            self._tryAddSong(full_path)
-        elif self.Settings.LookInsideZips and ext.lower() == ".zip":
-            self._scanZipFile(full_path, progress, yielder)
+            self._try_add_song(full_path)
+        elif self.Settings.look_inside_zips and ext.lower() == ".zip":
+            self._scan_zip_file(full_path, progress, yielder)
 
-    def _updateProgressIfNeeded(self, full_path, progress, yielder):
+    def _update_progress_if_needed(self, full_path, progress, yielder):
         """Update the progress bar if enough time has elapsed."""
         now = time.time()
-        if now - self.lastBusyUpdate <= 0.1:
+        if now - self.last_busy_update <= 0.1:
             return
         basename = os.path.split(full_path)[1]
         if isinstance(basename, bytes):
@@ -1513,16 +1513,16 @@ class SongDB:
                 basename = basename.decode("utf-8")
             except UnicodeDecodeError:
                 basename = basename.decode("ascii", "replace")
-        self.BusyDlg.SetProgress(
-            "Scanning %s" % basename, self.__computeProgressValue(progress)
+        self.busy_dlg.set_progress(
+            "Scanning %s" % basename, self.__compute_progress_value(progress)
         )
-        yielder.Yield()
-        self.lastBusyUpdate = now
+        yielder.do_yield()
+        self.last_busy_update = now
 
-    def _tryAddSong(self, full_path, zip_stored_name=None):
+    def _try_add_song(self, full_path, zip_stored_name=None):
         """Try to add a song to the database, ignoring non-matching filenames."""
         try:
-            self.addSong(SongStruct(
+            self.add_song(SongStruct(
                 full_path, self.Settings,
                 zip_stored_name=zip_stored_name, database_add=True,
             ))
@@ -1530,7 +1530,7 @@ class SongDB:
             display_name = zip_stored_name if zip_stored_name else os.path.basename(full_path)
             print("Excluding filename with unexpected format: %s " % repr(display_name))
 
-    def _scanZipFile(self, full_path, progress, yielder):
+    def _scan_zip_file(self, full_path, progress, yielder):
         """Scan inside a ZIP file for karaoke songs and titles files."""
         try:
             if not zipfile.is_zipfile(full_path):
@@ -1547,7 +1547,7 @@ class SongDB:
     def _updateZipProgress(self, full_path, progress, i, total, yielder):
         """Update progress bar during ZIP scanning."""
         now = time.time()
-        if now - self.lastBusyUpdate <= 0.1:
+        if now - self.last_busy_update <= 0.1:
             return
         next_progress = progress + [(i, total)]
         basename = os.path.split(full_path)[1]
@@ -1556,22 +1556,22 @@ class SongDB:
                 basename = basename.decode("utf-8")
             except UnicodeDecodeError:
                 basename = basename.decode("ascii", "replace")
-        self.BusyDlg.SetProgress(
+        self.busy_dlg.set_progress(
             "Scanning %s" % basename,
-            self.__computeProgressValue(next_progress),
+            self.__compute_progress_value(next_progress),
         )
-        yielder.Yield()
-        self.lastBusyUpdate = now
+        yielder.do_yield()
+        self.last_busy_update = now
 
     def _processZipMember(self, full_path, filename, zf):
         """Process a single member of a ZIP file."""
         root, ext = os.path.splitext(filename)
-        if self.Settings.ReadTitlesTxt and filename.endswith(_TITLES_FILENAME):
-            self.TitlesFiles.append(TitleStruct(full_path, zip_stored_name=filename))
+        if self.Settings.read_titles_txt and filename.endswith(_TITLES_FILENAME):
+            self.titles_files.append(TitleStruct(full_path, zip_stored_name=filename))
         elif self.is_extension_valid(ext):
             info = zf.getinfo(filename)
             if info.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
-                self._tryAddSong(full_path, zip_stored_name=filename)
+                self._try_add_song(full_path, zip_stored_name=filename)
             else:
                 print(
                     "ZIP member compressed with unsupported type (%d): %s"
@@ -1580,16 +1580,16 @@ class SongDB:
 
     # Add a folder to the database search list
     def folder_add(self, folder_path):
-        if folder_path not in self.Settings.FolderList:
-            self.Settings.FolderList.append(folder_path)
+        if folder_path not in self.Settings.folder_list:
+            self.Settings.folder_list.append(folder_path)
 
     # Remove a folder from the database search list
     def folder_del(self, folder_path):
-        self.Settings.FolderList.remove(folder_path)
+        self.Settings.folder_list.remove(folder_path)
 
     # Get the list of folders currently set up for the database
     def get_folder_list(self):
-        return self.Settings.FolderList
+        return self.Settings.folder_list
 
     # Search the database for occurrences of the search terms.
     # If there are multiple terms, all must exist for a match.
@@ -1603,7 +1603,7 @@ class SongDB:
         lower_terms = search_terms.lower()
         terms_list = lower_terms.split()
         for song in self.FullSongList:
-            yielder.ConsiderYield()
+            yielder.consider_yield()
             lower_title = song.Title.lower()
             lower_artist = song.Artist.lower()
             lower_path = song.DisplayFilename.lower()
@@ -1649,27 +1649,27 @@ class SongDB:
     # Create a directory for use by PyKaraoke for temporary zip files
     # and for saving the song database and settings.
     # This will be under the Wx idea of the home directory.
-    def CreateTempDir(self):
-        if not os.path.exists(self.TempDir):
-            os.mkdir(self.TempDir)
+    def create_temp_dir(self):
+        if not os.path.exists(self.temp_dir):
+            os.mkdir(self.temp_dir)
 
     # Create temporary filename prefix. Returns a path and filename
     # prefix which can be used as a base string for temporary files.
-    # You must clean them up when done using CleanupTempFiles().
+    # You must clean them up when done using cleanup_temp_files().
     # Also automatically creates a temporary directory if one doesn't
     # exist already.
-    def CreateTempFileNamePrefix(self):
-        self.CreateTempDir()
-        full_prefix = os.path.join(self.TempDir, self.TempFilePrefix)
+    def create_temp_file_name_prefix(self):
+        self.create_temp_dir()
+        full_prefix = os.path.join(self.temp_dir, self.temp_file_prefix)
         return full_prefix
 
     # Clean up any temporary (unzipped) files on startup/exit/end of song
-    def CleanupTempFiles(self):
-        if os.path.exists(self.TempDir):
-            filedir_list = os.listdir(self.TempDir)
+    def cleanup_temp_files(self):
+        if os.path.exists(self.temp_dir):
+            filedir_list = os.listdir(self.temp_dir)
             for item in filedir_list:
-                if item.startswith(self.TempFilePrefix):
-                    full_path = os.path.join(self.TempDir, item)
+                if item.startswith(self.temp_file_prefix):
+                    full_path = os.path.join(self.temp_dir, item)
                     try:
                         os.unlink(full_path)
                     except OSError:
@@ -1710,69 +1710,69 @@ class SongDB:
         self.SortKeys = sort_keys
         self.GetSongTuple = get_song_tuple
         self.GetSortKey = get_sort_key
-        self.SongList = song_list
+        self.song_list = song_list
 
         return True
 
     def _resolve_sort_config(self, sort):
         """Resolve sort type to (getSongTuple, sortKeys, getSortKey, sort)."""
-        if sort == "title" and self.GotTitles:
-            if self.GotArtists:
-                return (self.getSongTupleTitleArtistFilename,
+        if sort == "title" and self.got_titles:
+            if self.got_artists:
+                return (self.get_song_tuple_title_artist_filename,
                         ("title", "artist", "filename"),
-                        self.getSongTupleTitleArtistFilenameSortKey, sort)
-            return (self.getSongTupleTitleFilenameArtist,
+                        self.get_song_tuple_title_artist_filename_sort_key, sort)
+            return (self.get_song_tuple_title_filename_artist,
                     ("title", "filename"),
-                    self.getSongTupleTitleFilenameArtistSortKey, sort)
+                    self.get_song_tuple_title_filename_artist_sort_key, sort)
 
-        if sort == "artist" and self.GotArtists:
-            if self.GotTitles:
-                return (self.getSongTupleArtistTitleFilename,
+        if sort == "artist" and self.got_artists:
+            if self.got_titles:
+                return (self.get_song_tuple_artist_title_filename,
                         ("artist", "title", "filename"),
-                        self.getSongTupleArtistTitleFilenameSortKey, sort)
-            return (self.getSongTupleArtistFilenameTitle,
+                        self.get_song_tuple_artist_title_filename_sort_key, sort)
+            return (self.get_song_tuple_artist_filename_title,
                     ("artist", "filename"),
-                    self.getSongTupleArtistFilenameTitleSortKey, sort)
+                    self.get_song_tuple_artist_filename_title_sort_key, sort)
 
         return self._resolve_filename_sort_config()
 
     def _resolve_filename_sort_config(self):
         """Resolve filename sort config based on available metadata."""
-        if self.GotTitles and self.GotArtists:
-            return (self.getSongTupleFilenameTitleArtist,
+        if self.got_titles and self.got_artists:
+            return (self.get_song_tuple_filename_title_artist,
                     ("filename", "title", "artist"),
-                    self.getSongTupleFilenameTitleArtistSortKey, "filename")
-        if self.GotTitles:
-            return (self.getSongTupleFilenameTitleArtist,
+                    self.get_song_tuple_filename_title_artist_sort_key, "filename")
+        if self.got_titles:
+            return (self.get_song_tuple_filename_title_artist,
                     ("filename", "title"),
-                    self.getSongTupleFilenameTitleArtistSortKey, "filename")
-        if self.GotArtists:
-            return (self.getSongTupleFilenameArtistTitle,
+                    self.get_song_tuple_filename_title_artist_sort_key, "filename")
+        if self.got_artists:
+            return (self.get_song_tuple_filename_artist_title,
                     ("filename", "artist"),
-                    self.getSongTupleFilenameArtistTitleSortKey, "filename")
-        return (self.getSongTupleFilenameArtistTitle,
+                    self.get_song_tuple_filename_artist_title_sort_key, "filename")
+        return (self.get_song_tuple_filename_artist_title,
                 ("filename",),
-                self.getSongTupleFilenameArtistTitleSortKey, "filename")
+                self.get_song_tuple_filename_artist_title_sort_key, "filename")
 
-    def getSongTupleTitleArtistFilename(self, file):
+    def get_song_tuple_title_artist_filename(self, file):
         return (file.Title, file.Artist, file.get_display_filenames())
 
-    def getSongTupleTitleFilenameArtist(self, file):
+    def get_song_tuple_title_filename_artist(self, file):
         return (file.Title, file.get_display_filenames(), file.Artist)
 
-    def getSongTupleArtistTitleFilename(self, file):
+    def get_song_tuple_artist_title_filename(self, file):
         return (file.Artist, file.Title, file.get_display_filenames())
 
-    def getSongTupleArtistFilenameTitle(self, file):
+    def get_song_tuple_artist_filename_title(self, file):
         return (file.Artist, file.get_display_filenames(), file.Title)
 
-    def getSongTupleFilenameTitleArtist(self, file):
+    def get_song_tuple_filename_title_artist(self, file):
         return (file.DisplayFilename, file.Title, file.Artist)
 
-    def getSongTupleFilenameArtistTitle(self, file):
+    def get_song_tuple_filename_artist_title(self, file):
         return (file.DisplayFilename, file.Artist, file.Title)
 
-    def getSongTupleTitleArtistFilenameSortKey(self, file):
+    def get_song_tuple_title_artist_filename_sort_key(self, file):
         return (
             file.make_sort_key(file.Title),
             file.make_sort_key(file.Artist),
@@ -1780,7 +1780,7 @@ class SongDB:
             id(file),
         )
 
-    def getSongTupleTitleFilenameArtistSortKey(self, file):
+    def get_song_tuple_title_filename_artist_sort_key(self, file):
         return (
             file.make_sort_key(file.Title),
             file.DisplayFilename.lower(),
@@ -1788,7 +1788,7 @@ class SongDB:
             id(file),
         )
 
-    def getSongTupleArtistTitleFilenameSortKey(self, file):
+    def get_song_tuple_artist_title_filename_sort_key(self, file):
         return (
             file.make_sort_key(file.Artist),
             file.make_sort_key(file.Title),
@@ -1796,7 +1796,7 @@ class SongDB:
             id(file),
         )
 
-    def getSongTupleArtistFilenameTitleSortKey(self, file):
+    def get_song_tuple_artist_filename_title_sort_key(self, file):
         return (
             file.make_sort_key(file.Artist),
             file.DisplayFilename.lower(),
@@ -1804,7 +1804,7 @@ class SongDB:
             id(file),
         )
 
-    def getSongTupleFilenameTitleArtistSortKey(self, file):
+    def get_song_tuple_filename_title_artist_sort_key(self, file):
         return (
             file.DisplayFilename.lower(),
             file.make_sort_key(file.Title),
@@ -1812,7 +1812,7 @@ class SongDB:
             id(file),
         )
 
-    def getSongTupleFilenameArtistTitleSortKey(self, file):
+    def get_song_tuple_filename_artist_title_sort_key(self, file):
         return (
             file.DisplayFilename.lower(),
             file.make_sort_key(file.Artist),
@@ -1820,14 +1820,14 @@ class SongDB:
             id(file),
         )
 
-    def addSong(self, file):
+    def add_song(self, file):
         self.FullSongList.append(file)
         if file.Title:
-            self.GotTitles = True
+            self.got_titles = True
         if file.Artist:
-            self.GotArtists = True
+            self.got_artists = True
 
-        if hasattr(self, "filesByFullpath"):
+        if hasattr(self, "files_by_fullpath"):
             # Also record the file in the temporary map by fullpath name,
             # so we can cross-reference it with a titles.txt file that
             # might reference it.
@@ -1835,15 +1835,15 @@ class SongDB:
             if file.ZipStoredName:
                 name = file.ZipStoredName.replace("/", os.path.sep)
                 fullpath = os.path.join(fullpath, name)
-            self.filesByFullpath[fullpath] = file
+            self.files_by_fullpath[fullpath] = file
 
     def check_file_hashes(self, yielder):
         """Walks through self.FullSongList, checking for file hashes
         to see if any files are duplicated."""
 
-        self.BusyDlg.SetProgress("Checking file hashes", 0.0)
-        yielder.Yield()
-        self.lastBusyUpdate = time.time()
+        self.busy_dlg.set_progress("Checking file hashes", 0.0)
+        yielder.do_yield()
+        self.last_busy_update = time.time()
         num_duplicates = 0
 
         # Check the hashes of each file, to see if there are any
@@ -1852,15 +1852,15 @@ class SongDB:
         num_files = len(self.FullSongList)
         for i in range(num_files):
             now = time.time()
-            if now - self.lastBusyUpdate > 0.1:
+            if now - self.last_busy_update > 0.1:
                 label = "Checking file hashes"
                 if num_duplicates:
                     label = "%s duplicates found" % (num_duplicates)
-                self.BusyDlg.SetProgress(label, float(i) / float(num_files))
-                yielder.Yield()
-                self.lastBusyUpdate = now
+                self.busy_dlg.set_progress(label, float(i) / float(num_files))
+                yielder.do_yield()
+                self.last_busy_update = now
 
-            if self.BusyDlg.Clicked:
+            if self.busy_dlg.clicked:
                 return
 
             digest = self._computeSongHash(self.FullSongList[i])
@@ -1918,12 +1918,12 @@ class SongDB:
                     os.remove(extra.Filepath)
         return remove_indexes
 
-    def makeUniqueSongs(self):
+    def make_unique_songs(self):
         """Walks through self.FullSongList, and builds up
         self.UniqueSongList, which collects only those songs who have
         the same artist/title combination."""
 
-        if not self.GotArtists and not self.GotTitles:
+        if not self.got_artists and not self.got_titles:
             # A special case: titles.txt files aren't in use.
             self.UniqueSongList = self.FullSongList
             return

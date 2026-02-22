@@ -15,7 +15,7 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-"""This module defines the class pykPlayer, which is a base class used
+"""This module defines the class PykPlayer, which is a base class used
 by the modules pykar.py, pycdg.py, and pympg.py.  This collects
 together some common interfaces used by these different
 implementations for different types of Karaoke files."""
@@ -49,7 +49,7 @@ from pykaraoke.core.manager import manager
 _SYNC_MSG = "sync %s"
 
 
-class pykPlayer:
+class PykPlayer:
     def __init__(self, song, song_db, error_notify_callback=None, done_callback=None, window_title=None):
         """The first parameter, song, may be either a database.SongStruct
         instance, or it may be a filename."""
@@ -59,14 +59,14 @@ class pykPlayer:
 
             song_db = database.globalSongDB
             song_db.load_settings(None)
-        self.songDb = song_db
+        self.song_db = song_db
 
         # Set the global command-line options if they have not already
         # been set.
         if manager.options is None:
-            parser = self.SetupOptions()
+            parser = self.setup_options()
             (manager.options, args) = parser.parse_args()
-            manager.ApplyOptions(self.songDb)
+            manager.apply_options(self.song_db)
 
             if song is None:
                 if len(args) != 1:
@@ -89,23 +89,23 @@ class pykPlayer:
 
         if isinstance(song, str):
             # We were given a filename.  Convert it to a SongStruct.
-            song = self.songDb.makeSongStruct(song)
+            song = self.song_db.makeSongStruct(song)
 
         # Store the parameters
         self.Song = song
-        self.WindowTitle = window_title
+        self.window_title = window_title
 
         # And look up the actual files corresponding to this SongStruct.
-        self.SongDatas = song.GetSongDatas()
+        self.song_datas = song.get_song_datas()
         if window_title is None:
-            self.WindowTitle = song.DisplayFilename
+            self.window_title = song.DisplayFilename
 
         # Caller can register a callback by which we
         # print out error information, use stdout if none registered
         if error_notify_callback:
-            self.ErrorNotifyCallback = error_notify_callback
+            self.error_notify_callback = error_notify_callback
         else:
-            self.ErrorNotifyCallback = self.__defaultErrorPrint
+            self.error_notify_callback = self.__defaultErrorPrint
 
         # Caller can register a callback by which we
         # let them know when the song is finished
@@ -115,20 +115,20 @@ class pykPlayer:
             self.SongFinishedCallback = None
 
         self.State = STATE_INIT
-        self.InternalOffsetTime = 0
+        self.internal_offset_time = 0
 
         # These values are used to keep track of the current position
         # through the song based on pygame's get_ticks() interface.
         # It's used only when get_pos() cannot be used or is
         # unreliable for some reason.
-        self.PlayTime = 0
-        self.PlayStartTime = 0
+        self.play_time = 0
+        self.play_start_time = 0
         self.PlayFrame = 0
 
-        # self.PlayStartTime is valid while State == STATE_PLAYING; it
+        # self.play_start_time is valid while State == STATE_PLAYING; it
         # indicates the get_ticks() value at which the song started
         # (adjusted for any pause intervals that occurred during
-        # play).  self.PlayTime is valid while State != STATE_PLAYING;
+        # play).  self.play_time is valid while State != STATE_PLAYING;
         # it indicates the total number of ticks (milliseconds) that
         # have elapsed in the song so far.
 
@@ -138,73 +138,73 @@ class pykPlayer:
 
         # Keep track of the set of modifier buttons that are held
         # down.  This is currently used only for the GP2X interface.
-        self.ShoulderLHeld = False
-        self.ShoulderRHeld = False
+        self.shoulder_l_held = False
+        self.shoulder_r_held = False
 
         # Set this true if the player can zoom font sizes.
-        self.SupportsFontZoom = False
+        self.supports_font_zoom = False
 
     # The following methods are part of the public API and intended to
     # be exported from this class.
 
-    def Validate(self):
+    def validate(self):
         """Returns True if the karaoke file appears to be playable
         and contains lyrics, or False otherwise."""
 
-        return self.doValidate()
+        return self.do_validate()
 
-    def Play(self):
-        self.doPlay()
+    def play(self):
+        self.do_play()
 
         if manager.options.dump:
-            self.setupDump()
+            self.setup_dump()
         else:
-            self.PlayStartTime = pygame.time.get_ticks()
+            self.play_start_time = pygame.time.get_ticks()
             self.State = STATE_PLAYING
 
-    # Pause the song - Use Pause() again to unpause
-    def Pause(self):
+    # pause the song - Use pause() again to unpause
+    def pause(self):
         if self.State == STATE_PLAYING:
-            self.doPause()
-            self.PlayTime = pygame.time.get_ticks() - self.PlayStartTime
+            self.do_pause()
+            self.play_time = pygame.time.get_ticks() - self.play_start_time
             self.State = STATE_PAUSED
         elif self.State == STATE_PAUSED:
-            self.doUnpause()
-            self.PlayStartTime = pygame.time.get_ticks() - self.PlayTime
+            self.do_unpause()
+            self.play_start_time = pygame.time.get_ticks() - self.play_time
             self.State = STATE_PLAYING
 
-    # Close the whole thing down
-    def Close(self):
+    # close the whole thing down
+    def close(self):
         self.State = STATE_CLOSING
 
-    # you must call Play() to restart. Blocks until pygame is initialised
-    def Rewind(self):
-        self.doRewind()
-        self.PlayTime = 0
-        self.PlayStartTime = 0
+    # you must call play() to restart. Blocks until pygame is initialised
+    def rewind(self):
+        self.do_rewind()
+        self.play_time = 0
+        self.play_start_time = 0
         self.PlayFrame = 0
         self.State = STATE_NOT_PLAYING
 
-    # Stop the song and go back to the start. As you would
-    # expect Stop to do on a CD player. Play() restarts from
+    # stop the song and go back to the start. As you would
+    # expect stop to do on a CD player. play() restarts from
     # the beginning
-    def Stop(self):
-        self.Rewind()
+    def stop(self):
+        self.rewind()
 
     # Get the song length (in seconds)
-    def GetLength(self):
-        ErrorString = "GetLength() not supported"
-        self.ErrorNotifyCallback(ErrorString)
+    def get_length(self):
+        error_string = "get_length() not supported"
+        self.error_notify_callback(error_string)
         return None
 
     # Get the current time (in milliseconds).
-    def GetPos(self):
+    def get_pos(self):
         if self.State == STATE_PLAYING:
-            return pygame.time.get_ticks() - self.PlayStartTime
+            return pygame.time.get_ticks() - self.play_start_time
         else:
-            return self.PlayTime
+            return self.play_time
 
-    def SetupOptions(self, usage=None):
+    def setup_options(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
@@ -212,34 +212,34 @@ class pykPlayer:
         if usage is None:
             usage = "%prog [options] <Karaoke file>"
 
-        return manager.SetupOptions(usage, self.songDb)
+        return manager.setup_options(usage, self.song_db)
 
     # Below methods are internal.
 
-    def setupDump(self):
+    def setup_dump(self):
         # Capture the output as a sequence of numbered frame images.
-        self.PlayTime = 0
-        self.PlayStartTime = 0
+        self.play_time = 0
+        self.play_start_time = 0
         self.PlayFrame = 0
         self.State = STATE_CAPTURING
 
-        self.dumpFrameRate = manager.options.dump_fps
-        if not self.dumpFrameRate:
+        self.dump_frame_rate = manager.options.dump_fps
+        if not self.dump_frame_rate:
             raise ValueError("dump_fps must be specified for frame dumping")
 
         filename = manager.options.dump
         base, ext = os.path.splitext(filename)
         ext_lower = ext.lower()
 
-        self.dumpEncoder = None
+        self.dump_encoder = None
         if ext_lower == ".mpg":
             # Use pymedia to convert frames to an mpeg2 stream
             # on-the-fly.
             import pymedia.video.vcodec as vcodec
 
             self.dump_file = open(filename, "wb")
-            frameRate = int(self.dumpFrameRate * 100 + 0.5)
-            self.dumpFrameRate = float(frameRate) / 100.0
+            frame_rate = int(self.dump_frame_rate * 100 + 0.5)
+            self.dump_frame_rate = float(frame_rate) / 100.0
 
             params = {
                 "type": 0,
@@ -248,12 +248,12 @@ class pykPlayer:
                 "max_b_frames": 0,
                 "height": manager.options.size_y,
                 "width": manager.options.size_x,
-                "frame_rate": frameRate,
+                "frame_rate": frame_rate,
                 "deinterlace": 0,
                 "bitrate": 9800000,
                 "id": vcodec.getCodecID("mpeg2video"),
             }
-            self.dumpEncoder = vcodec.Encoder(params)
+            self.dump_encoder = vcodec.Encoder(params)
             return
 
         # Don't dump a video file; dump a sequence of frames instead.
@@ -282,25 +282,25 @@ class pykPlayer:
                 # Implicitly append a frame number.
                 filename = base + "%04d" + ext
 
-        self.dumpFilename = filename
+        self.dump_filename = filename
 
-    def doFrameDump(self):
-        if self.dumpEncoder:
+    def do_frame_dump(self):
+        if self.dump_encoder:
             import pymedia.video.vcodec as vcodec
 
             ss = pygame.image.tostring(manager.surface, "RGB")
-            bmpFrame = vcodec.VFrame(
+            bmp_frame = vcodec.VFrame(
                 vcodec.formats.PIX_FMT_RGB24, manager.surface.get_size(), (ss, None, None)
             )
-            yuvFrame = bmpFrame.convert(vcodec.formats.PIX_FMT_YUV420P)
-            d = self.dumpEncoder.encode(yuvFrame)
+            yuv_frame = bmp_frame.convert(vcodec.formats.PIX_FMT_YUV420P)
+            d = self.dump_encoder.encode(yuv_frame)
             self.dump_file.write(d.data)
             return
 
         if self.dumpAppend:
-            filename = self.dumpFilename
+            filename = self.dump_filename
         else:
-            filename = self.dumpFilename % self.PlayFrame
+            filename = self.dump_filename % self.PlayFrame
             print(filename)
 
         if self.dump_ppm:
@@ -321,26 +321,26 @@ class pykPlayer:
             # how to store an image in the requested format.
             pygame.image.save(manager.surface, filename)
 
-    def doValidate(self):
+    def do_validate(self):
         return True
 
-    def doPlay(self):
+    def do_play(self):
         # Abstract method - subclasses implement actual playback logic
         pass
 
-    def doPause(self):
+    def do_pause(self):
         # Abstract method - subclasses implement pause functionality
         pass
 
-    def doUnpause(self):
+    def do_unpause(self):
         # Abstract method - subclasses implement resume from pause
         pass
 
-    def doRewind(self):
+    def do_rewind(self):
         # Abstract method - subclasses implement rewind to beginning
         pass
 
-    def doStuff(self):
+    def do_stuff(self):
         # Override this in a derived class to do some useful per-frame
         # activity.
         # Common handling code for a close request or if the
@@ -353,39 +353,39 @@ class pykPlayer:
 
         elif self.State == STATE_CAPTURING:
             # We are capturing a video file.
-            self.doFrameDump()
+            self.do_frame_dump()
 
             # Set the frame time for the next frame.
-            self.PlayTime = 1000.0 * self.PlayFrame / self.dumpFrameRate
+            self.play_time = 1000.0 * self.PlayFrame / self.dump_frame_rate
 
         self.PlayFrame += 1
 
-    def doResize(self, newSize):
+    def do_resize(self, new_size):
         # This will be called internally whenever the window is
         # resized for any reason, either due to an application resize
         # request being processed, or due to the user dragging the
         # window handles.
         pass
 
-    def doResizeBegin(self):
+    def do_resize_begin(self):
         # This will be called internally before the screen is resized
-        # by pykmanager and doResize() is called. Not all players need
+        # by pykmanager and do_resize() is called. Not all players need
         # to do anything here.
         pass
 
-    def doResizeEnd(self):
+    def do_resize_end(self):
         # This will be called internally after the screen is resized
-        # by pykmanager and doResize() is called. Not all players need
+        # by pykmanager and do_resize() is called. Not all players need
         # to do anything here.
         pass
 
-    def handleEvent(self, event):
+    def handle_event(self, event):
         if event.type == pygame.USEREVENT:
-            self.Close()
+            self.close()
         elif event.type == pygame.KEYDOWN:
             self._handle_key_down(event)
         elif event.type == pygame.QUIT:
-            self.Close()
+            self.close()
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONDOWN:
             self._handle_joy_button_down(event)
         elif env == ENV_GP2X and event.type == pygame.JOYBUTTONUP:
@@ -394,16 +394,16 @@ class pykPlayer:
     def _handle_key_down(self, event):
         """Handle keyboard events, extracted to reduce cognitive complexity."""
         if event.key == pygame.K_ESCAPE:
-            self.Close()
+            self.close()
         elif event.key in (pygame.K_PAUSE, pygame.K_p):
-            self.Pause()
+            self.pause()
         elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
-            self.Rewind()
-            self.Play()
+            self.rewind()
+            self.play()
         elif self.State == STATE_PLAYING and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
             self._handle_ctrl_arrow(event)
 
-        if self.SupportsFontZoom:
+        if self.supports_font_zoom:
             self._handle_font_zoom_key(event)
 
     def _handle_ctrl_arrow(self, event):
@@ -421,33 +421,33 @@ class pykPlayer:
     def _handle_font_zoom_key(self, event):
         """Handle font zoom keyboard shortcuts."""
         if event.key in (pygame.K_PLUS, pygame.K_EQUALS, pygame.K_KP_PLUS):
-            manager.ZoomFont(1.0 / 0.9)
+            manager.zoom_font(1.0 / 0.9)
         elif event.key in (pygame.K_MINUS, pygame.K_UNDERSCORE, pygame.K_KP_MINUS):
-            manager.ZoomFont(0.9)
+            manager.zoom_font(0.9)
 
     def _handle_joy_button_down(self, event):
         """Handle GP2X joystick button down events."""
         if event.button == GP2X_BUTTON_SELECT:
-            self.Close()
+            self.close()
         elif event.button == GP2X_BUTTON_START:
-            self.Pause()
+            self.pause()
         elif event.button == GP2X_BUTTON_L:
-            self.ShoulderLHeld = True
+            self.shoulder_l_held = True
         elif event.button == GP2X_BUTTON_R:
-            self.ShoulderRHeld = True
+            self.shoulder_r_held = True
 
-        if self.SupportsFontZoom and self.ShoulderLHeld:
+        if self.supports_font_zoom and self.shoulder_l_held:
             if event.button == GP2X_BUTTON_RIGHT:
-                manager.ZoomFont(1.0 / 0.9)
+                manager.zoom_font(1.0 / 0.9)
             elif event.button == GP2X_BUTTON_LEFT:
-                manager.ZoomFont(0.9)
+                manager.zoom_font(0.9)
 
     def _handle_joy_button_up(self, event):
         """Handle GP2X joystick button up events."""
         if event.button == GP2X_BUTTON_L:
-            self.ShoulderLHeld = False
+            self.shoulder_l_held = False
         elif event.button == GP2X_BUTTON_R:
-            self.ShoulderRHeld = False
+            self.shoulder_r_held = False
 
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
@@ -459,20 +459,20 @@ class pykPlayer:
             if self.SongFinishedCallback is not None:
                 self.SongFinishedCallback()
 
-    def __defaultErrorPrint(self, ErrorString):
-        print(ErrorString)
+    def __defaultErrorPrint(self, error_string):
+        print(error_string)
 
-    def findPygameFont(self, fontData, fontSize):
+    def find_pygame_font(self, font_data, font_size):
         """Returns a pygame.Font selected by this data."""
-        if not fontData.size:
+        if not font_data.size:
             # The font names a specific filename.
-            filename = fontData.name
+            filename = font_data.name
             if os.path.sep not in filename:
                 filename = os.path.join(manager.FontPath, filename)
-            return pygame.font.Font(filename, fontSize)
+            return pygame.font.Font(filename, font_size)
 
         # The font names a system font.
-        pointSize = int(fontData.size * fontSize / 10.0 + 0.5)
+        point_size = int(font_data.size * font_size / 10.0 + 0.5)
         return pygame.font.SysFont(
-            fontData.name, pointSize, bold=fontData.bold, italic=fontData.italic
+            font_data.name, point_size, bold=font_data.bold, italic=font_data.italic
         )

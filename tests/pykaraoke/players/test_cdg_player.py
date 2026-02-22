@@ -35,12 +35,12 @@ class TestCdgModule:
     def test_has_cdg_player_class(self):
         from pykaraoke.players import cdg
 
-        assert hasattr(cdg, "cdgPlayer")
+        assert hasattr(cdg, "CdgPlayer")
 
     def test_cdg_player_is_class(self):
         from pykaraoke.players import cdg
 
-        assert isinstance(cdg.cdgPlayer, type)
+        assert isinstance(cdg.CdgPlayer, type)
 
 
 class TestCdgPacketConstants:

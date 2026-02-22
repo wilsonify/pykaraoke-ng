@@ -34,16 +34,16 @@ class DummyBusy(database.BusyCancelDialog):
 
 song_db = database.SongDB()
 
-song_db.Settings.FolderList = [os.environ['SONGS_DIR']]
+song_db.Settings.folder_list = [os.environ['SONGS_DIR']]
 # Keep the scan small and deterministic for tests
-song_db.Settings.ReadTitlesTxt = False
-song_db.Settings.LookInsideZips = False
+song_db.Settings.read_titles_txt = False
+song_db.Settings.look_inside_zips = False
 song_db.Settings.CheckHashes = False
 
-song_db.BuildSearchDatabase(DummyYielder(), DummyBusy())
+song_db.build_search_database(DummyYielder(), DummyBusy())
 
-song_db.SaveSettings()
-song_db.SaveDatabase()
+song_db.save_settings()
+song_db.save_database()
 
 report_path = os.path.join(os.environ['OUT_DIR'], 'scan_report.html')
 with open(report_path, 'w') as f:

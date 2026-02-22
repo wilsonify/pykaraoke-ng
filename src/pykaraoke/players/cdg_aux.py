@@ -67,7 +67,7 @@ CDG_DISPLAY_HEIGHT = 192
 # 24 tiles (6x4 of 49x51 each). This is used to only update
 # those tiles which have changed on every screen update,
 # thus reducing the CPU load of screen updates. A bitmask of
-# tiles requiring update is held in cdgPlayer.UpdatedTiles.
+# tiles requiring update is held in CdgPlayer.UpdatedTiles.
 # This stores each of the 4 columns in separate bytes, with 6 bits used
 # to represent the 6 rows.
 TILES_PER_ROW = 6
@@ -101,16 +101,16 @@ class CdgPacketReader:
     # in practice, the C port follows this class structure quite
     # closely, including duplicating the private members.)
 
-    def __init__(self, cdgData, mapperSurface):
-        self.__cdgData = cdgData
+    def __init__(self, cdg_data, mapper_surface):
+        self.__cdgData = cdg_data
         self.__cdgDataPos = 0
 
         # This is just for the purpose of mapping colors.
-        self.__mapperSurface = mapperSurface
+        self.__mapperSurface = mapper_surface
 
-        self.Rewind()
+        self.rewind()
 
-    def Rewind(self):
+    def rewind(self):
         """Rewinds the stream to the beginning, and resets all
         internal state in preparation for decoding the tiles
         again."""
@@ -123,7 +123,7 @@ class CdgPacketReader:
         defaultColour = 0
         self.__cdgColourTable = [defaultColour] * COLOUR_TABLE_SIZE
 
-        self.__justClearedColourIndex = -1
+        self.__just_cleared_colour_index = -1
         self.__cdgPresetColourIndex = -1
         self.__cdgBorderColourIndex = -1
         # Support only one transparent colour
@@ -137,8 +137,8 @@ class CdgPacketReader:
         # is used in conjunction with scrolling (which always jumps in
         # integer blocks of 6x12 pixels) to perform
         # one-pixel-at-a-time scrolls.
-        self.__hOffset = 0
-        self.__vOffset = 0
+        self.__h_offset = 0
+        self.__v_offset = 0
 
         # Build a 306x228 array for the pixel indeces, including border area
         self.__cdgPixelColours = N.zeros((CDG_FULL_WIDTH, CDG_FULL_HEIGHT))
@@ -207,10 +207,10 @@ class CdgPacketReader:
         the pixels from the indicated tile."""
 
         # Calculate the row & column starts/ends
-        row_start = 6 + self.__hOffset + (row * TILE_WIDTH)
-        row_end = 6 + self.__hOffset + ((row + 1) * TILE_WIDTH)
-        col_start = 12 + self.__vOffset + (col * TILE_HEIGHT)
-        col_end = 12 + self.__vOffset + ((col + 1) * TILE_HEIGHT)
+        row_start = 6 + self.__h_offset + (row * TILE_WIDTH)
+        row_end = 6 + self.__h_offset + ((row + 1) * TILE_WIDTH)
+        col_start = 12 + self.__v_offset + (col * TILE_HEIGHT)
+        col_end = 12 + self.__v_offset + ((col + 1) * TILE_HEIGHT)
         pygame.surfarray.blit_array(
             surface, self.__cdgSurfarray[row_start:row_end, col_start:col_end]
         )
@@ -272,9 +272,9 @@ class CdgPacketReader:
         # last color that we just cleared to, and don't bother
         # clearing again if it hasn't changed.
 
-        if colour == self.__justClearedColourIndex:
+        if colour == self.__just_cleared_colour_index:
             return
-        self.__justClearedColourIndex = colour
+        self.__just_cleared_colour_index = colour
 
         # Our new interpretation of CD+G Revealed is that memory preset
         # commands should also change the border
@@ -340,8 +340,8 @@ class CdgPacketReader:
 
         # Now that we have set the PixelColours, apply them to
         # the Surfarray.
-        lookupTable = N.array(self.__cdgColourTable)
-        self.__cdgSurfarray.flat[:] = N.take(lookupTable, N.ravel(self.__cdgPixelColours))
+        lookup_table = N.array(self.__cdgColourTable)
+        self.__cdgSurfarray.flat[:] = N.take(lookup_table, N.ravel(self.__cdgPixelColours))
 
         return
 
@@ -373,10 +373,10 @@ class CdgPacketReader:
         # Scroll Horizontal- Calculate number of pixels
         hScrollPixels = self._calcHorizontalScroll(hSCmd)
 
-        if h_offset != self.__hOffset or v_offset != self.__vOffset:
+        if h_offset != self.__h_offset or v_offset != self.__v_offset:
             # Changing the screen shift.
-            self.__hOffset = min(h_offset, 5)
-            self.__vOffset = min(v_offset, 11)
+            self.__h_offset = min(h_offset, 5)
+            self.__v_offset = min(v_offset, 11)
             self.__updated_tiles = 0xFFFFFFFF
 
         if hScrollPixels == 0 and vScrollPixels == 0:
@@ -390,8 +390,8 @@ class CdgPacketReader:
 
         # Now that we have scrolled the PixelColours, apply them to
         # the Surfarray.
-        lookupTable = N.array(self.__cdgColourTable)
-        self.__cdgSurfarray.flat[:] = N.take(lookupTable, N.ravel(self.__cdgPixelColours))
+        lookup_table = N.array(self.__cdgColourTable)
+        self.__cdgSurfarray.flat[:] = N.take(lookup_table, N.ravel(self.__cdgPixelColours))
         self.__updated_tiles = 0xFFFFFFFF
 
     @staticmethod
@@ -508,8 +508,8 @@ class CdgPacketReader:
         # we already have an array of colour indeces (0 to 15). We can create a
         # new RGB surfarray from that by doing take() which translates the 0-15
         # into an RGB colour and stores them in the RGB surfarray.
-        lookupTable = N.array(self.__cdgColourTable)
-        self.__cdgSurfarray.flat[:] = N.take(lookupTable, N.ravel(self.__cdgPixelColours))
+        lookup_table = N.array(self.__cdgColourTable)
+        self.__cdgSurfarray.flat[:] = N.take(lookup_table, N.ravel(self.__cdgPixelColours))
 
         # An alternative way of doing the above - was found to be very slightly slower.
         # self.__cdgSurfarray.flat[:] =  map(self.__cdgColourTable.__getitem__, self.__cdgPixelColours.flat)
@@ -547,18 +547,18 @@ class CdgPacketReader:
 
         # Now the screen has some data on it, so a subsequent clear
         # should be respected.
-        self.__justClearedColourIndex = -1
+        self.__just_cleared_colour_index = -1
 
     def __updateTileMask(self, row_index, column_index):
         """Update the tile bitmask for the affected screen region."""
-        firstRow = max((row_index - 6 - self.__hOffset) / TILE_WIDTH, 0)
-        lastRow = (row_index - 1 - self.__hOffset) / TILE_WIDTH
+        first_row = max((row_index - 6 - self.__h_offset) / TILE_WIDTH, 0)
+        last_row = (row_index - 1 - self.__h_offset) / TILE_WIDTH
 
-        firstCol = max((column_index - 12 - self.__vOffset) / TILE_HEIGHT, 0)
-        lastCol = (column_index - 1 - self.__vOffset) / TILE_HEIGHT
+        first_col = max((column_index - 12 - self.__v_offset) / TILE_HEIGHT, 0)
+        last_col = (column_index - 1 - self.__v_offset) / TILE_HEIGHT
 
-        for col in range(firstCol, lastCol + 1):
-            for row in range(firstRow, lastRow + 1):
+        for col in range(first_col, last_col + 1):
+            for row in range(first_row, last_row + 1):
                 self.__updated_tiles |= (1 << row) << (col * 8)
 
     def __setTilePixels(self, data_block, row_index, column_index, colour0, colour1, xor):

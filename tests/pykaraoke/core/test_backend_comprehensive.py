@@ -370,7 +370,7 @@ class TestBackendPoll:
 
         backend = self._get_backend()
         backend.current_player = MagicMock()
-        backend.current_player.GetPos.return_value = 1000
+        backend.current_player.get_pos.return_value = 1000
         backend.state = BackendState.PLAYING
         backend.poll()
         assert backend.position_ms == 1000
@@ -397,7 +397,7 @@ class TestBackendShutdown:
         mock_player = MagicMock()
         backend.current_player = mock_player
         backend.shutdown()
-        mock_player.Close.assert_called_once()
+        mock_player.close.assert_called_once()
 
 
 class TestBackendMain:

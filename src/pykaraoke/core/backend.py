@@ -42,7 +42,7 @@ try:
     )
     from pykaraoke.core import database
     from pykaraoke.core.manager import manager
-    from pykaraoke.core.player import pykPlayer  # noqa: F401 - Used for type hints
+    from pykaraoke.core.player import PykPlayer  # noqa: F401 - Used for type hints
     from pykaraoke.players import cdg, kar, mpg  # noqa: F401 - Used for player creation
 
     IMPORTS_AVAILABLE = True
@@ -89,7 +89,7 @@ class PyKaraokeBackend:
             raise RuntimeError("Backend dependencies not available")
 
         self.state = BackendState.IDLE
-        self.current_player: Any | None = None  # pykPlayer when available
+        self.current_player: Any | None = None  # PykPlayer when available
         self.current_song: Any | None = None  # database.SongStruct when available
         self.playlist: list[Any] = []  # List[database.SongStruct] when available
         self.playlist_index: int = -1
@@ -220,7 +220,7 @@ class PyKaraokeBackend:
 
         elif self.current_player and self.state == BackendState.PAUSED:
             # Resume from pause
-            self.current_player.Pause()  # Toggle pause
+            self.current_player.pause()  # Toggle pause
             self.state = BackendState.PLAYING
             self._emit_state_change()
             return {"status": "ok"}
@@ -235,7 +235,7 @@ class PyKaraokeBackend:
     def _handle_pause(self) -> dict[str, Any]:
         """Handle pause command"""
         if self.current_player and self.state == BackendState.PLAYING:
-            self.current_player.Pause()
+            self.current_player.pause()
             self.state = BackendState.PAUSED
             self._emit_state_change()
             return {"status": "ok"}
@@ -244,7 +244,7 @@ class PyKaraokeBackend:
     def _handle_stop(self) -> dict[str, Any]:
         """Handle stop command"""
         if self.current_player:
-            self.current_player.Stop()
+            self.current_player.stop()
             self.state = BackendState.STOPPED
             self.position_ms = 0
             self._emit_state_change()
@@ -295,10 +295,10 @@ class PyKaraokeBackend:
 
             # Stop current player if any
             if self.current_player:
-                self.current_player.Close()
+                self.current_player.close()
 
             # Create new player for the song
-            self.current_player = self.current_song.MakePlayer(
+            self.current_player = self.current_song.make_player(
                 self.song_db,
                 error_notify_callback=self._on_player_error,
                 done_callback=self._on_song_finished,
@@ -308,7 +308,7 @@ class PyKaraokeBackend:
                 raise RuntimeError("Failed to create player")
 
             # Start playback
-            self.current_player.Play()
+            self.current_player.play()
             self.state = BackendState.PLAYING
             manager.set_volume(self.volume)
 
@@ -402,7 +402,7 @@ class PyKaraokeBackend:
         """Search the song library"""
         query = params.get("query", "")
         try:
-            results = self.song_db.SearchDatabase(query)
+            results = self.song_db.search_database(query)
             return {
                 "status": "ok",
                 "data": {"results": [self._song_to_dict(song) for song in results]},
@@ -413,7 +413,7 @@ class PyKaraokeBackend:
     def _handle_get_library(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Get library contents"""
         try:
-            songs = self.song_db.SongList if hasattr(self.song_db, "SongList") else []
+            songs = self.song_db.song_list if hasattr(self.song_db, "song_list") else []
             return {"status": "ok", "data": {"songs": [self._song_to_dict(song) for song in songs]}}
         except (AttributeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
@@ -423,7 +423,7 @@ class PyKaraokeBackend:
         # This is a long-running operation that should be async
         logger.info("Starting library scan")
         try:
-            self.song_db.BuildSearchDatabase()
+            self.song_db.build_search_database()
             self._emit_event("library_scan_complete", {})
             return {"status": "ok", "message": "Scan started"}
         except (OSError, RuntimeError, ValueError) as e:
@@ -436,7 +436,7 @@ class PyKaraokeBackend:
             return {"status": "error", "message": "folder required"}
 
         try:
-            self.song_db.FolderAdd(folder)
+            self.song_db.folder_add(folder)
             return {"status": "ok"}
         except (OSError, ValueError, AttributeError) as e:
             return {"status": "error", "message": str(e)}
@@ -464,19 +464,19 @@ class PyKaraokeBackend:
     def poll(self):
         """Poll the manager - should be called regularly"""
         if self.current_player:
-            manager.Poll()
+            manager.poll()
 
             # Update position
             if self.state == BackendState.PLAYING:
                 with contextlib.suppress(BaseException):
-                    self.position_ms = self.current_player.GetPos()
+                    self.position_ms = self.current_player.get_pos()
 
     def shutdown(self):
         """Shutdown the backend"""
         logger.info("Shutting down backend")
         if self.current_player:
-            self.current_player.Close()
-        manager.Quit()
+            self.current_player.close()
+        manager.quit()
 
 
 def create_stdio_server(backend: PyKaraokeBackend):

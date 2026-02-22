@@ -63,12 +63,12 @@
 #       python pykar.py /songs/theboxer.kar
 #
 # You can also incorporate a KAR player in your own projects by
-# importing this module. The class midPlayer is exported by the
+# importing this module. The class MidPlayer is exported by the
 # module. You can import and start it as follows:
 #   from pykaraoke.players import kar
-#   player = kar.midPlayer("/songs/theboxer.kar")
-#   player.Play()
-# If you do this, you must also arrange to call manager.Poll()
+#   player = kar.MidPlayer("/songs/theboxer.kar")
+#   player.play()
+# If you do this, you must also arrange to call manager.poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #
@@ -93,7 +93,7 @@
 #       msgBox ("Song is finished")
 #
 # To register callbacks, pass the functions in to the initialiser:
-#   midPlayer ("/songs/theboxer.kar", errorPopup, songFinishedCallback)
+#   MidPlayer ("/songs/theboxer.kar", errorPopup, songFinishedCallback)
 # These parameters are optional and default to None.
 #
 # If the initialiser fails (e.g. the song file is not present), __init__
@@ -132,7 +132,7 @@
 #
 # Previous implementations ran the player within a thread; this is no
 # longer the case.  Instead, it is the caller's responsibility to call
-# pykar.manager.Poll() every once in a while to ensure that the player
+# pykar.manager.poll() every once in a while to ensure that the player
 # gets enough CPU time to do its work.  Ideally, this should be at
 # least every 100 milliseconds or so to guarantee good video and audio
 # response time.
@@ -163,7 +163,7 @@ from pykaraoke.config.constants import (
 )
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
-from pykaraoke.core.player import pykPlayer
+from pykaraoke.core.player import PykPlayer
 
 # At what percentage of the screen height should we try to keep the
 # current singing cursor?  33% keeps it on the top third, 50% keeps it
@@ -213,8 +213,8 @@ class midiFile:
         self.Denominator = None  # Denominator
         self.ClocksPerMetronomeTick = None  # MIDI clocks per metronome tick
         self.NotesPer24MIDIClocks = None  # 1/32 Notes per 24 MIDI clocks
-        self.earliestNoteMS = 0  # Start of earliest note in song
-        self.lastNoteMS = 0  # End of latest note in song
+        self.earliest_note_ms = 0  # Start of earliest note in song
+        self.last_note_ms = 0  # End of latest note in song
 
 
 class TrackDesc:
@@ -224,8 +224,8 @@ class TrackDesc:
         self.BytesRead = 0  # Number of file bytes read for track
         self.FirstNoteClick = None  # Start of first note in track
         self.FirstNoteMs = None  # The same, in milliseconds
-        self.LastNoteClick = None  # End of last note in track
-        self.LastNoteMs = None  # In millseconds
+        self.last_note_click = None  # End of last note in track
+        self.last_note_ms = None  # In millseconds
         self.LyricsTrack = False  # This track contains lyrics
         self.RunningStatus = 0  # MIDI Running Status byte
 
@@ -419,9 +419,9 @@ class Lyrics:
                         "T%s first note at %s clicks, %s ms"
                         % (track_desc.TrackNum, track_desc.FirstNoteClick, track_desc.FirstNoteMs)
                     )
-            if track_desc.LastNoteClick is not None:
-                ts.advanceToClick(track_desc.LastNoteClick)
-                track_desc.LastNoteMs = ts.ms
+            if track_desc.last_note_click is not None:
+                ts.advanceToClick(track_desc.last_note_click)
+                track_desc.last_note_ms = ts.ms
 
     def analyzeSpaces(self):
         """Checks for a degenerate case: no (or very few) spaces
@@ -542,7 +542,7 @@ class Lyrics:
         Returns (output_line, remaining_line, remaining_text) or None if
         the line should not be folded (trailing whitespace only).
         """
-        fold_point = manager.FindFoldPoint(current_text, font, max_width)
+        fold_point = manager.find_fold_point(current_text, font, max_width)
         if fold_point == len(current_text):
             return None
 
@@ -616,11 +616,11 @@ def midi_parse_data(midi_data, error_notify_callback, encoding):
     midifile.lyrics.analyzeSpaces()
 
     # Calculate the song start/end from note events across all tracks.
-    midifile.earliestNoteMS, midifile.lastNoteMS = _compute_note_bounds(midifile)
+    midifile.earliest_note_ms, midifile.last_note_ms = _compute_note_bounds(midifile)
 
     if debug:
-        print("first = %s" % (midifile.earliestNoteMS))
-        print("last = %s" % (midifile.lastNoteMS))
+        print("first = %s" % (midifile.earliest_note_ms))
+        print("last = %s" % (midifile.last_note_ms))
 
     # Return the populated midiFile structure
     return midifile
@@ -679,17 +679,17 @@ def _choose_lyrics_from_track(track_desc):
 
 
 def _compute_note_bounds(midifile):
-    """Return (earliestNoteMS, lastNoteMS) across all tracks."""
-    earliestNoteMS = None
-    lastNoteMS = None
+    """Return (earliest_note_ms, last_note_ms) across all tracks."""
+    earliest_note_ms = None
+    last_note_ms = None
     for track in midifile.trackList:
         if track.FirstNoteMs is not None:
-            if earliestNoteMS is None or track.FirstNoteMs < earliestNoteMS:
-                earliestNoteMS = track.FirstNoteMs
-        if track.LastNoteMs is not None:
-            if lastNoteMS is None or track.LastNoteMs > lastNoteMS:
-                lastNoteMS = track.LastNoteMs
-    return earliestNoteMS, lastNoteMS
+            if earliest_note_ms is None or track.FirstNoteMs < earliest_note_ms:
+                earliest_note_ms = track.FirstNoteMs
+        if track.last_note_ms is not None:
+            if last_note_ms is None or track.last_note_ms > last_note_ms:
+                last_note_ms = track.last_note_ms
+    return earliest_note_ms, last_note_ms
 
 
 def midi_parse_track(filehdl, midifile, track_num, length):
@@ -972,7 +972,7 @@ def _process_channel_event(filehdl, track_desc, event_type):
     if high_nibble == 0x80:
         # Note off
         filehdl.read(2)
-        track_desc.LastNoteClick = track_desc.TotalClicksFromStart
+        track_desc.last_note_click = track_desc.TotalClicksFromStart
         return 2
 
     if high_nibble == 0x90:
@@ -980,7 +980,7 @@ def _process_channel_event(filehdl, track_desc, event_type):
         filehdl.read(2)
         if track_desc.FirstNoteClick is None:
             track_desc.FirstNoteClick = track_desc.TotalClicksFromStart
-        track_desc.LastNoteClick = track_desc.TotalClicksFromStart
+        track_desc.last_note_click = track_desc.TotalClicksFromStart
         return 2
 
     if high_nibble in (0xA0, 0xB0, 0xE0):
@@ -1045,28 +1045,28 @@ def var_length(filehdl):
     return (converted_int, bytes_read)
 
 
-class midPlayer(pykPlayer):
+class MidPlayer(PykPlayer):
     def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
-        settings = self.songDb.Settings
+        PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
+        settings = self.song_db.Settings
 
-        self.SupportsFontZoom = True
+        self.supports_font_zoom = True
         self.isValid = False
 
         # Parse the MIDI file
         self.midifile = midi_parse_data(
-            self.SongDatas[0].GetData(), self.ErrorNotifyCallback, settings.KarEncoding
+            self.song_datas[0].get_data(), self.error_notify_callback, settings.KarEncoding
         )
         if self.midifile is None:
             error_string = "ERROR: Could not parse the MIDI file"
-            self.ErrorNotifyCallback(error_string)
+            self.error_notify_callback(error_string)
             return
         elif self.midifile.lyrics is None:
             error_string = "ERROR: Could not get any lyric data from file"
-            self.ErrorNotifyCallback(error_string)
+            self.error_notify_callback(error_string)
             return
 
         self.isValid = True
@@ -1075,19 +1075,19 @@ class midPlayer(pykPlayer):
         if debug:
             self.midifile.lyrics.write()
 
-        manager.setCpuSpeed("kar")
-        manager.InitPlayer(self)
-        manager.OpenDisplay()
+        manager.set_cpu_speed("kar")
+        manager.init_player(self)
+        manager.open_display()
 
         if not manager.options.nomusic:
-            manager.OpenAudio(frequency=manager.settings.MIDISampleRate, channels=1)
+            manager.open_audio(frequency=manager.settings.MIDISampleRate, channels=1)
 
         # Account for the size of the playback buffer in the lyrics
         # display.  Assume that the buffer will be mostly full.  On a
         # slower computer that's struggling to keep up, this may not
         # be the right amount of delay, but it should usually be
         # pretty close.
-        self.InternalOffsetTime = -manager.GetAudioBufferMS()
+        self.internal_offset_time = -manager.get_audio_buffer_ms()
 
         self.screenDirty = False
         self.initFont()
@@ -1102,7 +1102,7 @@ class midPlayer(pykPlayer):
         # run MIDI via Timidity instead, which appears to work better
         # than the native support, so we recommend this.
         if env != ENV_WINDOWS:
-            self.InternalOffsetTime += self.midifile.earliestNoteMS
+            self.internal_offset_time += self.midifile.earliest_note_ms
 
         # Now word-wrap the text to fit our window.
         self.lyrics = self.midifile.lyrics.wordWrapLyrics(self.font)
@@ -1127,7 +1127,7 @@ class midPlayer(pykPlayer):
 
         else:
             # Load the sound normally for playback.
-            audio_path = self.SongDatas[0].GetFilepath()
+            audio_path = self.song_datas[0].get_filepath()
             if isinstance(audio_path, str):
                 audio_path = audio_path.encode(sys.getfilesystemencoding())
             pygame.mixer.music.load(audio_path)
@@ -1139,20 +1139,20 @@ class midPlayer(pykPlayer):
         # paint the first numRows lines.
         self.resetPlayingState()
 
-    def GetPos(self):
+    def get_pos(self):
         if self.useMidiTimer:
             return pygame.mixer.music.get_pos()
         else:
-            return pykPlayer.GetPos(self)
+            return PykPlayer.get_pos(self)
 
-    def SetupOptions(self, usage=None):
+    def setup_options(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
         if usage is None:
             usage = "%prog [options] <KAR file>"
-        parser = pykPlayer.SetupOptions(self, usage=usage)
+        parser = PykPlayer.setup_options(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--fps")
@@ -1161,8 +1161,8 @@ class midPlayer(pykPlayer):
         return parser
 
     def initFont(self):
-        font_size = int(FONT_SIZE * manager.GetFontScale() * manager.displaySize[1] / 480.0)
-        self.font = self.findPygameFont(self.songDb.Settings.KarFont, font_size)
+        font_size = int(FONT_SIZE * manager.get_font_scale() * manager.displaySize[1] / 480.0)
+        self.font = self.find_pygame_font(self.song_db.Settings.KarFont, font_size)
         self.lineSize = max(self.font.get_height(), self.font.get_linesize())
         self.numRows = int((manager.displaySize[1] - Y_BORDER * 2) / self.lineSize)
 
@@ -1207,7 +1207,7 @@ class midPlayer(pykPlayer):
         # Redraws the contents of the currently onscreen text.
 
         # Clear the screen
-        settings = self.songDb.Settings
+        settings = self.song_db.Settings
         manager.surface.fill(settings.KarBackgroundColour)
 
         # Paint the first numRows lines
@@ -1220,7 +1220,7 @@ class midPlayer(pykPlayer):
                     self.drawSyllable(syllable, i, None)
                     x = syllable.right
 
-        manager.Flip()
+        manager.flip()
         self.screenDirty = False
 
     def drawSyllable(self, syllable, row, x):
@@ -1240,7 +1240,7 @@ class midPlayer(pykPlayer):
 
         y = Y_BORDER + row * self.lineSize
 
-        settings = self.songDb.Settings
+        settings = self.song_db.Settings
 
         if syllable.type == TEXT_LYRIC:
             if self.currentMs < syllable.ms:
@@ -1273,13 +1273,13 @@ class midPlayer(pykPlayer):
                 return True
         return False
 
-    def doValidate(self):
+    def do_validate(self):
         if not self.__hasLyrics():
             return False
 
         return True
 
-    def doPlay(self):
+    def do_play(self):
         if not manager.options.nomusic:
             pygame.mixer.music.play()
 
@@ -1289,15 +1289,15 @@ class midPlayer(pykPlayer):
             # front.
             pygame.time.wait(50)
 
-    def doPause(self):
+    def do_pause(self):
         if not manager.options.nomusic:
             pygame.mixer.music.pause()
 
-    def doUnpause(self):
+    def do_unpause(self):
         if not manager.options.nomusic:
             pygame.mixer.music.unpause()
 
-    def doRewind(self):
+    def do_rewind(self):
         # Reset all the state (current lyric index etc)
         self.resetPlayingState()
         # Stop the audio
@@ -1305,32 +1305,32 @@ class midPlayer(pykPlayer):
             pygame.mixer.music.rewind()
             pygame.mixer.music.stop()
 
-    def GetLength(self):
+    def get_length(self):
         """Give the number of seconds in the song."""
-        return self.midifile.lastNoteMS / 1000
+        return self.midifile.last_note_ms / 1000
 
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
         if not manager.options.nomusic and manager.audioProps:
             pygame.mixer.music.stop()
-        pykPlayer.shutdown(self)
+        PykPlayer.shutdown(self)
 
-    def doStuff(self):
-        pykPlayer.doStuff(self)
+    def do_stuff(self):
+        PykPlayer.do_stuff(self)
 
         if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
             self.currentMs = int(
-                self.GetPos() + self.InternalOffsetTime + manager.settings.SyncDelayMs
+                self.get_pos() + self.internal_offset_time + manager.settings.SyncDelayMs
             )
             self.colourUpdateMs()
 
             # If we're not using the automatic midi timer, we have to
             # know to when stop the song at the end ourselves.
-            if self.currentMs > self.midifile.lastNoteMS:
-                self.Close()
+            if self.currentMs > self.midifile.last_note_ms:
+                self.close()
 
-    def handleEvent(self, event):
+    def handle_event(self, event):
         if (
             event.type == pygame.KEYDOWN
             and event.key == pygame.K_RETURN
@@ -1340,12 +1340,12 @@ class midPlayer(pykPlayer):
             )
         ):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
-            self.Close()
+            self.close()
             return
 
-        pykPlayer.handleEvent(self, event)
+        PykPlayer.handle_event(self, event)
 
-    def doResize(self, newSize):
+    def do_resize(self, new_size):
         # This will be called internally whenever the window is
         # resized for any reason, either due to an application resize
         # request being processed, or due to the user dragging the
@@ -1387,7 +1387,7 @@ class midPlayer(pykPlayer):
                 self.drawSyllable(syllable, line - self.topLine, x)
                 x = syllable.right
 
-            manager.Flip()
+            manager.flip()
 
         return True
 
@@ -1480,7 +1480,7 @@ class midPlayer(pykPlayer):
         y = Y_BORDER + linesRemaining * self.lineSize
         h = linesScrolled * self.lineSize
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
-        settings = self.songDb.Settings
+        settings = self.song_db.Settings
         manager.surface.fill(settings.KarBackgroundColour, rect)
 
         # We can remove any syllables from the list that might have
@@ -1507,10 +1507,10 @@ def usage():
 
 # Can be called from the command line with the CDG filepath as parameter
 def main():
-    player = midPlayer(None, None)
+    player = MidPlayer(None, None)
     if player.isValid:
-        player.Play()
-        manager.WaitForPlayer()
+        player.play()
+        manager.wait_for_player()
 
 
 if __name__ == "__main__":

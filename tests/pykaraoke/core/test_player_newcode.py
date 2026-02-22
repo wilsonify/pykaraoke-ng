@@ -67,7 +67,7 @@ class TestPlayerDoStuffCapturingState:
         from pykaraoke.core.manager import manager
         from pykaraoke.core import player
 
-        # Pre-set options on the singleton to skip SetupOptions/parse_args
+        # Pre-set options on the singleton to skip setup_options/parse_args
         if manager.options is None:
             opts = MagicMock()
             opts.dump = None
@@ -85,20 +85,20 @@ class TestPlayerDoStuffCapturingState:
         mock_song.ZipStoredName = None
         mock_song.Filepath = "test.cdg"
         mock_song.DisplayFilename = "test.cdg"
-        mock_song.GetSongDatas.return_value = []
+        mock_song.get_song_datas.return_value = []
 
-        p = player.pykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
+        p = player.PykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
         return p
 
     def test_do_stuff_with_capturing_state(self):
         from pykaraoke.config.constants import STATE_CAPTURING
         p = self._make_player()
         p.State = STATE_CAPTURING
-        p.doFrameDump = MagicMock()
-        p.dumpFrameRate = 30.0
+        p.do_frame_dump = MagicMock()
+        p.dump_frame_rate = 30.0
         p.PlayFrame = 0
-        p.PlayTime = 0.0
-        result = p.doStuff()
+        p.play_time = 0.0
+        result = p.do_stuff()
 
 
 class TestPlayerAdditionalCoverage:
@@ -125,9 +125,9 @@ class TestPlayerAdditionalCoverage:
         mock_song.ZipStoredName = None
         mock_song.Filepath = "test.cdg"
         mock_song.DisplayFilename = "test.cdg"
-        mock_song.GetSongDatas.return_value = []
+        mock_song.get_song_datas.return_value = []
 
-        p = player.pykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
+        p = player.PykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
         return p
 
     def test_player_pause_unpause(self):
@@ -136,21 +136,21 @@ class TestPlayerAdditionalCoverage:
         p.doPause = MagicMock()
         p.doUnpause = MagicMock()
         p.State = STATE_PLAYING
-        p.PlayStartTime = 0
-        p.Pause()
+        p.play_start_time = 0
+        p.pause()
         assert p.State == STATE_PAUSED
-        p.Pause()
+        p.pause()
         assert p.State == STATE_PLAYING
 
     def test_player_get_pos_default(self):
         p = self._make_player()
-        pos = p.GetPos()
+        pos = p.get_pos()
         assert isinstance(pos, (int, float))
 
     def test_player_close(self):
         from pykaraoke.config.constants import STATE_CLOSING
         p = self._make_player()
-        p.Close()
+        p.close()
         assert p.State == STATE_CLOSING
 
     def test_player_shutdown(self):
@@ -161,22 +161,22 @@ class TestPlayerAdditionalCoverage:
 
     def test_player_stop(self):
         p = self._make_player()
-        p.Stop()  # Should not raise
+        p.stop()  # Should not raise
 
     def test_player_rewind(self):
         p = self._make_player()
-        p.Rewind()  # Should not raise
+        p.rewind()  # Should not raise
 
     def test_player_get_length(self):
         p = self._make_player()
-        length = p.GetLength()
+        length = p.get_length()
         # Base implementation returns None and notifies error
         assert length is None
 
     def test_player_validate(self):
         p = self._make_player()
-        p.Validate()  # Should not raise
+        p.validate()  # Should not raise
 
     def test_player_resize(self):
         p = self._make_player()
-        p.doResize((800, 600))  # Should not raise
+        p.do_resize((800, 600))  # Should not raise

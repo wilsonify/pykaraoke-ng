@@ -55,5 +55,5 @@ def test_issue6_divx_xvid_extensions_should_scan():
     """Issue #6: DIVX and XVID extensions should be recognized."""
     song_db = SongDB()
 
-    assert song_db.IsExtensionValid(".divx") is True
-    assert song_db.IsExtensionValid(".xvid") is True
+    assert song_db.is_extension_valid(".divx") is True
+    assert song_db.is_extension_valid(".xvid") is True

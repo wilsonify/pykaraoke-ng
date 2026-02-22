@@ -41,7 +41,7 @@ class TestSongData:
         assert sd.filename == "/path/to/song.cdg"
         assert sd.trueFile is True
         assert sd.data is None
-        assert sd.Ext == ".cdg"
+        assert sd.ext == ".cdg"
 
     def test_songdata_from_data(self):
         """SongData with data means it came from a zip."""
@@ -50,45 +50,45 @@ class TestSongData:
         assert sd.filename == "song.cdg"
         assert sd.trueFile is False
         assert sd.data == data
-        assert sd.Ext == ".cdg"
+        assert sd.ext == ".cdg"
 
     def test_songdata_get_data_from_memory(self):
-        """GetData should return data if already in memory."""
+        """get_data should return data if already in memory."""
         data = b"fake cdg data"
         sd = SongData("song.cdg", data)
-        assert sd.GetData() == data
+        assert sd.get_data() == data
 
     def test_songdata_get_data_from_file(self):
-        """GetData should read file from disk if trueFile."""
+        """get_data should read file from disk if trueFile."""
         with tempfile.NamedTemporaryFile(suffix=".cdg", delete=False) as f:
             f.write(b"test cdg content")
             fname = f.name
         try:
             sd = SongData(fname, None)
-            result = sd.GetData()
+            result = sd.get_data()
             assert result == b"test cdg content"
         finally:
             os.unlink(fname)
 
     def test_songdata_get_filepath_true_file(self):
-        """GetFilepath should return filename directly for true files."""
+        """get_filepath should return filename directly for true files."""
         sd = SongData("/path/to/song.cdg", None)
-        assert sd.GetFilepath() == "/path/to/song.cdg"
+        assert sd.get_filepath() == "/path/to/song.cdg"
 
     def test_songdata_extension_kar(self):
         """SongData should correctly extract .kar extension."""
         sd = SongData("song.KAR", None)
-        assert sd.Ext == ".kar"
+        assert sd.ext == ".kar"
 
     def test_songdata_extension_mpg(self):
         """SongData should correctly extract .mpg extension."""
         sd = SongData("song.MPG", None)
-        assert sd.Ext == ".mpg"
+        assert sd.ext == ".mpg"
 
     def test_songdata_temp_filename_initially_none(self):
-        """tempFilename should initially be None."""
+        """temp_filename should initially be None."""
         sd = SongData("song.cdg", b"data")
-        assert sd.tempFilename is None
+        assert sd.temp_filename is None
 
 
 class TestSettingsStructDefaults:
@@ -100,7 +100,7 @@ class TestSettingsStructDefaults:
 
     def test_folder_list_empty(self):
         s = SettingsStruct()
-        assert s.FolderList == []
+        assert s.folder_list == []
 
     def test_cdg_extensions(self):
         s = SettingsStruct()
@@ -117,11 +117,11 @@ class TestSettingsStructDefaults:
 
     def test_look_inside_zips(self):
         s = SettingsStruct()
-        assert s.LookInsideZips is True
+        assert s.look_inside_zips is True
 
     def test_read_titles_txt(self):
         s = SettingsStruct()
-        assert s.ReadTitlesTxt is True
+        assert s.read_titles_txt is True
 
     def test_sample_rate(self):
         s = SettingsStruct()
@@ -239,19 +239,19 @@ class TestBusyCancelDialogMethods:
 
     def test_show(self):
         d = BusyCancelDialog()
-        d.Show()  # Should not raise
+        d.show()  # Should not raise
 
     def test_set_progress(self):
         d = BusyCancelDialog()
-        d.SetProgress("Scanning...", 0.5)  # Should not raise
+        d.set_progress("Scanning...", 0.5)  # Should not raise
 
     def test_destroy(self):
         d = BusyCancelDialog()
-        d.Destroy()  # Should not raise
+        d.destroy()  # Should not raise
 
     def test_clicked_default(self):
         d = BusyCancelDialog()
-        assert d.Clicked is False
+        assert d.clicked is False
 
 
 class TestSongDBMethodsExtended:
@@ -260,61 +260,61 @@ class TestSongDBMethodsExtended:
     def test_songdb_is_extension_valid_cdg(self):
         db = SongDB()
         # .cdg should always be valid
-        assert db.IsExtensionValid(".cdg") is True
+        assert db.is_extension_valid(".cdg") is True
 
     def test_songdb_is_extension_valid_kar(self):
         db = SongDB()
-        assert db.IsExtensionValid(".kar") is True
+        assert db.is_extension_valid(".kar") is True
 
     def test_songdb_is_extension_valid_mid(self):
         db = SongDB()
-        assert db.IsExtensionValid(".mid") is True
+        assert db.is_extension_valid(".mid") is True
 
     def test_songdb_is_extension_valid_mpg(self):
         db = SongDB()
-        assert db.IsExtensionValid(".mpg") is True
+        assert db.is_extension_valid(".mpg") is True
 
     def test_songdb_is_extension_invalid(self):
         db = SongDB()
-        assert db.IsExtensionValid(".xyz") is False
+        assert db.is_extension_valid(".xyz") is False
 
     def test_songdb_is_extension_ignored(self):
         db = SongDB()
         db.Settings.IgnoredExtensions = [".mp3"]
-        assert db.IsExtensionValid(".mp3") is False
+        assert db.is_extension_valid(".mp3") is False
 
     def test_songdb_get_save_directory_env(self):
         db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_DIR": "/tmp/test_save"}):
-            result = db.getSaveDirectory()
+            result = db.get_save_directory()
             assert result == "/tmp/test_save"
 
     def test_songdb_get_temp_directory_env(self):
         db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_TEMP_DIR": "/tmp/test_temp"}):
-            result = db.getTempDirectory()
+            result = db.get_temp_directory()
             assert result == "/tmp/test_temp"
 
     def test_songdb_folder_add(self):
         db = SongDB()
-        db.FolderAdd("/songs/folder1")
-        assert "/songs/folder1" in db.Settings.FolderList
+        db.folder_add("/songs/folder1")
+        assert "/songs/folder1" in db.Settings.folder_list
 
     def test_songdb_folder_add_no_dup(self):
         db = SongDB()
-        db.FolderAdd("/songs/folder1")
-        db.FolderAdd("/songs/folder1")
-        assert db.Settings.FolderList.count("/songs/folder1") == 1
+        db.folder_add("/songs/folder1")
+        db.folder_add("/songs/folder1")
+        assert db.Settings.folder_list.count("/songs/folder1") == 1
 
     def test_songdb_folder_del(self):
         db = SongDB()
-        db.FolderAdd("/songs/folder1")
-        db.FolderDel("/songs/folder1")
-        assert "/songs/folder1" not in db.Settings.FolderList
+        db.folder_add("/songs/folder1")
+        db.folder_del("/songs/folder1")
+        assert "/songs/folder1" not in db.Settings.folder_list
 
     def test_songdb_zip_files_empty(self):
         db = SongDB()
-        assert db.ZipFiles == []
+        assert db.zip_files == []
 
     def test_songdb_database_dirty_initial(self):
         db = SongDB()
@@ -322,11 +322,11 @@ class TestSongDBMethodsExtended:
 
     def test_songdb_got_titles_initial(self):
         db = SongDB()
-        assert db.GotTitles is False
+        assert db.got_titles is False
 
     def test_songdb_got_artists_initial(self):
         db = SongDB()
-        assert db.GotArtists is False
+        assert db.got_artists is False
 
     def test_songdb_settings_is_settings_struct(self):
         db = SongDB()
@@ -335,19 +335,19 @@ class TestSongDBMethodsExtended:
     def test_songdb_save_settings(self):
         db = SongDB()
         with tempfile.TemporaryDirectory() as tmpdir:
-            db.SaveDir = tmpdir
-            db.SaveSettings()
+            db.save_dir = tmpdir
+            db.save_settings()
             assert os.path.exists(os.path.join(tmpdir, "settings.dat"))
 
     def test_songdb_save_and_load_settings(self):
         db = SongDB()
         with tempfile.TemporaryDirectory() as tmpdir:
-            db.SaveDir = tmpdir
+            db.save_dir = tmpdir
             db.Settings.SampleRate = 22050
-            db.SaveSettings()
+            db.save_settings()
             # Load into a new DB
             db2 = SongDB()
-            db2.SaveDir = tmpdir
+            db2.save_dir = tmpdir
             db2.load_settings(None)
             assert db2.Settings.SampleRate == 22050
 
@@ -414,12 +414,12 @@ class TestSongStructExtended:
     def test_song_struct_get_mark_key(self):
         settings = SettingsStruct()
         song = SongStruct("/path/to/song.cdg", settings)
-        assert song.getMarkKey() == ("/path/to/song.cdg", None)
+        assert song.get_mark_key() == ("/path/to/song.cdg", None)
 
     def test_song_struct_get_mark_key_zip(self):
         settings = SettingsStruct()
         song = SongStruct("/path/to/songs.zip", settings, zip_stored_name="inner.cdg")
-        assert song.getMarkKey() == ("/path/to/songs.zip", "inner.cdg")
+        assert song.get_mark_key() == ("/path/to/songs.zip", "inner.cdg")
 
 
 class TestTitleStruct:
@@ -442,8 +442,8 @@ class TestAppYielderExtended:
 
     def test_yielder_yield_does_nothing(self):
         y = AppYielder()
-        y.Yield()  # Abstract, should not raise
+        y.do_yield()  # Abstract, should not raise
 
     def test_yielder_consider_yield(self):
         y = AppYielder()
-        y.ConsiderYield()  # Should not raise
+        y.consider_yield()  # Should not raise

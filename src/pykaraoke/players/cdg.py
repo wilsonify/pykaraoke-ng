@@ -53,12 +53,12 @@
 #       python pycdg.py /songs/theboxer.cdg
 #
 # You can also incorporate a CDG player in your own projects by
-# importing this module. The class cdgPlayer is exported by the
+# importing this module. The class CdgPlayer is exported by the
 # module. You can import and start it as follows:
 #   from pykaraoke.players import cdg
-#   player = cdg.cdgPlayer("/songs/theboxer.cdg")
-#   player.Play()
-# If you do this, you must also arrange to call manager.Poll()
+#   player = cdg.CdgPlayer("/songs/theboxer.cdg")
+#   player.play()
+# If you do this, you must also arrange to call manager.poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #
@@ -73,8 +73,8 @@
 # error popup window mechanism (or similar). If no callback is provided,
 # errors are printed to stdout. errorNotifyCallback should take one
 # parameter, the error string, e.g.:
-#   def errorPopup (ErrorString):
-#       msgBox (ErrorString)
+#   def errorPopup (error_string):
+#       msgBox (error_string)
 #
 # doneCallback can be used to register a callback so that the player
 # calls you back when the song is finished playing. The callback should
@@ -83,7 +83,7 @@
 #       msgBox ("Song is finished")
 #
 # To register callbacks, pass the functions in to the initialiser:
-#   cdgPlayer ("/songs/theboxer.cdg", errorPopup, songFinishedCallback)
+#   CdgPlayer ("/songs/theboxer.cdg", errorPopup, songFinishedCallback)
 # These parameters are optional and default to None.
 #
 # If the initialiser fails (e.g. the song file is not present), __init__
@@ -109,7 +109,7 @@
 
 # Previous implementations ran the player within a thread; this is no
 # longer the case.  Instead, it is the caller's responsibility to call
-# pycdg.manager.Poll() every once in a while to ensure that the player
+# pycdg.manager.poll() every once in a while to ensure that the player
 # gets enough CPU time to do its work.  Ideally, this should be at
 # least every 100 milliseconds or so to guarantee good video and audio
 # response time.
@@ -187,7 +187,7 @@ from pykaraoke.config.constants import (
     STATE_PLAYING,
 )
 from pykaraoke.core.manager import manager
-from pykaraoke.core.player import pykPlayer
+from pykaraoke.core.player import PykPlayer
 
 # Import the optimised C version if available, or fall back to Python
 try:
@@ -208,7 +208,7 @@ CDG_DISPLAY_HEIGHT = 192
 # (6x4 of 49x51 each). This is used to only update those tiles which
 # have changed on every screen update, thus reducing the CPU load of
 # screen updates. A bitmask of tiles requiring update is held in
-# cdgPlayer.UpdatedTiles.  This stores each of the 4 columns in
+# CdgPlayer.UpdatedTiles.  This stores each of the 4 columns in
 # separate bytes, with 6 bits used to represent the 6 rows.
 TILES_PER_ROW = 6
 TILES_PER_COL = 4
@@ -216,27 +216,27 @@ TILE_WIDTH = CDG_DISPLAY_WIDTH // TILES_PER_ROW
 TILE_HEIGHT = CDG_DISPLAY_HEIGHT // TILES_PER_COL
 
 
-# cdgPlayer Class
-class cdgPlayer(pykPlayer):
+# CdgPlayer Class
+class CdgPlayer(PykPlayer):
     # Initialise the player instace
     def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
+        PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
 
         sound_file_data = self._findSoundFile()
 
-        self.cdgFileData = self.SongDatas[0]
-        self.soundFileData = sound_file_data
+        self.cdgFileData = self.song_datas[0]
+        self.sound_file_data = sound_file_data
         self.soundLength = 0
 
         # Handle a bug in pygame (pre-1.7) which means that the position
         # timer carries on even when the song has been paused.
         self.pauseOffsetTime = 0
 
-        manager.InitPlayer(self)
-        manager.OpenDisplay()
+        manager.init_player(self)
+        manager.open_display()
         manager.surface.fill((0, 0, 0))
 
         # A working surface for blitting tiles, one at a time.
@@ -259,8 +259,8 @@ class cdgPlayer(pykPlayer):
             aux = aux_python
 
         # Open the cdg and sound files
-        self.packetReader = aux.CdgPacketReader(self.cdgFileData.GetData(), self.workingTile)
-        manager.setCpuSpeed("cdg")
+        self.packetReader = aux.CdgPacketReader(self.cdgFileData.get_data(), self.workingTile)
+        manager.set_cpu_speed("cdg")
 
         self._initAudio()
 
@@ -279,55 +279,55 @@ class cdgPlayer(pykPlayer):
 
         validexts = [".wav", ".ogg", ".mp3"]
         for ext in validexts:
-            for data in self.SongDatas:
-                if data.Ext == ext:
+            for data in self.song_datas:
+                if data.ext == ext:
                     return data
 
-        ErrorString = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
-        self.ErrorNotifyCallback(ErrorString)
+        error_string = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
+        self.error_notify_callback(error_string)
         raise FileNotFoundError("NoSoundFile")
 
     def _initAudio(self):
         """Initialise audio playback or set silent mode."""
-        if not self.soundFileData:
-            self.InternalOffsetTime = 0
+        if not self.sound_file_data:
+            self.internal_offset_time = 0
             return
 
         audioProperties = None
         if manager.settings.UseMp3Settings:
-            audioProperties = self.getAudioProperties(self.soundFileData)
+            audioProperties = self.getAudioProperties(self.sound_file_data)
         if audioProperties is None:
             audioProperties = (None, None, None)
         try:
-            manager.OpenAudio(*audioProperties)
-            audio_path = self.soundFileData.GetFilepath()
+            manager.open_audio(*audioProperties)
+            audio_path = self.sound_file_data.get_filepath()
             if isinstance(audio_path, str):
                 audio_path = audio_path.encode(sys.getfilesystemencoding())
             pygame.mixer.music.load(audio_path)
         except Exception:
-            self.Close()
+            self.close()
             raise
 
         pygame.mixer.music.set_endevent(pygame.USEREVENT)
-        self.InternalOffsetTime = -manager.GetAudioBufferMS()
+        self.internal_offset_time = -manager.get_audio_buffer_ms()
 
-    def doPlay(self):
-        if self.soundFileData:
+    def do_play(self):
+        if self.sound_file_data:
             pygame.mixer.music.play()
 
     # Pause the song - Use Pause() again to unpause
-    def doPause(self):
-        if self.soundFileData:
+    def do_pause(self):
+        if self.sound_file_data:
             pygame.mixer.music.pause()
-            self.PauseStartTime = self.GetPos()
+            self.PauseStartTime = self.get_pos()
 
-    def doUnpause(self):
-        if self.soundFileData:
-            self.pauseOffsetTime = self.pauseOffsetTime + (self.GetPos() - self.PauseStartTime)
+    def do_unpause(self):
+        if self.sound_file_data:
+            self.pauseOffsetTime = self.pauseOffsetTime + (self.get_pos() - self.PauseStartTime)
             pygame.mixer.music.unpause()
 
     # you must call Play() to restart. Blocks until pygame is initialised
-    def doRewind(self):
+    def do_rewind(self):
         # Reset the state of the packet-reading thread
         self.cdgReadPackets = 0
         self.cdgPacketsDue = 0
@@ -335,33 +335,33 @@ class cdgPlayer(pykPlayer):
         # No need for the Pause() fix anymore
         self.pauseOffsetTime = 0
         # Move file pointer to the beginning of the file
-        self.packetReader.Rewind()
+        self.packetReader.rewind()
 
-        if self.soundFileData:
+        if self.sound_file_data:
             # Actually stop the audio
             pygame.mixer.music.rewind()
             pygame.mixer.music.stop()
 
-    def GetLength(self):
+    def get_length(self):
         """Give the number of seconds in the song."""
         return self.soundLength
 
     # Get the current time (in milliseconds). Blocks if pygame is
     # not initialised yet.
-    def GetPos(self):
-        if self.soundFileData:
+    def get_pos(self):
+        if self.sound_file_data:
             return pygame.mixer.music.get_pos()
         else:
-            return pykPlayer.GetPos(self)
+            return PykPlayer.get_pos(self)
 
-    def SetupOptions(self, usage=None):
+    def setup_options(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
         if usage is None:
             usage = "%prog [options] <CDG file>"
-        parser = pykPlayer.SetupOptions(self, usage=usage)
+        parser = PykPlayer.setup_options(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--font-scale")
@@ -371,25 +371,25 @@ class cdgPlayer(pykPlayer):
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
-        if self.soundFileData and manager.audioProps:
+        if self.sound_file_data and manager.audioProps:
             pygame.mixer.music.stop()
 
         # Make sure our surfaces are deallocated before we call up to
-        # CloseDisplay(), otherwise bad things can happen.
+        # close_display(), otherwise bad things can happen.
         self.workingSurface = None
         self.workingTile = None
         self.packetReader = None
-        pykPlayer.shutdown(self)
+        PykPlayer.shutdown(self)
 
-    def doStuff(self):
-        pykPlayer.doStuff(self)
+    def do_stuff(self):
+        PykPlayer.do_stuff(self)
 
         # Check whether the songfile has moved on, if so
         # get the relevant CDG data and update the screen.
         if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
             self.curr_pos = (
-                self.GetPos()
-                + self.InternalOffsetTime
+                self.get_pos()
+                + self.internal_offset_time
                 + manager.settings.SyncDelayMs
                 - self.pauseOffsetTime
             )
@@ -400,7 +400,7 @@ class cdgPlayer(pykPlayer):
                 if not self.packetReader.DoPackets(numPackets):
                     # End of file.
                     # print "End of file on cdg."
-                    self.Close()
+                    self.close()
                 self.cdgReadPackets += numPackets
 
             # Check if any screen updates are now due.
@@ -408,7 +408,7 @@ class cdgPlayer(pykPlayer):
                 self.cdgDisplayUpdate()
                 self.LastPos = self.curr_pos
 
-    def handleEvent(self, event):
+    def handle_event(self, event):
         if (
             event.type == pygame.KEYDOWN
             and event.key == pygame.K_RETURN
@@ -418,12 +418,12 @@ class cdgPlayer(pykPlayer):
             )
         ):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
-            self.Close()
+            self.close()
             return
 
-        pykPlayer.handleEvent(self, event)
+        PykPlayer.handle_event(self, event)
 
-    def doResize(self, newSize):
+    def do_resize(self, new_size):
         self.computeDisplaySize()
 
         if self.borderColour is not None:
@@ -471,7 +471,7 @@ class cdgPlayer(pykPlayer):
             self.displayTileWidth = scaledWidth / TILES_PER_ROW
             self.displayTileHeight = scaledHeight / TILES_PER_COL
 
-    def getAudioProperties(self, soundFileData):
+    def getAudioProperties(self, sound_file_data):
         """Attempts to determine the samplerate, etc., from the
         specified filename.  It would be nice to know this so we can
         configure the audio hardware to the same properties, to
@@ -483,12 +483,12 @@ class cdgPlayer(pykPlayer):
         # try to figure it out ourselves.
 
         audioProperties = None
-        if soundFileData.Ext == ".mp3":
-            audioProperties = self.getMp3AudioProperties(soundFileData)
+        if sound_file_data.ext == ".mp3":
+            audioProperties = self.getMp3AudioProperties(sound_file_data)
 
         return audioProperties
 
-    def getMp3AudioProperties(self, soundFileData):
+    def getMp3AudioProperties(self, sound_file_data):
         """Attempts to determine the samplerate, etc., from the
         specified filename, which is known to be an mp3 file."""
 
@@ -501,7 +501,7 @@ class cdgPlayer(pykPlayer):
             return None
 
         # Open the file with mutagen
-        m = mutagen.mp3.MP3(soundFileData.GetFilepath())
+        m = mutagen.mp3.MP3(sound_file_data.get_filepath())
 
         # Pull out the song length
         self.soundLength = m.info.length
@@ -621,13 +621,13 @@ class cdgPlayer(pykPlayer):
             # Now scale and blit the whole screen.
             scaled = pygame.transform.rotozoom(self.workingSurface, 0, self.displayScale)
             manager.surface.blit(scaled, (self.displayRowOffset, self.displayColOffset))
-            manager.Flip()
+            manager.flip()
         elif len(rect_list) < 24:
             # Only update those areas which have changed
             if manager.display:
                 pygame.display.update(rect_list)
         else:
-            manager.Flip()
+            manager.flip()
 
 
 def default_error_print(error_string):
@@ -636,9 +636,9 @@ def default_error_print(error_string):
 
 # Can be called from the command line with the CDG filepath as parameter
 def main():
-    player = cdgPlayer(None, None)
-    player.Play()
-    manager.WaitForPlayer()
+    player = CdgPlayer(None, None)
+    player.play()
+    manager.wait_for_player()
 
 
 if __name__ == "__main__":

@@ -104,7 +104,7 @@ class TestCdgPacketReaderInit:
 
     def test_reader_has_rewind(self):
         reader = self._make_reader()
-        assert hasattr(reader, "Rewind")
+        assert hasattr(reader, "rewind")
 
     def test_reader_has_mark_tiles_dirty(self):
         reader = self._make_reader()
@@ -112,7 +112,7 @@ class TestCdgPacketReaderInit:
 
     def test_rewind_resets_state(self):
         reader = self._make_reader()
-        reader.Rewind()
+        reader.rewind()
         # Should not raise
 
 
@@ -130,5 +130,5 @@ class TestCdgPacketReaderMethods:
 
     def test_rewind_twice(self):
         reader = self._make_reader_with_data(bytes(24))
-        reader.Rewind()
-        reader.Rewind()  # Should be idempotent
+        reader.rewind()
+        reader.rewind()  # Should be idempotent

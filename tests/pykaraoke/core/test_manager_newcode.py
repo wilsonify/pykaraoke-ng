@@ -57,27 +57,27 @@ class TestGetVolumeNewCode:
 
 
 class TestGetAudioBufferMSNewCode:
-    """Tests refactored GetAudioBufferMS with _ and buffer_samples renames."""
+    """Tests refactored get_audio_buffer_ms with _ and buffer_samples renames."""
 
     def test_buffer_ms_with_audio_props(self):
         """Verify the renamed variable buffer_samples computes correctly."""
         mgr = pykManager()
         # audioProps = (frequency, size, channels, buffer_samples)
-        mgr.audioProps = (44100, -16, 2, 4096)
-        ms = mgr.GetAudioBufferMS()
+        mgr.audio_props = (44100, -16, 2, 4096)
+        ms = mgr.get_audio_buffer_ms()
         expected = 4096 * 1000 / (44100 * 2)
         assert abs(ms - expected) < 0.1
 
     def test_buffer_ms_without_audio_props(self):
         """Returns 0 when audioProps is None."""
         mgr = pykManager()
-        mgr.audioProps = None
-        assert mgr.GetAudioBufferMS() == 0
+        mgr.audio_props = None
+        assert mgr.get_audio_buffer_ms() == 0
 
     def test_buffer_ms_mono(self):
         mgr = pykManager()
-        mgr.audioProps = (22050, -16, 1, 2048)
-        ms = mgr.GetAudioBufferMS()
+        mgr.audio_props = (22050, -16, 1, 2048)
+        ms = mgr.get_audio_buffer_ms()
         expected = 2048 * 1000 / (22050 * 1)
         assert abs(ms - expected) < 0.1
 
@@ -97,24 +97,24 @@ class TestManagerImports:
 
 
 class TestManagerCpuSpeedRemovedPass:
-    """Test setCpuSpeed (which had unnecessary pass removed)."""
+    """Test set_cpu_speed (which had unnecessary pass removed)."""
 
     def test_set_cpu_speed_no_gp2x(self):
-        """On non-GP2X, setCpuSpeed is a no-op."""
+        """On non-GP2X, set_cpu_speed is a no-op."""
         mgr = pykManager()
         mgr.settings = MagicMock()
-        mgr.setCpuSpeed("playing")  # Should not raise
+        mgr.set_cpu_speed("playing")  # Should not raise
 
     def test_set_cpu_speed_none(self):
         mgr = pykManager()
         mgr.settings = MagicMock()
-        mgr.setCpuSpeed(None)  # Should not raise
+        mgr.set_cpu_speed(None)  # Should not raise
 
     def test_set_cpu_speed_same_speed_noop(self):
         mgr = pykManager()
         mgr.settings = MagicMock()
-        mgr.cpuSpeed = "playing"
-        mgr.setCpuSpeed("playing")  # No change, returns early
+        mgr.cpu_speed = "playing"
+        mgr.set_cpu_speed("playing")  # No change, returns early
 
 
 class TestManagerMapToComprehension:
@@ -134,11 +134,11 @@ class TestManagerOpenCloseDisplay:
     def test_close_display_without_open(self):
         mgr = pykManager()
         mgr.display = None
-        mgr.CloseDisplay()  # Should not raise
+        mgr.close_display()  # Should not raise
 
     def test_close_audio_without_open(self):
         mgr = pykManager()
-        mgr.CloseAudio()  # Should not raise
+        mgr.close_audio()  # Should not raise
 
 
 class TestManagerQuitNewCode:
@@ -149,7 +149,7 @@ class TestManagerQuitNewCode:
         mock_player = MagicMock()
         mgr.player = mock_player
         mgr.initialized = False
-        mgr.Quit()
+        mgr.quit()
         mock_player.shutdown.assert_called_once()
         assert mgr.player is None
 
@@ -157,5 +157,5 @@ class TestManagerQuitNewCode:
         mgr = pykManager()
         mgr.initialized = True
         mgr.player = None
-        mgr.Quit()
+        mgr.quit()
         assert mgr.initialized is False

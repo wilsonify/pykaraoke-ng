@@ -41,23 +41,23 @@ class TestManagerInit:
 
     def test_display_size_default(self):
         mgr = pykManager()
-        assert mgr.displaySize is None
+        assert mgr.display_size is None
 
     def test_display_flags_default(self):
         mgr = pykManager()
-        assert mgr.displayFlags == 0
+        assert mgr.display_flags == 0
 
     def test_display_depth_default(self):
         mgr = pykManager()
-        assert mgr.displayDepth == 0
+        assert mgr.display_depth == 0
 
     def test_font_path_exists(self):
         mgr = pykManager()
-        assert hasattr(mgr, "FontPath")
+        assert hasattr(mgr, "font_path")
 
     def test_icon_path_exists(self):
         mgr = pykManager()
-        assert hasattr(mgr, "IconPath")
+        assert hasattr(mgr, "icon_path")
 
 
 class TestManagerVolume:
@@ -83,13 +83,13 @@ class TestManagerVolume:
     def test_volume_up(self):
         mgr = pykManager()
         mgr.set_volume(0.5)
-        mgr.VolumeUp()
+        mgr.volume_up()
         v = mgr.get_volume()
         assert v >= 0.5  # Should have gone up
 
     def test_volume_down(self):
         mgr = pykManager()
-        mgr.VolumeDown()  # Should not raise
+        mgr.volume_down()  # Should not raise
 
 
 class TestManagerFontScale:
@@ -100,7 +100,7 @@ class TestManagerFontScale:
         opts = MagicMock()
         opts.font_scale = 1.0
         mgr.options = opts
-        fs = mgr.GetFontScale()
+        fs = mgr.get_font_scale()
         assert fs == 1.0
 
     def test_zoom_font(self):
@@ -108,8 +108,8 @@ class TestManagerFontScale:
         opts = MagicMock()
         opts.font_scale = 1.0
         mgr.options = opts
-        mgr.ZoomFont(2.0)
-        fs = mgr.GetFontScale()
+        mgr.zoom_font(2.0)
+        fs = mgr.get_font_scale()
         assert fs == 2.0
 
     def test_zoom_font_multiply(self):
@@ -117,9 +117,9 @@ class TestManagerFontScale:
         opts = MagicMock()
         opts.font_scale = 1.0
         mgr.options = opts
-        mgr.ZoomFont(2.0)
-        mgr.ZoomFont(0.5)
-        fs = mgr.GetFontScale()
+        mgr.zoom_font(2.0)
+        mgr.zoom_font(0.5)
+        fs = mgr.get_font_scale()
         assert abs(fs - 1.0) < 0.01
 
 
@@ -129,12 +129,12 @@ class TestManagerPlayer:
     def test_init_player(self):
         mgr = pykManager()
         mock_player = MagicMock()
-        mgr.InitPlayer(mock_player)
+        mgr.init_player(mock_player)
         assert mgr.player == mock_player
 
     def test_close_display_no_display(self):
         mgr = pykManager()
-        mgr.CloseDisplay()  # Should not raise
+        mgr.close_display()  # Should not raise
 
 
 class TestManagerWordWrap:
@@ -144,7 +144,7 @@ class TestManagerWordWrap:
         mgr = pykManager()
         mock_font = MagicMock()
         mock_font.size.return_value = (100, 20)
-        lines = mgr.WordWrapText("Hello World", mock_font, 500)
+        lines = mgr.word_wrap_text("Hello World", mock_font, 500)
         assert len(lines) == 1
         assert lines[0] == "Hello World"
 
@@ -152,14 +152,14 @@ class TestManagerWordWrap:
         mgr = pykManager()
         mock_font = MagicMock()
         mock_font.size.return_value = (100, 20)
-        lines = mgr.WordWrapText("Line1\nLine2\nLine3", mock_font, 500)
+        lines = mgr.word_wrap_text("Line1\nLine2\nLine3", mock_font, 500)
         assert len(lines) == 3
 
     def test_word_wrap_empty(self):
         mgr = pykManager()
         mock_font = MagicMock()
         mock_font.size.return_value = (0, 20)
-        lines = mgr.WordWrapText("", mock_font, 500)
+        lines = mgr.word_wrap_text("", mock_font, 500)
         assert lines == []
 
 
@@ -168,4 +168,4 @@ class TestManagerQuit:
 
     def test_quit_without_init(self):
         mgr = pykManager()
-        mgr.Quit()  # Should not raise even without initialization
+        mgr.quit()  # Should not raise even without initialization

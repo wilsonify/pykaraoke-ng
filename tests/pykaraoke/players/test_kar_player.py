@@ -23,12 +23,12 @@ class TestKarModule:
     def test_has_mid_player_class(self):
         from pykaraoke.players import kar
 
-        assert hasattr(kar, "midPlayer")
+        assert hasattr(kar, "MidPlayer")
 
     def test_mid_player_is_class(self):
         from pykaraoke.players import kar
 
-        assert isinstance(kar.midPlayer, type)
+        assert isinstance(kar.MidPlayer, type)
 
 
 class TestMidiConstants:

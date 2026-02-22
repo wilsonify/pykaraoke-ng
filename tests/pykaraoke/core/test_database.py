@@ -39,20 +39,20 @@ class TestAppYielder:
 
     def test_init(self):
         yielder = AppYielder()
-        assert hasattr(yielder, "lastYield")
+        assert hasattr(yielder, "last_yield")
 
     def test_consider_yield_short_interval(self):
-        """ConsiderYield should not call Yield if interval is short."""
+        """consider_yield should not call Yield if interval is short."""
         yielder = AppYielder()
-        # lastYield is set to current ticks, so ConsiderYield should not yield
-        yielder.Yield = MagicMock()
-        yielder.ConsiderYield()
+        # last_yield is set to current ticks, so consider_yield should not yield
+        yielder.do_yield = MagicMock()
+        yielder.consider_yield()
         # With default ticks returning 0, it won't yield since (0 - 0) < YIELD_INTERVAL
 
     def test_yield_base_does_nothing(self):
-        """Base AppYielder.Yield() should do nothing (abstract)."""
+        """Base AppYielder.do_yield() should do nothing (abstract)."""
         yielder = AppYielder()
-        yielder.Yield()  # Should not raise
+        yielder.do_yield()  # Should not raise
 
 
 class TestBusyCancelDialog:
@@ -60,13 +60,13 @@ class TestBusyCancelDialog:
 
     def test_init(self):
         dialog = BusyCancelDialog()
-        assert dialog.Clicked is False
+        assert dialog.clicked is False
 
     def test_set_progress(self):
-        """SetProgress should be callable."""
+        """set_progress should be callable."""
         dialog = BusyCancelDialog()
-        if hasattr(dialog, "SetProgress"):
-            dialog.SetProgress("test", 0.5)
+        if hasattr(dialog, "set_progress"):
+            dialog.set_progress("test", 0.5)
 
 
 class TestSongSettings:
@@ -74,8 +74,8 @@ class TestSongSettings:
 
     def test_default_settings_created(self):
         settings = SongSettings()
-        assert hasattr(settings, "FolderList")
-        assert isinstance(settings.FolderList, list)
+        assert hasattr(settings, "folder_list")
+        assert isinstance(settings.folder_list, list)
 
     def test_default_sample_rate(self):
         settings = SongSettings()
@@ -115,13 +115,13 @@ class TestSongSettings:
 
     def test_default_look_inside_zips(self):
         settings = SongSettings()
-        assert hasattr(settings, "LookInsideZips")
-        assert isinstance(settings.LookInsideZips, bool)
+        assert hasattr(settings, "look_inside_zips")
+        assert isinstance(settings.look_inside_zips, bool)
 
     def test_default_read_titles_txt(self):
         settings = SongSettings()
-        assert hasattr(settings, "ReadTitlesTxt")
-        assert isinstance(settings.ReadTitlesTxt, bool)
+        assert hasattr(settings, "read_titles_txt")
+        assert isinstance(settings.read_titles_txt, bool)
 
 
 class TestSongStructBasic:
@@ -168,11 +168,11 @@ class TestSongStructBasic:
             pass
 
     def test_song_mark_key(self):
-        """SongStruct.getMarkKey() should return (Filepath, ZipStoredName)."""
+        """SongStruct.get_mark_key() should return (Filepath, ZipStoredName)."""
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/song.cdg", settings)
-            assert song1.getMarkKey() == ("/path/to/song.cdg", None)
+            assert song1.get_mark_key() == ("/path/to/song.cdg", None)
         except (KeyError, ValueError):
             pass
 
@@ -198,7 +198,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("Hello World")
+            key = song.make_sort_key("Hello World")
             assert key == "hello world"
         except (KeyError, ValueError):
             pass
@@ -208,7 +208,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("The Beatles")
+            key = song.make_sort_key("The Beatles")
             assert key == "beatles"
         except (KeyError, ValueError):
             pass
@@ -218,7 +218,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("A Song")
+            key = song.make_sort_key("A Song")
             assert key == "song"
         except (KeyError, ValueError):
             pass
@@ -228,7 +228,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("An Example")
+            key = song.make_sort_key("An Example")
             assert key == "example"
         except (KeyError, ValueError):
             pass
@@ -238,7 +238,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("  Hello  ")
+            key = song.make_sort_key("  Hello  ")
             assert key == "hello"
         except (KeyError, ValueError):
             pass
@@ -248,7 +248,7 @@ class TestSongStructParsing:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            key = song.MakeSortKey("(Bonus) Track Name")
+            key = song.make_sort_key("(Bonus) Track Name")
             assert "track name" in key
         except (KeyError, ValueError):
             pass
@@ -260,7 +260,7 @@ class TestSongStructParsing:
         settings.CdgFileNameType = 0
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            disc = song.ParseDisc("DISC01-01-Artist-Title", settings)
+            disc = song.parse_disc("DISC01-01-Artist-Title", settings)
             assert disc == "DISC01"
         except (KeyError, ValueError):
             pass
@@ -272,7 +272,7 @@ class TestSongStructParsing:
         settings.CdgFileNameType = 1
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            disc = song.ParseDisc("DISC01-Artist-Title", settings)
+            disc = song.parse_disc("DISC01-Artist-Title", settings)
             # After fix: should use filepath[:-2]
             assert isinstance(disc, str)
         except (KeyError, ValueError):
@@ -285,7 +285,7 @@ class TestSongStructParsing:
         settings.CdgFileNameType = 0
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            track = song.ParseTrack("DISC01-02-Artist-Title", settings)
+            track = song.parse_track("DISC01-02-Artist-Title", settings)
             assert track == "02"
         except (KeyError, ValueError):
             pass
@@ -297,7 +297,7 @@ class TestSongStructParsing:
         settings.CdgFileNameType = 1
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            track = song.ParseTrack("DISC01-Artist-Title", settings)
+            track = song.parse_track("DISC01-Artist-Title", settings)
             # After fix: should use filepath[-2:]
             assert isinstance(track, str)
         except (KeyError, ValueError):
@@ -357,14 +357,14 @@ class TestSongDBInit:
     def test_songdb_has_save_dir(self):
         """SongDB should determine a save directory."""
         db = SongDB()
-        assert hasattr(db, "SaveDir")
-        assert isinstance(db.SaveDir, str)
+        assert hasattr(db, "save_dir")
+        assert isinstance(db.save_dir, str)
 
     def test_songdb_has_temp_dir(self):
         """SongDB should determine a temp directory."""
         db = SongDB()
-        assert hasattr(db, "TempDir")
-        assert isinstance(db.TempDir, str)
+        assert hasattr(db, "temp_dir")
+        assert isinstance(db.temp_dir, str)
 
 
 class TestSongDBOperations:
@@ -373,65 +373,65 @@ class TestSongDBOperations:
     def test_folder_add(self):
         """FolderAdd should add a folder to the search list."""
         db = SongDB()
-        db.FolderAdd("/path/to/songs")
-        assert "/path/to/songs" in db.Settings.FolderList
+        db.folder_add("/path/to/songs")
+        assert "/path/to/songs" in db.Settings.folder_list
 
     def test_folder_add_no_duplicates(self):
         """FolderAdd should not add duplicate folders."""
         db = SongDB()
-        db.FolderAdd("/path/to/songs")
-        db.FolderAdd("/path/to/songs")
-        assert db.Settings.FolderList.count("/path/to/songs") == 1
+        db.folder_add("/path/to/songs")
+        db.folder_add("/path/to/songs")
+        assert db.Settings.folder_list.count("/path/to/songs") == 1
 
     def test_folder_del(self):
         """FolderDel should remove a folder from the search list."""
         db = SongDB()
-        db.FolderAdd("/path/to/songs")
-        db.FolderDel("/path/to/songs")
-        assert "/path/to/songs" not in db.Settings.FolderList
+        db.folder_add("/path/to/songs")
+        db.folder_del("/path/to/songs")
+        assert "/path/to/songs" not in db.Settings.folder_list
 
     def test_is_extension_valid_cdg(self):
         """IsExtensionValid should recognize .cdg files."""
         db = SongDB()
         # CDG extension should be valid
-        result = db.IsExtensionValid(".cdg")
+        result = db.is_extension_valid(".cdg")
         assert isinstance(result, bool)
 
     def test_get_save_directory_env_override(self):
         """getSaveDirectory should respect PYKARAOKE_DIR env var."""
         db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_DIR": "/custom/path"}):
-            save_dir = db.getSaveDirectory()
+            save_dir = db.get_save_directory()
             assert save_dir == "/custom/path"
 
     def test_get_temp_directory_env_override(self):
         """getTempDirectory should respect PYKARAOKE_TEMP_DIR env var."""
         db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_TEMP_DIR": "/custom/temp"}):
-            temp_dir = db.getTempDirectory()
+            temp_dir = db.get_temp_directory()
             assert temp_dir == "/custom/temp"
 
     def test_save_settings_creates_directory(self):
         """SaveSettings should create save directory if needed."""
         db = SongDB()
         with tempfile.TemporaryDirectory() as tmpdir:
-            db.SaveDir = os.path.join(tmpdir, "pykaraoke_test")
-            db.SaveSettings()
-            assert os.path.exists(db.SaveDir)
+            db.save_dir = os.path.join(tmpdir, "pykaraoke_test")
+            db.save_settings()
+            assert os.path.exists(db.save_dir)
 
     def test_save_settings_writes_file(self):
         """SaveSettings should create settings.dat file."""
         db = SongDB()
         with tempfile.TemporaryDirectory() as tmpdir:
-            db.SaveDir = tmpdir
-            db.SaveSettings()
+            db.save_dir = tmpdir
+            db.save_settings()
             settings_path = os.path.join(tmpdir, "settings.dat")
             assert os.path.exists(settings_path)
 
     def test_load_settings_nonexistent_dir(self):
         """LoadSettings should handle nonexistent directory gracefully."""
         db = SongDB()
-        db.SaveDir = "/nonexistent/path/that/does/not/exist"
+        db.save_dir = "/nonexistent/path/that/does/not/exist"
         # Should not raise
         try:
             db.load_settings(None)
@@ -445,8 +445,8 @@ class TestSongDBZipCache:
     def test_zip_files_list_initialized(self):
         """SongDB should initialize with empty zip file cache."""
         db = SongDB()
-        assert hasattr(db, "ZipFiles")
-        assert len(db.ZipFiles) == 0
+        assert hasattr(db, "zip_files")
+        assert len(db.zip_files) == 0
 
 
 class TestConstants:
