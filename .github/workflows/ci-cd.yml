@@ -152,12 +152,14 @@ jobs:
           fetch-depth: 0
 
       - name: Validate spec completion
+        env:
+          PR_HEAD_REF: ${{ github.head_ref }}
         run: |
+          set -euo pipefail
           chmod +x specs/ci/validate-spec-completion.sh
-          # Extract branch name from PR head ref and sanitize it
-          BRANCH="${{ github.head_ref }}"
-          SAFE_BRANCH=$(echo "$BRANCH" | tr -cd '[:alnum:]._-/')
-          ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH"
+          # Sanitize inside the shell using a quoted variable
+          SAFE_BRANCH_NAME="$(printf '%s' "$PR_HEAD_REF" | tr -cd '[:alnum:]._-/')"
+          ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH_NAME"
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 2: SonarQube — static analysis + quality gate enforcement.
