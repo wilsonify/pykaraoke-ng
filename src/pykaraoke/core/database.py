@@ -1169,57 +1169,45 @@ class SongDB:
         self.TitlesFiles.append(bestTitles)
         return bestTitles
 
-    def LoadSettings(self, errorCallback):
+    def load_settings(self, error_callback):
         """Load the personal settings (but not yet the database)."""
-
-        # Load the settings file
         settings_filepath = os.path.join(self.SaveDir, "settings.dat")
-        if os.path.exists(settings_filepath):
-            file = open(settings_filepath)
-            loadsettings = SettingsStruct()
-            # We use eval to evaluate the settings file.  This is
-            # very easy and powerful, though it does mean we
-            # execute whatever arbitrary Python code a malicious
-            # user might have put in there.  On the other hand,
-            # it's the user's own machine, and this isn't any less
-            # secure than using cPickle to decode the file (which
-            # basically does the same thing anyway).
+        if not os.path.exists(settings_filepath):
+            return
+        loadsettings = self._parse_settings_file(settings_filepath)
+        message = self._validate_settings_version(loadsettings)
+        if message:
+            if error_callback:
+                error_callback(message)
+            else:
+                print(message)
+
+    def _parse_settings_file(self, settings_filepath):
+        loadsettings = SettingsStruct()
+        with open(settings_filepath) as file:
             for line in file:
                 if "=" not in line:
                     continue
                 key, value = line.split("=", 1)
                 key = key.strip()
-
-                # Ignore any definitions for keys we don't already
-                # have.  This allows us to phase out old config values
-                # we no longer use.
                 if not hasattr(loadsettings, key):
                     continue
-
                 try:
-                    # Use ast.literal_eval for safe evaluation of Python literals
                     import ast
                     value = ast.literal_eval(value)
                 except (ValueError, SyntaxError):
-                    # Ignore anything that isn't valid Python literal.
                     print("Invalid value for %s" % (key))
                     continue
-
                 setattr(loadsettings, key, value)
+        return loadsettings
 
-            # Check settings are for the current version.
-            message = None
-            if loadsettings:
-                if loadsettings.Version == SETTINGS_VERSION:
-                    self.Settings = loadsettings
-                else:
-                    message = "New version of PyKaraoke, clearing settings"
-
-            if message:
-                if errorCallback:
-                    errorCallback(message)
-                else:
-                    print(message)
+    def _validate_settings_version(self, loadsettings):
+        if loadsettings and loadsettings.Version == SETTINGS_VERSION:
+            self.Settings = loadsettings
+            return None
+        elif loadsettings:
+            return "New version of PyKaraoke, clearing settings"
+        return None
 
     def LoadDatabase(self, errorCallback):
         """Load the saved database."""
