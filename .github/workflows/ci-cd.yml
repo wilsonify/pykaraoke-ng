@@ -259,6 +259,7 @@ jobs:
     name: Build / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     needs: [integration-tests]
+    if: ${{ !cancelled() && needs.integration-tests.result == 'success' }}
     permissions:
       contents: read
     strategy:
@@ -339,6 +340,7 @@ jobs:
     name: E2E Tests / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     needs: [build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     permissions:
       contents: read
     strategy:
