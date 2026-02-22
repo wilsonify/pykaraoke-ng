@@ -183,7 +183,7 @@ class TestSongStructBasic:
             song = SongStruct(
                 "/path/to/songs.zip",
                 settings,
-                ZipStoredName="artist - title.cdg",
+                zip_stored_name="artist - title.cdg",
             )
             assert song.ZipStoredName == "artist - title.cdg"
         except (KeyError, ValueError):
@@ -304,37 +304,37 @@ class TestSongStructParsing:
             pass
 
     def test_lt_comparison(self):
-        """SongStruct should support < comparison for sorting when fileSortKey is set."""
+        """SongStruct should support < comparison for sorting when file_sort_key is set."""
         import pykaraoke.core.database as db_module
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/a_song.cdg", settings)
             song2 = SongStruct("/path/to/b_song.cdg", settings)
-            # Set the global fileSortKey function
-            old_key = db_module.fileSortKey
-            db_module.fileSortKey = lambda s: s.DisplayFilename.lower()
+            # Set the global file_sort_key function
+            old_key = db_module.file_sort_key
+            db_module.file_sort_key = lambda s: s.DisplayFilename.lower()
             try:
                 result = song1 < song2
                 assert isinstance(result, bool)
             finally:
-                db_module.fileSortKey = old_key
+                db_module.file_sort_key = old_key
         except (KeyError, ValueError):
             pass
 
     def test_eq_comparison(self):
-        """SongStruct should support == comparison when fileSortKey is set."""
+        """SongStruct should support == comparison when file_sort_key is set."""
         import pykaraoke.core.database as db_module
         settings = SongSettings()
         try:
             song1 = SongStruct("/path/to/song.cdg", settings)
             song2 = SongStruct("/path/to/song.cdg", settings)
-            old_key = db_module.fileSortKey
-            db_module.fileSortKey = lambda s: s.DisplayFilename.lower()
+            old_key = db_module.file_sort_key
+            db_module.file_sort_key = lambda s: s.DisplayFilename.lower()
             try:
                 result = song1 == song2
                 assert isinstance(result, bool)
             finally:
-                db_module.fileSortKey = old_key
+                db_module.file_sort_key = old_key
         except (KeyError, ValueError):
             pass
 

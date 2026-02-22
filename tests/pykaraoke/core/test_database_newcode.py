@@ -106,8 +106,8 @@ class TestSongStructComparisonNewCode:
     """Tests the refactored __lt__ and __eq__ methods."""
 
     def _set_sort_key(self):
-        """Set fileSortKey to use Filepath for sorting."""
-        db_module.fileSortKey = lambda s: s.Filepath
+        """Set file_sort_key to use Filepath for sorting."""
+        db_module.file_sort_key = lambda s: s.Filepath
 
     def test_lt_different_keys(self):
         self._set_sort_key()

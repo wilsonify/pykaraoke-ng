@@ -382,18 +382,18 @@ class TestSongStructExtended:
 
     def test_song_struct_zip_stored_name(self):
         settings = SettingsStruct()
-        song = SongStruct("/path/to/songs.zip", settings, ZipStoredName="inner.cdg")
+        song = SongStruct("/path/to/songs.zip", settings, zip_stored_name="inner.cdg")
         assert song.ZipStoredName == "inner.cdg"
         assert song.DisplayFilename == "inner.cdg"
 
     def test_song_struct_title(self):
         settings = SettingsStruct()
-        song = SongStruct("/path/to/song.cdg", settings, Title="My Title")
+        song = SongStruct("/path/to/song.cdg", settings, title="My Title")
         assert song.Title == "My Title"
 
     def test_song_struct_artist(self):
         settings = SettingsStruct()
-        song = SongStruct("/path/to/song.cdg", settings, Artist="My Artist")
+        song = SongStruct("/path/to/song.cdg", settings, artist="My Artist")
         assert song.Artist == "My Artist"
 
     def test_song_struct_default_title(self):
@@ -418,7 +418,7 @@ class TestSongStructExtended:
 
     def test_song_struct_get_mark_key_zip(self):
         settings = SettingsStruct()
-        song = SongStruct("/path/to/songs.zip", settings, ZipStoredName="inner.cdg")
+        song = SongStruct("/path/to/songs.zip", settings, zip_stored_name="inner.cdg")
         assert song.getMarkKey() == ("/path/to/songs.zip", "inner.cdg")
 
 
@@ -432,7 +432,7 @@ class TestTitleStruct:
         assert ts.dirty is False
 
     def test_title_struct_zip(self):
-        ts = TitleStruct("/path/to/archive.zip", ZipStoredName="titles.txt")
+        ts = TitleStruct("/path/to/archive.zip", zip_stored_name="titles.txt")
         assert ts.Filepath == "/path/to/archive.zip"
         assert ts.ZipStoredName == "titles.txt"
 

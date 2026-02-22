@@ -43,8 +43,8 @@ def test_issue5_zip_stored_name_parsing_uses_inner_path():
     song = SongStruct(
         "/tmp/Archive.zip",
         settings,
-        ZipStoredName="English/Queen/Bohemian Rhapsody.kar",
-        DatabaseAdd=True,
+        zip_stored_name="English/Queen/Bohemian Rhapsody.kar",
+        database_add=True,
     )
 
     assert song.Artist == "Queen"
