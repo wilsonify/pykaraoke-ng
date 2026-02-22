@@ -1694,14 +1694,14 @@ class SongDB:
 
         getSongTuple, sortKeys, getSortKey, sort = self._resolveSortConfig(sort)
 
-        list = self.SortedLists.get(getSortKey, None)
-        if list is None:
+        song_list = self.SortedLists.get(getSortKey, None)
+        if song_list is None:
             if not allowResort:
                 return False
 
-            list = self.FullSongList[:] if sort == "filename" else self.UniqueSongList[:]
-            list.sort(key=getSortKey)
-            self.SortedLists[getSortKey] = list
+            song_list = self.FullSongList[:] if sort == "filename" else self.UniqueSongList[:]
+            song_list.sort(key=getSortKey)
+            self.SortedLists[getSortKey] = song_list
 
         global fileSortKey
         fileSortKey = getSortKey
@@ -1710,7 +1710,7 @@ class SongDB:
         self.SortKeys = sortKeys
         self.GetSongTuple = getSongTuple
         self.GetSortKey = getSortKey
-        self.SongList = list
+        self.SongList = song_list
 
         return True
 
@@ -1931,8 +1931,8 @@ class SongDB:
         songsByArtistTitle = {}
 
         for song in self.FullSongList:
-            tuple = (song.Artist.lower(), song.Title.lower())
-            songList = songsByArtistTitle.setdefault(tuple, [])
+            song_key = (song.Artist.lower(), song.Title.lower())
+            songList = songsByArtistTitle.setdefault(song_key, [])
             songList.append(song)
 
         # Now go through and sort each songList into order by type.

@@ -371,9 +371,8 @@ class cdgPlayer(pykPlayer):
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
-        if self.soundFileData:
-            if manager.audioProps:
-                pygame.mixer.music.stop()
+        if self.soundFileData and manager.audioProps:
+            pygame.mixer.music.stop()
 
         # Make sure our surfaces are deallocated before we call up to
         # CloseDisplay(), otherwise bad things can happen.
@@ -631,7 +630,7 @@ class cdgPlayer(pykPlayer):
             manager.Flip()
 
 
-def defaultErrorPrint(ErrorString):
+def default_error_print(ErrorString):
     print(ErrorString)
 
 

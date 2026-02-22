@@ -718,10 +718,9 @@ class pykManager:
         # the position works on MS Windows.
 
         # Don't set the environment variable on OSX.
-        if env != ENV_OSX:
-            if self.settings.PlayerPosition:
-                x, y = self.settings.PlayerPosition
-                os.environ["SDL_VIDEO_WINDOW_POS"] = "%s,%s" % (x, y)
+        if env != ENV_OSX and self.settings.PlayerPosition:
+            x, y = self.settings.PlayerPosition
+            os.environ["SDL_VIDEO_WINDOW_POS"] = "%s,%s" % (x, y)
 
         w, h = self.settings.PlayerSize
         self.displaySize = (w, h)

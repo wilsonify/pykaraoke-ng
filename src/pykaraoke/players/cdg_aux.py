@@ -85,9 +85,7 @@ class CdgPacket:
     def __init__(self, packetData):
         self.command = packetData[0]
         self.instruction = packetData[1]
-        # self.parityQ = packetData[2:4]
         self.data = packetData[4:20]
-        # self.parity = packetData[20:24]
 
 
 class CdgPacketReader:

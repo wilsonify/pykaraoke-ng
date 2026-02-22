@@ -177,9 +177,7 @@ class TestBackendProcessIntegration:
             proc.wait(timeout=2)
 
             # If poll_result is None, process is running
-            if poll_result is None:
-                assert True  # Server started successfully
-            else:
+            if poll_result is not None:
                 pytest.skip("Backend startup failed")
         except Exception as e:
             pytest.skip(f"Integration test - requires full environment: {e}")

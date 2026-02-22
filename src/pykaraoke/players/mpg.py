@@ -358,6 +358,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-    # import profile
-    # result = profile.run('main()', 'pympg.prof')
-    # sys.exit(result)

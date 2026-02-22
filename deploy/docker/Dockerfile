@@ -146,10 +146,12 @@ ENV PYTHONPATH=/app/src
 ENV CARGO_HOME=/app/.cargo
 ENV RUSTUP_HOME=/app/.rustup
 
-WORKDIR /app/tauri
+WORKDIR /app/tauri/src-tauri
 
 # Pre-fetch Rust dependencies for caching
-RUN cd src-tauri && cargo fetch
+RUN cargo fetch
+
+WORKDIR /app/tauri
 
 # Default: interactive shell for development
 CMD ["bash"]

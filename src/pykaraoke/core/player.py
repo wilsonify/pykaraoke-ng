@@ -262,12 +262,12 @@ class pykPlayer:
 
         # Convert the filename to a pattern.
         if "#" in filename:
-            hash = filename.index("#")
-            end = hash
+            hash_pos = filename.index("#")
+            end = hash_pos
             while end < len(filename) and filename[end] == "#":
                 end += 1
-            count = end - hash
-            filename = filename[:hash] + "%0" + str(count) + "d" + filename[end:]
+            count = end - hash_pos
+            filename = filename[:hash_pos] + "%0" + str(count) + "d" + filename[end:]
         else:
             # There's no hash in the filename.
             if self.dumpPPM:
