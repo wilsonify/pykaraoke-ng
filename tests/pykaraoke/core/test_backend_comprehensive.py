@@ -338,11 +338,11 @@ class TestBackendGetState:
     def test_song_to_dict_with_mock_song(self):
         backend = self._get_backend()
         mock_song = MagicMock()
-        mock_song.Title = "Test Song"
-        mock_song.Artist = "Test Artist"
-        mock_song.DisplayFilename = "test.cdg"
-        mock_song.Filepath = "/path/test.cdg"
-        mock_song.ZipStoredName = None
+        mock_song.title = "Test Song"
+        mock_song.artist = "Test Artist"
+        mock_song.display_filename = "test.cdg"
+        mock_song.filepath = "/path/test.cdg"
+        mock_song.zip_stored_name = None
         result = backend._song_to_dict(mock_song)
         assert result["title"] == "Test Song"
         assert result["artist"] == "Test Artist"

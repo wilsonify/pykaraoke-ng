@@ -9,14 +9,14 @@ class MockSettings:
     """Mock settings object for testing without pygame dependencies."""
 
     def __init__(self, file_name_type=0, derive_info=True):
-        self.CdgDeriveSongInformation = derive_info
-        self.CdgFileNameType = file_name_type
-        self.ExcludeNonMatchingFilenames = False
-        self.KarExtensions = [".kar", ".mid"]
-        self.CdgExtensions = [".cdg"]
-        self.MpgExtensions = [".mpg", ".mpeg", ".avi"]
-        self.FilesystemCoding = "utf-8"
-        self.ZipfileCoding = "cp1252"
+        self.cdg_derive_song_information = derive_info
+        self.cdg_file_name_type = file_name_type
+        self.exclude_non_matching_filenames = False
+        self.kar_extensions = [".kar", ".mid"]
+        self.cdg_extensions = [".cdg"]
+        self.mpg_extensions = [".mpg", ".mpeg", ".avi"]
+        self.filesystem_coding = "utf-8"
+        self.zipfile_coding = "cp1252"
 
 
 class TestFileNameParsing:
@@ -102,26 +102,26 @@ class TestFileExtensions:
     def test_kar_extensions(self):
         """Test KAR file extensions."""
         settings = MockSettings()
-        assert ".kar" in settings.KarExtensions
-        assert ".mid" in settings.KarExtensions
+        assert ".kar" in settings.kar_extensions
+        assert ".mid" in settings.kar_extensions
 
     def test_cdg_extensions(self):
         """Test CDG file extensions."""
         settings = MockSettings()
-        assert ".cdg" in settings.CdgExtensions
+        assert ".cdg" in settings.cdg_extensions
 
     def test_mpg_extensions(self):
         """Test MPG file extensions."""
         settings = MockSettings()
-        assert ".mpg" in settings.MpgExtensions
-        assert ".mpeg" in settings.MpgExtensions
-        assert ".avi" in settings.MpgExtensions
+        assert ".mpg" in settings.mpg_extensions
+        assert ".mpeg" in settings.mpg_extensions
+        assert ".avi" in settings.mpg_extensions
 
     def test_extension_case_handling(self):
         """Test that extensions are stored in lowercase."""
         settings = MockSettings()
 
-        for ext in settings.KarExtensions + settings.CdgExtensions + settings.MpgExtensions:
+        for ext in settings.kar_extensions + settings.cdg_extensions + settings.mpg_extensions:
             assert ext == ext.lower(), f"Extension {ext} should be lowercase"
 
     def test_extension_detection(self):

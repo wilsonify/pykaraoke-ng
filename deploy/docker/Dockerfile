@@ -90,41 +90,33 @@ FROM rust:1.75-bookworm AS tauri-dev
 
 # Install system dependencies for Tauri
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Build essentials
     build-essential \
-    pkg-config \
-    # Tauri/WebKit dependencies
-    libwebkit2gtk-4.0-dev \
-    libgtk-3-dev \
+    curl \
+    git \
+    libasound2-dev \
     libayatana-appindicator3-dev \
+    libgtk-3-dev \
     librsvg2-dev \
-    # Audio/Video dependencies
     libsdl2-dev \
     libsdl2-image-dev \
     libsdl2-mixer-dev \
     libsdl2-ttf-dev \
-    libasound2-dev \
-    # Python runtime
+    libwebkit2gtk-4.0-dev \
+    libxcb1-dev \
+    libxi-dev \
+    libxrandr-dev \
+    pkg-config \
     python3 \
     python3-pip \
     python3-venv \
-    # GUI tools
-    libxcb1-dev \
-    libxrandr-dev \
-    libxi-dev \
-    # Utilities
-    curl \
     wget \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js for potential frontend tooling
+# Install Node.js and Tauri CLI
 RUN curl -fsSL --proto '=https' https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Tauri CLI
-RUN cargo install tauri-cli
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo install tauri-cli
 
 # Install uv for Python
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -163,22 +155,18 @@ FROM debian:bookworm-slim AS tauri-runtime
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # WebKit/GTK runtime
-    libwebkit2gtk-4.0-37 \
-    libgtk-3-0 \
-    libayatana-appindicator3-1 \
-    librsvg2-2 \
-    # Audio runtime
     libasound2 \
+    libayatana-appindicator3-1 \
+    libgtk-3-0 \
     libpulse0 \
-    # Python runtime
-    python3 \
-    python3-pip \
-    # SDL runtime
+    librsvg2-2 \
     libsdl2-2.0-0 \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
+    libwebkit2gtk-4.0-37 \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -218,8 +206,8 @@ USER root
 
 # Install development dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
     curl \
+    git \
     vim \
     && rm -rf /var/lib/apt/lists/*
 

@@ -98,7 +98,7 @@ class PykPlayer:
         # And look up the actual files corresponding to this SongStruct.
         self.song_datas = song.get_song_datas()
         if window_title is None:
-            self.window_title = song.DisplayFilename
+            self.window_title = song.display_filename
 
         # Caller can register a callback by which we
         # print out error information, use stdout if none registered
@@ -409,14 +409,14 @@ class PykPlayer:
     def _handle_ctrl_arrow(self, event):
         """Handle ctrl+arrow keys for sync delay adjustment."""
         if event.key == pygame.K_RIGHT:
-            manager.settings.SyncDelayMs += 250
-            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+            manager.settings.sync_delay_ms += 250
+            print(_SYNC_MSG % manager.settings.sync_delay_ms)
         elif event.key == pygame.K_LEFT:
-            manager.settings.SyncDelayMs -= 250
-            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+            manager.settings.sync_delay_ms -= 250
+            print(_SYNC_MSG % manager.settings.sync_delay_ms)
         elif event.key == pygame.K_DOWN:
-            manager.settings.SyncDelayMs = 0
-            print(_SYNC_MSG % manager.settings.SyncDelayMs)
+            manager.settings.sync_delay_ms = 0
+            print(_SYNC_MSG % manager.settings.sync_delay_ms)
 
     def _handle_font_zoom_key(self, event):
         """Handle font zoom keyboard shortcuts."""

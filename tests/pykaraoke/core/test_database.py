@@ -80,38 +80,38 @@ class TestSongSettings:
     def test_default_sample_rate(self):
         settings = SongSettings()
         assert hasattr(settings, "SampleRate")
-        assert settings.SampleRate > 0
+        assert settings.sample_rate > 0
 
     def test_default_player_size(self):
         settings = SongSettings()
         assert hasattr(settings, "PlayerSize")
-        assert len(settings.PlayerSize) == 2
+        assert len(settings.player_size) == 2
 
     def test_default_zoom_modes(self):
         settings = SongSettings()
         assert hasattr(settings, "Zoom")
-        assert isinstance(settings.Zoom, (list, tuple))
-        assert len(settings.Zoom) > 0
+        assert isinstance(settings.zoom, (list, tuple))
+        assert len(settings.zoom) > 0
 
     def test_default_fullscreen(self):
         settings = SongSettings()
         assert hasattr(settings, "FullScreen")
-        assert isinstance(settings.FullScreen, bool)
+        assert isinstance(settings.full_screen, bool)
 
     def test_default_buffer_ms(self):
         settings = SongSettings()
         assert hasattr(settings, "BufferMs")
-        assert settings.BufferMs > 0
+        assert settings.buffer_ms > 0
 
     def test_default_num_channels(self):
         settings = SongSettings()
         assert hasattr(settings, "NumChannels")
-        assert settings.NumChannels in (1, 2)
+        assert settings.num_channels in (1, 2)
 
     def test_default_extensions(self):
         settings = SongSettings()
-        assert hasattr(settings, "CdgExtensions")
-        assert ".cdg" in settings.CdgExtensions or "cdg" in str(settings.CdgExtensions).lower()
+        assert hasattr(settings, "cdg_extensions")
+        assert ".cdg" in settings.cdg_extensions or "cdg" in str(settings.cdg_extensions).lower()
 
     def test_default_look_inside_zips(self):
         settings = SongSettings()
@@ -132,8 +132,8 @@ class TestSongStructBasic:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            assert song.Filepath == "/path/to/song.cdg"
-            assert song.Type == SongStruct.T_CDG
+            assert song.filepath == "/path/to/song.cdg"
+            assert song.type == SongStruct.T_CDG
         except (KeyError, ValueError):
             # May raise if extension validation is strict
             pass
@@ -143,8 +143,8 @@ class TestSongStructBasic:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.kar", settings)
-            assert song.Filepath == "/path/to/song.kar"
-            assert song.Type == SongStruct.T_KAR
+            assert song.filepath == "/path/to/song.kar"
+            assert song.type == SongStruct.T_KAR
         except (KeyError, ValueError):
             pass
 
@@ -153,8 +153,8 @@ class TestSongStructBasic:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.mpg", settings)
-            assert song.Filepath == "/path/to/song.mpg"
-            assert song.Type == SongStruct.T_MPG
+            assert song.filepath == "/path/to/song.mpg"
+            assert song.type == SongStruct.T_MPG
         except (KeyError, ValueError):
             pass
 
@@ -163,7 +163,7 @@ class TestSongStructBasic:
         settings = SongSettings()
         try:
             song = SongStruct("/path/to/song.cdg", settings)
-            assert song.Type == SongStruct.T_CDG
+            assert song.type == SongStruct.T_CDG
         except (KeyError, ValueError):
             pass
 
@@ -185,7 +185,7 @@ class TestSongStructBasic:
                 settings,
                 zip_stored_name="artist - title.cdg",
             )
-            assert song.ZipStoredName == "artist - title.cdg"
+            assert song.zip_stored_name == "artist - title.cdg"
         except (KeyError, ValueError):
             pass
 
@@ -256,8 +256,8 @@ class TestSongStructParsing:
     def test_parse_disc_type0(self):
         """ParseDisc with type 0 should extract disc from Disc-Track-Artist-Title."""
         settings = SongSettings()
-        settings.CdgDeriveSongInformation = True
-        settings.CdgFileNameType = 0
+        settings.cdg_derive_song_information = True
+        settings.cdg_file_name_type = 0
         try:
             song = SongStruct("/path/to/song.cdg", settings)
             disc = song.parse_disc("DISC01-01-Artist-Title", settings)
@@ -268,8 +268,8 @@ class TestSongStructParsing:
     def test_parse_disc_type1(self):
         """ParseDisc with type 1 should extract disc from DiscTrack format."""
         settings = SongSettings()
-        settings.CdgDeriveSongInformation = True
-        settings.CdgFileNameType = 1
+        settings.cdg_derive_song_information = True
+        settings.cdg_file_name_type = 1
         try:
             song = SongStruct("/path/to/song.cdg", settings)
             disc = song.parse_disc("DISC01-Artist-Title", settings)
@@ -281,8 +281,8 @@ class TestSongStructParsing:
     def test_parse_track_type0(self):
         """ParseTrack with type 0 should extract track from Disc-Track-Artist-Title."""
         settings = SongSettings()
-        settings.CdgDeriveSongInformation = True
-        settings.CdgFileNameType = 0
+        settings.cdg_derive_song_information = True
+        settings.cdg_file_name_type = 0
         try:
             song = SongStruct("/path/to/song.cdg", settings)
             track = song.parse_track("DISC01-02-Artist-Title", settings)
@@ -293,8 +293,8 @@ class TestSongStructParsing:
     def test_parse_track_type1(self):
         """ParseTrack with type 1 should extract last 2 chars as track."""
         settings = SongSettings()
-        settings.CdgDeriveSongInformation = True
-        settings.CdgFileNameType = 1
+        settings.cdg_derive_song_information = True
+        settings.cdg_file_name_type = 1
         try:
             song = SongStruct("/path/to/song.cdg", settings)
             track = song.parse_track("DISC01-Artist-Title", settings)
@@ -312,7 +312,7 @@ class TestSongStructParsing:
             song2 = SongStruct("/path/to/b_song.cdg", settings)
             # Set the global file_sort_key function
             old_key = db_module.file_sort_key
-            db_module.file_sort_key = lambda s: s.DisplayFilename.lower()
+            db_module.file_sort_key = lambda s: s.display_filename.lower()
             try:
                 result = song1 < song2
                 assert isinstance(result, bool)
@@ -329,7 +329,7 @@ class TestSongStructParsing:
             song1 = SongStruct("/path/to/song.cdg", settings)
             song2 = SongStruct("/path/to/song.cdg", settings)
             old_key = db_module.file_sort_key
-            db_module.file_sort_key = lambda s: s.DisplayFilename.lower()
+            db_module.file_sort_key = lambda s: s.display_filename.lower()
             try:
                 result = song1 == song2
                 assert isinstance(result, bool)
@@ -345,14 +345,14 @@ class TestSongDBInit:
     def test_songdb_creates_settings(self):
         """SongDB should create a Settings object."""
         db = SongDB()
-        assert hasattr(db, "Settings")
-        assert isinstance(db.Settings, SongSettings)
+        assert hasattr(db, "settings")
+        assert isinstance(db.settings, SongSettings)
 
     def test_songdb_empty_song_list(self):
         """SongDB should start with empty song lists."""
         db = SongDB()
-        assert hasattr(db, "FullSongList")
-        assert len(db.FullSongList) == 0
+        assert hasattr(db, "full_song_list")
+        assert len(db.full_song_list) == 0
 
     def test_songdb_has_save_dir(self):
         """SongDB should determine a save directory."""
@@ -374,21 +374,21 @@ class TestSongDBOperations:
         """FolderAdd should add a folder to the search list."""
         db = SongDB()
         db.folder_add("/path/to/songs")
-        assert "/path/to/songs" in db.Settings.folder_list
+        assert "/path/to/songs" in db.settings.folder_list
 
     def test_folder_add_no_duplicates(self):
         """FolderAdd should not add duplicate folders."""
         db = SongDB()
         db.folder_add("/path/to/songs")
         db.folder_add("/path/to/songs")
-        assert db.Settings.folder_list.count("/path/to/songs") == 1
+        assert db.settings.folder_list.count("/path/to/songs") == 1
 
     def test_folder_del(self):
         """FolderDel should remove a folder from the search list."""
         db = SongDB()
         db.folder_add("/path/to/songs")
         db.folder_del("/path/to/songs")
-        assert "/path/to/songs" not in db.Settings.folder_list
+        assert "/path/to/songs" not in db.settings.folder_list
 
     def test_is_extension_valid_cdg(self):
         """IsExtensionValid should recognize .cdg files."""

@@ -302,7 +302,7 @@ class ExternalPlayer(PykPlayer):
     def __start(self):
         filepath = self.song_datas[0].get_filepath()
 
-        external = manager.settings.MpgExternal
+        external = manager.settings.mpg_external
         if "%" in external:
             # Assume the filename parameter is embedded in the string.
             # Parse the command string into a list to avoid shell injection
@@ -323,7 +323,7 @@ class ExternalPlayer(PykPlayer):
             raise RuntimeError("Process already running")
         sys.stdout.flush()
         self.proc = subprocess.Popen(cmd, shell=False)
-        if manager.settings.MpgExternalThreaded:
+        if manager.settings.mpg_external_threaded:
             # Wait for it to complete in a thread.
             self.thread = threading.Thread(target=self.__runThread)
             self.thread.start()

@@ -258,15 +258,15 @@ class pykManager:
         self.close_cpu_control()
 
         if frequency is None:
-            frequency = self.settings.SampleRate
+            frequency = self.settings.sample_rate
 
         if size is None:
             size = -16
 
         if channels is None:
-            channels = self.settings.NumChannels
+            channels = self.settings.num_channels
 
-        buffer_ms = self.settings.BufferMs
+        buffer_ms = self.settings.buffer_ms
 
         # Compute the number of samples that would fill the indicated
         # buffer time.
@@ -351,9 +351,9 @@ class pykManager:
                     self.song_valid = False
 
             if self.song_valid:
-                print("%s ok" % (song.DisplayFilename))
+                print("%s ok" % (song.display_filename))
             else:
-                print("%s invalid" % (song.DisplayFilename))
+                print("%s invalid" % (song.display_filename))
                 print("%s\t%s" % (song.Filepath, song.ZipStoredName), file=invalid_file)
                 invalid_file.flush()
 
@@ -394,15 +394,15 @@ class pykManager:
 
         version = "%prog " + pykversion.PYKARAOKE_VERSION_STRING
 
-        settings = song_db.Settings
+        settings = song_db.settings
 
         parser = optparse.OptionParser(usage=usage, version=version, conflict_handler="resolve")
 
         if env != ENV_OSX and env != ENV_GP2X:
             pos_x = None
             pos_y = None
-            if settings.PlayerPosition:
-                pos_x, pos_y = settings.PlayerPosition
+            if settings.player_position:
+                pos_x, pos_y = settings.player_position
             parser.add_option(
                 "-x",
                 "--window-x",
@@ -430,7 +430,7 @@ class pykManager:
                 type="int",
                 metavar="X",
                 help="draw song window X pixels wide",
-                default=settings.PlayerSize[0],
+                default=settings.player_size[0],
             )
             parser.add_option(
                 "-h",
@@ -439,7 +439,7 @@ class pykManager:
                 type="int",
                 metavar="Y",
                 help="draw song window Y pixels high",
-                default=settings.PlayerSize[1],
+                default=settings.player_size[1],
             )
             parser.add_option(
                 "-t",
@@ -456,7 +456,7 @@ class pykManager:
                 dest="fullscreen",
                 action="store_true",
                 help="make song window fullscreen",
-                default=settings.FullScreen,
+                default=settings.full_screen,
             )
             parser.add_option(
                 "",
@@ -482,7 +482,7 @@ class pykManager:
             dest="sample_rate",
             type="int",
             help="specify the audio sample rate.  Ideally, this should match the recording.  For MIDI files, higher is better but consumes more CPU.",
-            default=settings.SampleRate,
+            default=settings.sample_rate,
         )
         parser.add_option(
             "",
@@ -490,7 +490,7 @@ class pykManager:
             dest="num_channels",
             type="int",
             help="specify the number of audio channels: 1 for mono, 2 for stereo.",
-            default=settings.NumChannels,
+            default=settings.num_channels,
         )
         parser.add_option(
             "",
@@ -511,7 +511,7 @@ class pykManager:
             choices=settings.Zoom,
             help="specify the way in which graphics are scaled to fit the window.  The choices are %s."
             % (", ".join('"%s"' % z for z in settings.Zoom)),
-            default=settings.CdgZoom,
+            default=settings.cdg_zoom,
         )
 
         parser.add_option(
@@ -521,7 +521,7 @@ class pykManager:
             metavar="MS",
             type="int",
             help="buffer audio by the indicated number of milliseconds",
-            default=settings.BufferMs,
+            default=settings.buffer_ms,
         )
         parser.add_option(
             "-n",
@@ -560,25 +560,25 @@ class pykManager:
 
     def apply_options(self, song_db):
         """Copies the user-specified command-line options in
-        self.options to the settings in song_db.Settings."""
+        self.options to the settings in song_db.settings."""
 
-        self.settings = song_db.Settings
+        self.settings = song_db.settings
 
-        self.settings.CdgZoom = self.options.zoom_mode
+        self.settings.cdg_zoom = self.options.zoom_mode
 
         if hasattr(self.options, "fullscreen"):
-            self.settings.FullScreen = self.options.fullscreen
-            self.settings.PlayerSize = (self.options.size_x, self.options.size_y)
+            self.settings.full_screen = self.options.fullscreen
+            self.settings.player_size = (self.options.size_x, self.options.size_y)
         if (
             hasattr(self.options, "pos_x")
             and self.options.pos_x is not None
             and self.options.pos_y is not None
         ):
-            self.settings.PlayerPosition = (self.options.pos_x, self.options.pos_y)
+            self.settings.player_position = (self.options.pos_x, self.options.pos_y)
 
-        self.settings.NumChannels = self.options.num_channels
-        self.settings.SampleRate = self.options.sample_rate
-        self.settings.BufferMs = self.options.buffer
+        self.settings.num_channels = self.options.num_channels
+        self.settings.sample_rate = self.options.sample_rate
+        self.settings.buffer_ms = self.options.buffer
 
     def word_wrap_text(self, text, font, max_width):
         """Folds the line (or lines) of text into as many lines as
@@ -656,7 +656,7 @@ class pykManager:
 
             # Do the resize
             self.display_size = event.size
-            self.settings.PlayerSize = tuple(self.display_size)
+            self.settings.player_size = tuple(self.display_size)
             pygame.display.set_mode(event.size, self.display_flags, self.display_depth)
             # Call any player-specific resize
             if player:
@@ -718,22 +718,22 @@ class pykManager:
         # the position works on MS Windows.
 
         # Don't set the environment variable on OSX.
-        if env != ENV_OSX and self.settings.PlayerPosition:
-            x, y = self.settings.PlayerPosition
+        if env != ENV_OSX and self.settings.player_position:
+            x, y = self.settings.player_position
             os.environ["SDL_VIDEO_WINDOW_POS"] = "%s,%s" % (x, y)
 
-        w, h = self.settings.PlayerSize
+        w, h = self.settings.player_size
         self.display_size = (w, h)
 
         self.display_flags = pygame.RESIZABLE
-        if self.settings.DoubleBuf:
+        if self.settings.double_buf:
             self.display_flags |= pygame.DOUBLEBUF
-        if self.settings.HardwareSurface:
+        if self.settings.hardware_surface:
             self.display_flags |= pygame.HWSURFACE
 
-        if self.settings.NoFrame:
+        if self.settings.no_frame:
             self.display_flags |= pygame.NOFRAME
-        if self.settings.FullScreen:
+        if self.settings.full_screen:
             self.display_flags |= pygame.FULLSCREEN
 
         self.display_depth = 0

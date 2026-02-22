@@ -445,7 +445,7 @@ class PyKaraokeBackend:
 
     def _handle_get_settings(self) -> dict[str, Any]:
         """Get current settings"""
-        settings = self.song_db.Settings if hasattr(self.song_db, "Settings") else {}
+        settings = self.song_db.settings if hasattr(self.song_db, "settings") else {}
         return {
             "status": "ok",
             "data": {

@@ -40,18 +40,18 @@ def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, win
     # Create a mock songDb
     mock_db = MagicMock()
     mock_settings = MagicMock()
-    mock_settings.CdgExtensions = [".cdg"]
-    mock_settings.KarExtensions = [".kar", ".mid"]
-    mock_settings.MpgExtensions = [".mpg", ".mpeg"]
-    mock_settings.CdgDeriveSongInformation = False
-    mock_settings.FilesystemCoding = "utf-8"
-    mock_settings.ZipfileCoding = "cp1252"
-    mock_db.Settings = mock_settings
+    mock_settings.cdg_extensions = [".cdg"]
+    mock_settings.kar_extensions = [".kar", ".mid"]
+    mock_settings.mpg_extensions = [".mpg", ".mpeg"]
+    mock_settings.cdg_derive_song_information = False
+    mock_settings.filesystem_coding = "utf-8"
+    mock_settings.zipfile_coding = "cp1252"
+    mock_db.settings = mock_settings
 
     # Create a mock song object
     mock_song = MagicMock()
-    mock_song.Filepath = song_filepath
-    mock_song.DisplayFilename = song_filepath
+    mock_song.filepath = song_filepath
+    mock_song.display_filename = song_filepath
     mock_song.get_song_datas.return_value = []
     mock_db.makeSongStruct.return_value = mock_song
 

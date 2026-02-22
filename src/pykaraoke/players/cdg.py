@@ -245,7 +245,7 @@ class CdgPlayer(PykPlayer):
         # A surface that contains the set of all tiles as they are to
         # be assembled onscreen.  This surface is kept at the original
         # scale, then zoomed to display size.  It is only used if
-        # settings.CdgZoom == 'soft'.
+        # settings.cdg_zoom == 'soft'.
         self.workingSurface = pygame.Surface(
             (CDG_DISPLAY_WIDTH, CDG_DISPLAY_HEIGHT), pygame.HWSURFACE, manager.surface
         )
@@ -254,7 +254,7 @@ class CdgPlayer(PykPlayer):
         self.computeDisplaySize()
 
         aux = aux_c
-        if not aux or not manager.settings.CdgUseC:
+        if not aux or not manager.settings.cdg_use_c:
             print("Using Python implementation of CDG interpreter.")
             aux = aux_python
 
@@ -283,7 +283,7 @@ class CdgPlayer(PykPlayer):
                 if data.ext == ext:
                     return data
 
-        error_string = "There is no mp3 or ogg file to match " + self.Song.DisplayFilename
+        error_string = "There is no mp3 or ogg file to match " + self.Song.display_filename
         self.error_notify_callback(error_string)
         raise FileNotFoundError("NoSoundFile")
 
@@ -294,7 +294,7 @@ class CdgPlayer(PykPlayer):
             return
 
         audioProperties = None
-        if manager.settings.UseMp3Settings:
+        if manager.settings.use_mp3_settings:
             audioProperties = self.getAudioProperties(self.sound_file_data)
         if audioProperties is None:
             audioProperties = (None, None, None)
@@ -390,7 +390,7 @@ class CdgPlayer(PykPlayer):
             self.curr_pos = (
                 self.get_pos()
                 + self.internal_offset_time
-                + manager.settings.SyncDelayMs
+                + manager.settings.sync_delay_ms
                 - self.pauseOffsetTime
             )
 
@@ -441,9 +441,9 @@ class CdgPlayer(PykPlayer):
         # Compute an appropriate uniform scale to letterbox the image
         # within the window
         scale = min(float(winWidth) / CDG_DISPLAY_WIDTH, float(winHeight) / CDG_DISPLAY_HEIGHT)
-        if manager.settings.CdgZoom == "none":
+        if manager.settings.cdg_zoom == "none":
             scale = 1
-        elif manager.settings.CdgZoom == "int":
+        elif manager.settings.cdg_zoom == "int":
             if scale < 1:
                 scale = 1.0 / math.ceil(1.0 / scale)
             else:
@@ -453,7 +453,7 @@ class CdgPlayer(PykPlayer):
         scaledWidth = int(scale * CDG_DISPLAY_WIDTH)
         scaledHeight = int(scale * CDG_DISPLAY_HEIGHT)
 
-        if manager.settings.CdgZoom == "full":
+        if manager.settings.cdg_zoom == "full":
             # If we are allowing non-proportional scaling, allow
             # scaledWidth and scaledHeight to be independent.
             scaledWidth = winWidth
@@ -464,7 +464,7 @@ class CdgPlayer(PykPlayer):
         self.displayColOffset = (winHeight - scaledHeight) / 2
 
         # Calculate the scaled width and height for each tile
-        if manager.settings.CdgZoom == "soft":
+        if manager.settings.cdg_zoom == "soft":
             self.displayTileWidth = CDG_DISPLAY_WIDTH / TILES_PER_ROW
             self.displayTileHeight = CDG_DISPLAY_HEIGHT / TILES_PER_COL
         else:
@@ -531,31 +531,31 @@ class CdgPlayer(PykPlayer):
         # There are four different approaches for blitting tiles onto
         # the display:
 
-        # settings.CdgZoom == 'none':
+        # settings.cdg_zoom == 'none':
         #   No scaling.  The CDG graphics are centered within the
         #   display.  When a tile is dirty, it is blitted directly to
         #   manager.surface.  After all dirty tiles have been blitted,
         #   we then use display.update to flip only those rectangles
         #   on the screen that have been blitted.
 
-        # settings.CdgZoom = 'quick':
+        # settings.cdg_zoom = 'quick':
         #   Trivial scaling.  Similar to 'none', but each tile is
         #   first scaled to its target scale using
         #   pygame.transform.scale(), which is quick but gives a
         #   pixelly result.  The scaled tile is then blitted to
         #   manager.surface.
 
-        # settings.CdgZoom = 'int':
+        # settings.cdg_zoom = 'int':
         #   The same as 'quick', but the scaling is constrained to be
         #   an integer multiple or divisor of its original size, which
         #   may reduce artifacts somewhat.
 
-        # settings.CdgZoom = 'full':
+        # settings.cdg_zoom = 'full':
         #   The same as 'quick', but the scaling is allowed to
         #   completely fill the window in both x and y, regardless of
         #   aspect ratio constraints.
 
-        # settings.CdgZoom = 'soft':
+        # settings.cdg_zoom = 'soft':
         #   Antialiased scaling.  We blit all tiles onto
         #   self.workingSurface, which is maintained as the non-scaled
         #   version of the CDG graphics, similar to 'none'.  Then,
@@ -586,7 +586,7 @@ class CdgPlayer(PykPlayer):
         for row, col in dirtyTiles:
             self.packetReader.FillTile(self.workingTile, row, col)
 
-            if manager.settings.CdgZoom == "none":
+            if manager.settings.cdg_zoom == "none":
                 # The no-scale approach.
                 rect = pygame.Rect(
                     self.displayTileWidth * row + self.displayRowOffset,
@@ -597,7 +597,7 @@ class CdgPlayer(PykPlayer):
                 manager.surface.blit(self.workingTile, rect)
                 rect_list.append(rect)
 
-            elif manager.settings.CdgZoom == "soft":
+            elif manager.settings.cdg_zoom == "soft":
                 # The soft-scale approach.
                 self.workingSurface.blit(
                     self.workingTile, (self.displayTileWidth * row, self.displayTileHeight * col)
@@ -617,7 +617,7 @@ class CdgPlayer(PykPlayer):
                 manager.surface.blit(scaled, rect)
                 rect_list.append(rect)
 
-        if manager.settings.CdgZoom == "soft":
+        if manager.settings.cdg_zoom == "soft":
             # Now scale and blit the whole screen.
             scaled = pygame.transform.rotozoom(self.workingSurface, 0, self.displayScale)
             manager.surface.blit(scaled, (self.displayRowOffset, self.displayColOffset))

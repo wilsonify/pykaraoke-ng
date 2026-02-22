@@ -1051,14 +1051,14 @@ class MidPlayer(PykPlayer):
         instance, or it may be a filename."""
 
         PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
-        settings = self.song_db.Settings
+        settings = self.song_db.settings
 
         self.supports_font_zoom = True
         self.isValid = False
 
         # Parse the MIDI file
         self.midifile = midi_parse_data(
-            self.song_datas[0].get_data(), self.error_notify_callback, settings.KarEncoding
+            self.song_datas[0].get_data(), self.error_notify_callback, settings.kar_encoding
         )
         if self.midifile is None:
             error_string = "ERROR: Could not parse the MIDI file"
@@ -1080,7 +1080,7 @@ class MidPlayer(PykPlayer):
         manager.open_display()
 
         if not manager.options.nomusic:
-            manager.open_audio(frequency=manager.settings.MIDISampleRate, channels=1)
+            manager.open_audio(frequency=manager.settings.midi_sample_rate, channels=1)
 
         # Account for the size of the playback buffer in the lyrics
         # display.  Assume that the buffer will be mostly full.  On a
@@ -1162,7 +1162,7 @@ class MidPlayer(PykPlayer):
 
     def initFont(self):
         font_size = int(FONT_SIZE * manager.get_font_scale() * manager.displaySize[1] / 480.0)
-        self.font = self.find_pygame_font(self.song_db.Settings.KarFont, font_size)
+        self.font = self.find_pygame_font(self.song_db.settings.kar_font, font_size)
         self.lineSize = max(self.font.get_height(), self.font.get_linesize())
         self.numRows = int((manager.displaySize[1] - Y_BORDER * 2) / self.lineSize)
 
@@ -1207,8 +1207,8 @@ class MidPlayer(PykPlayer):
         # Redraws the contents of the currently onscreen text.
 
         # Clear the screen
-        settings = self.song_db.Settings
-        manager.surface.fill(settings.KarBackgroundColour)
+        settings = self.song_db.settings
+        manager.surface.fill(settings.kar_background_colour)
 
         # Paint the first numRows lines
         for i in range(self.numRows):
@@ -1240,21 +1240,21 @@ class MidPlayer(PykPlayer):
 
         y = Y_BORDER + row * self.lineSize
 
-        settings = self.song_db.Settings
+        settings = self.song_db.settings
 
         if syllable.type == TEXT_LYRIC:
             if self.currentMs < syllable.ms:
-                color = settings.KarReadyColour
+                color = settings.kar_ready_colour
             else:
-                color = settings.KarSweepColour
+                color = settings.kar_sweep_colour
         elif syllable.type == TEXT_INFO:
-            color = settings.KarInfoColour
+            color = settings.kar_info_colour
         elif syllable.type == TEXT_TITLE:
-            color = settings.KarTitleColour
+            color = settings.kar_title_colour
 
         # Render text on a black background (instead of transparent)
         # to save a hair of CPU time.
-        text = self.font.render(syllable.text, True, color, settings.KarBackgroundColour)
+        text = self.font.render(syllable.text, True, color, settings.kar_background_colour)
 
         width, height = text.get_size()
         syllable.right = syllable.left + width
@@ -1321,7 +1321,7 @@ class MidPlayer(PykPlayer):
 
         if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
             self.currentMs = int(
-                self.get_pos() + self.internal_offset_time + manager.settings.SyncDelayMs
+                self.get_pos() + self.internal_offset_time + manager.settings.sync_delay_ms
             )
             self.colourUpdateMs()
 
@@ -1480,8 +1480,8 @@ class MidPlayer(PykPlayer):
         y = Y_BORDER + linesRemaining * self.lineSize
         h = linesScrolled * self.lineSize
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
-        settings = self.song_db.Settings
-        manager.surface.fill(settings.KarBackgroundColour, rect)
+        settings = self.song_db.settings
+        manager.surface.fill(settings.kar_background_colour, rect)
 
         # We can remove any syllables from the list that might have
         # scrolled off the screen now.

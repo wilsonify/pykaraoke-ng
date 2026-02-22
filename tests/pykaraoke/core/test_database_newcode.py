@@ -107,7 +107,7 @@ class TestSongStructComparisonNewCode:
 
     def _set_sort_key(self):
         """Set file_sort_key to use Filepath for sorting."""
-        db_module.file_sort_key = lambda s: s.Filepath
+        db_module.file_sort_key = lambda s: s.filepath
 
     def test_lt_different_keys(self):
         self._set_sort_key()
@@ -177,7 +177,7 @@ class TestGetAssociatedFilesNewCode:
 
     def test_empty_filepath(self):
         song = _make_song("")
-        song.Filepath = ""
+        song.filepath = ""
         datas = song.get_song_datas()
         assert datas == []
 
@@ -293,7 +293,7 @@ class TestSaveSettingsSorted:
         save_dir = tmp_path / "save"
         save_dir.mkdir()
         song_db.save_dir = str(save_dir)
-        song_db.Settings = SettingsStruct()
+        song_db.settings = SettingsStruct()
         song_db.save_settings()
         # Check that a settings file was created
         settings_file = save_dir / "settings.dat"
@@ -355,8 +355,8 @@ class TestZipAssociatedFiles:
             zf.writestr("other.txt", b"unrelated")
 
         song = _make_song(str(zpath))
-        song.ZipStoredName = "song.cdg"
-        song.Type = SongStruct.T_CDG
+        song.zip_stored_name = "song.cdg"
+        song.type = SongStruct.T_CDG
         datas = song.get_song_datas()
         # SongData stores temp file paths; check we got both cdg and mp3
         assert len(datas) >= 2
@@ -374,8 +374,8 @@ class TestZipAssociatedFiles:
             zf.writestr("other.mp3", b"MP3 data")
 
         song = _make_song(str(zpath))
-        song.ZipStoredName = "song.kar"
-        song.Type = SongStruct.T_KAR
+        song.zip_stored_name = "song.kar"
+        song.type = SongStruct.T_KAR
         datas = song.get_song_datas()
         assert len(datas) >= 1
         paths = [d.get_filepath() for d in datas]
@@ -389,14 +389,14 @@ class TestTitleStructReadTitles:
 
     def test_title_struct_init(self):
         ts = TitleStruct("path/to/titles.txt")
-        assert ts.Filepath == "path/to/titles.txt"
-        assert ts.ZipStoredName is None
+        assert ts.filepath == "path/to/titles.txt"
+        assert ts.zip_stored_name is None
         assert ts.songs == []
 
     def test_title_struct_init_with_zip(self):
         ts = TitleStruct("archive.zip", "titles.txt")
-        assert ts.Filepath == "archive.zip"
-        assert ts.ZipStoredName == "titles.txt"
+        assert ts.filepath == "archive.zip"
+        assert ts.zip_stored_name == "titles.txt"
 
     def test_title_struct_read_from_zip(self, tmp_path):
         """TitleStruct.read() with zip → covers lines 612-613 and __read_titles 694-699."""

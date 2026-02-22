@@ -78,13 +78,13 @@ class TestPlayerDoStuffCapturingState:
             manager.options = opts
 
         mock_song_db = MagicMock()
-        mock_song_db.Settings = MagicMock()
-        mock_song_db.Settings.CdgDeriveSongInformation = False
+        mock_song_db.settings = MagicMock()
+        mock_song_db.settings.cdg_derive_song_information = False
         mock_song = MagicMock()
-        mock_song.Type = 1
-        mock_song.ZipStoredName = None
-        mock_song.Filepath = "test.cdg"
-        mock_song.DisplayFilename = "test.cdg"
+        mock_song.type = 1
+        mock_song.zip_stored_name = None
+        mock_song.filepath = "test.cdg"
+        mock_song.display_filename = "test.cdg"
         mock_song.get_song_datas.return_value = []
 
         p = player.PykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
@@ -118,13 +118,13 @@ class TestPlayerAdditionalCoverage:
             manager.options = opts
 
         mock_song_db = MagicMock()
-        mock_song_db.Settings = MagicMock()
-        mock_song_db.Settings.CdgDeriveSongInformation = False
+        mock_song_db.settings = MagicMock()
+        mock_song_db.settings.cdg_derive_song_information = False
         mock_song = MagicMock()
-        mock_song.Type = 1
-        mock_song.ZipStoredName = None
-        mock_song.Filepath = "test.cdg"
-        mock_song.DisplayFilename = "test.cdg"
+        mock_song.type = 1
+        mock_song.zip_stored_name = None
+        mock_song.filepath = "test.cdg"
+        mock_song.display_filename = "test.cdg"
         mock_song.get_song_datas.return_value = []
 
         p = player.PykPlayer(mock_song, mock_song_db, MagicMock(), MagicMock())
