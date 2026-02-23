@@ -294,11 +294,6 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install Windows bundler (NSIS)
-        if: matrix.platform == 'windows'
-        run: choco install nsis --no-progress -y
-        shell: pwsh
-
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
