@@ -136,13 +136,13 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 1.5: Spec Kit Validation — enforce spec-driven development.
-  #            Runs in parallel with unit tests on PRs only.
+  #            Runs in parallel with unit tests. On pushes the script
+  #            auto-passes for main/master; on PRs it validates the feature branch.
   # ═══════════════════════════════════════════════════════════════════════════
 
   spec-validation:
     name: Spec Kit Validation
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     permissions:
       contents: read
     steps:
@@ -157,8 +157,9 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x specs/ci/validate-spec-completion.sh
-          # Sanitize inside the shell using a quoted variable
-          SAFE_BRANCH_NAME="$(printf '%s' "$PR_HEAD_REF" | tr -cd '[:alnum:]._/-')"
+          # On pushes github.head_ref is empty; fall back to the current branch
+          BRANCH_NAME="${PR_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
+          SAFE_BRANCH_NAME="$(printf '%s' "$BRANCH_NAME" | tr -cd '[:alnum:]._/-')"
           ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH_NAME"
 
   # ═══════════════════════════════════════════════════════════════════════════
