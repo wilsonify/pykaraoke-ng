@@ -68,8 +68,8 @@ def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, win
 class TestPykPlayerInit:
     def test_player_has_song(self):
         player = _make_player()
-        assert hasattr(player, "Song")
-        assert player.Song is not None
+        assert hasattr(player, "song")
+        assert player.song is not None
 
     def test_player_has_error_callback(self):
         err_cb = MagicMock()
@@ -79,11 +79,11 @@ class TestPykPlayerInit:
     def test_player_has_done_callback(self):
         done_cb = MagicMock()
         player = _make_player(done_cb=done_cb)
-        assert player.SongFinishedCallback == done_cb
+        assert player.song_finished_callback == done_cb
 
     def test_player_initial_state(self):
         player = _make_player()
-        assert player.State == STATE_INIT
+        assert player.state == STATE_INIT
 
     def test_player_has_window_title(self):
         player = _make_player(window_title="My Song")
@@ -99,7 +99,7 @@ class TestPykPlayerInit:
 
     def test_player_play_frame_zero(self):
         player = _make_player()
-        assert player.PlayFrame == 0
+        assert player.play_frame == 0
 
     def test_player_internal_offset_time(self):
         player = _make_player()
@@ -114,47 +114,47 @@ class TestPykPlayerState:
     def test_close_sets_closing(self):
         player = _make_player()
         player.close()
-        assert player.State == STATE_CLOSING
+        assert player.state == STATE_CLOSING
 
     def test_shutdown_from_playing(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
     def test_shutdown_calls_done_callback(self):
         cb = MagicMock()
         player = _make_player(done_cb=cb)
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
         cb.assert_called_once()
 
     def test_shutdown_no_callback(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
     def test_shutdown_idempotent(self):
         player = _make_player()
-        player.State = STATE_CLOSED
+        player.state = STATE_CLOSED
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
 
 class TestPykPlayerMethods:
     def test_pause_from_playing(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.pause()
-        assert player.State == STATE_PAUSED
+        assert player.state == STATE_PAUSED
 
     def test_unpause(self):
         player = _make_player()
-        player.State = STATE_PAUSED
+        player.state = STATE_PAUSED
         player.play_time = 1000
         player.pause()
-        assert player.State == STATE_PLAYING
+        assert player.state == STATE_PLAYING
 
     def test_validate_returns_true(self):
         player = _make_player()
@@ -175,21 +175,21 @@ class TestPykPlayerMethods:
 
     def test_rewind(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.play_time = 5000
         player.rewind()
         assert player.play_time == 0
-        assert player.State == STATE_NOT_PLAYING
+        assert player.state == STATE_NOT_PLAYING
 
     def test_stop(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.stop()
-        assert player.State == STATE_NOT_PLAYING
+        assert player.state == STATE_NOT_PLAYING
 
     def test_get_pos_not_playing(self):
         player = _make_player()
-        player.State = STATE_NOT_PLAYING
+        player.state = STATE_NOT_PLAYING
         player.play_time = 2000
         assert player.get_pos() == 2000
 
@@ -200,16 +200,16 @@ class TestPykPlayerMethods:
 
     def test_do_stuff_increments_frame(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.do_stuff()
-        assert player.PlayFrame == 1
+        assert player.play_frame == 1
 
     def test_handle_event_quit(self):
         player = _make_player()
         event = MagicMock()
         event.type = mock_pygame.QUIT
         player.handle_event(event)
-        assert player.State == STATE_CLOSING
+        assert player.state == STATE_CLOSING
 
 
 class TestPykPlayerSongData:

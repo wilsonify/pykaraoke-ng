@@ -43,7 +43,7 @@ COPY assets/ /app/assets/
 # =============================================================================
 FROM python:3.12-slim AS backend
 
-# Install runtime dependencies for pygame/SDL
+# Install runtime dependencies for pygame/SDL and create non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6 \
     libportmidi0 \
@@ -51,10 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash pykaraoke
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash pykaraoke
 
 WORKDIR /app
 
@@ -86,7 +84,7 @@ CMD ["python", "-m", "pykaraoke.core.backend", "--http"]
 # =============================================================================
 # Stage 3: Tauri Development Environment
 # =============================================================================
-FROM rust:1.75-bookworm AS tauri-dev
+FROM rust:slim-bookworm AS tauri-dev
 
 # Install system dependencies for Tauri
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -181,7 +179,7 @@ COPY --from=python-builder /app/assets /app/assets
 
 # Copy built Tauri application (this requires a pre-build step)
 # In practice, build with tauri-dev stage and copy the binary
-COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng 2>/dev/null || true
+COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng
 
 # Set ownership
 RUN chown -R pykaraoke:pykaraoke /app

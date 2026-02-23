@@ -250,7 +250,7 @@ class CdgPlayer(PykPlayer):
             (CDG_DISPLAY_WIDTH, CDG_DISPLAY_HEIGHT), pygame.HWSURFACE, manager.surface
         )
 
-        self.borderColour = None
+        self.border_colour = None
         self.computeDisplaySize()
 
         aux = aux_c
@@ -283,7 +283,7 @@ class CdgPlayer(PykPlayer):
                 if data.ext == ext:
                     return data
 
-        error_string = "There is no mp3 or ogg file to match " + self.Song.display_filename
+        error_string = "There is no mp3 or ogg file to match " + self.song.display_filename
         self.error_notify_callback(error_string)
         raise FileNotFoundError("NoSoundFile")
 
@@ -293,13 +293,13 @@ class CdgPlayer(PykPlayer):
             self.internal_offset_time = 0
             return
 
-        audioProperties = None
+        audio_properties = None
         if manager.settings.use_mp3_settings:
-            audioProperties = self.getAudioProperties(self.sound_file_data)
-        if audioProperties is None:
-            audioProperties = (None, None, None)
+            audio_properties = self.getAudioProperties(self.sound_file_data)
+        if audio_properties is None:
+            audio_properties = (None, None, None)
         try:
-            manager.open_audio(*audioProperties)
+            manager.open_audio(*audio_properties)
             audio_path = self.sound_file_data.get_filepath()
             if isinstance(audio_path, str):
                 audio_path = audio_path.encode(sys.getfilesystemencoding())
@@ -386,7 +386,7 @@ class CdgPlayer(PykPlayer):
 
         # Check whether the songfile has moved on, if so
         # get the relevant CDG data and update the screen.
-        if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
+        if self.state == STATE_PLAYING or self.state == STATE_CAPTURING:
             self.curr_pos = (
                 self.get_pos()
                 + self.internal_offset_time
@@ -395,13 +395,13 @@ class CdgPlayer(PykPlayer):
             )
 
             self.cdgPacketsDue = int((self.curr_pos * 300) / 1000)
-            numPackets = self.cdgPacketsDue - self.cdgReadPackets
-            if numPackets > 0:
-                if not self.packetReader.DoPackets(numPackets):
+            num_packets = self.cdgPacketsDue - self.cdgReadPackets
+            if num_packets > 0:
+                if not self.packetReader.do_packets(num_packets):
                     # End of file.
                     # print "End of file on cdg."
                     self.close()
-                self.cdgReadPackets += numPackets
+                self.cdgReadPackets += num_packets
 
             # Check if any screen updates are now due.
             if (self.curr_pos - self.LastPos) > self.ms_per_update:
@@ -426,21 +426,21 @@ class CdgPlayer(PykPlayer):
     def do_resize(self, new_size):
         self.computeDisplaySize()
 
-        if self.borderColour is not None:
-            manager.surface.fill(self.borderColour)
+        if self.border_colour is not None:
+            manager.surface.fill(self.border_colour)
 
-        self.packetReader.MarkTilesDirty()
+        self.packetReader.mark_tiles_dirty()
 
     def computeDisplaySize(self):
         """Figures out what scale and placement to use for blitting
         tiles to the screen.  This must be called at startup, and
         whenever the window size changes."""
 
-        winWidth, winHeight = manager.displaySize
+        win_width, win_height = manager.displaySize
 
         # Compute an appropriate uniform scale to letterbox the image
         # within the window
-        scale = min(float(winWidth) / CDG_DISPLAY_WIDTH, float(winHeight) / CDG_DISPLAY_HEIGHT)
+        scale = min(float(win_width) / CDG_DISPLAY_WIDTH, float(win_height) / CDG_DISPLAY_HEIGHT)
         if manager.settings.cdg_zoom == "none":
             scale = 1
         elif manager.settings.cdg_zoom == "int":
@@ -450,26 +450,26 @@ class CdgPlayer(PykPlayer):
                 scale = int(scale)
         self.displayScale = scale
 
-        scaledWidth = int(scale * CDG_DISPLAY_WIDTH)
-        scaledHeight = int(scale * CDG_DISPLAY_HEIGHT)
+        scaled_width = int(scale * CDG_DISPLAY_WIDTH)
+        scaled_height = int(scale * CDG_DISPLAY_HEIGHT)
 
         if manager.settings.cdg_zoom == "full":
             # If we are allowing non-proportional scaling, allow
-            # scaledWidth and scaledHeight to be independent.
-            scaledWidth = winWidth
-            scaledHeight = winHeight
+            # scaled_width and scaled_height to be independent.
+            scaled_width = win_width
+            scaled_height = win_height
 
         # And the center of the display after letterboxing.
-        self.displayRowOffset = (winWidth - scaledWidth) / 2
-        self.displayColOffset = (winHeight - scaledHeight) / 2
+        self.displayRowOffset = (win_width - scaled_width) / 2
+        self.displayColOffset = (win_height - scaled_height) / 2
 
         # Calculate the scaled width and height for each tile
         if manager.settings.cdg_zoom == "soft":
             self.displayTileWidth = CDG_DISPLAY_WIDTH / TILES_PER_ROW
             self.displayTileHeight = CDG_DISPLAY_HEIGHT / TILES_PER_COL
         else:
-            self.displayTileWidth = scaledWidth / TILES_PER_ROW
-            self.displayTileHeight = scaledHeight / TILES_PER_COL
+            self.displayTileWidth = scaled_width / TILES_PER_ROW
+            self.displayTileHeight = scaled_height / TILES_PER_COL
 
     def getAudioProperties(self, sound_file_data):
         """Attempts to determine the samplerate, etc., from the
@@ -482,11 +482,11 @@ class CdgPlayer(PykPlayer):
         # information, so we have to open the soundfile separately and
         # try to figure it out ourselves.
 
-        audioProperties = None
+        audio_properties = None
         if sound_file_data.ext == ".mp3":
-            audioProperties = self.getMp3AudioProperties(sound_file_data)
+            audio_properties = self.getMp3AudioProperties(sound_file_data)
 
-        return audioProperties
+        return audio_properties
 
     def getMp3AudioProperties(self, sound_file_data):
         """Attempts to determine the samplerate, etc., from the
@@ -565,17 +565,17 @@ class CdgPlayer(PykPlayer):
         #   manager.surface, and then flip the whole display.  (We
         #   can't scale and blit the tiles one a time in this mode,
         #   since that introduces artifacts between the tile edges.)
-        borderColour = self.packetReader.GetBorderColour()
-        if borderColour != self.borderColour:
+        border_colour = self.packetReader.get_border_colour()
+        if border_colour != self.border_colour:
             # When the border colour changes, blit the whole screen
             # and redraw it.
-            self.borderColour = borderColour
-            if borderColour is not None:
-                manager.surface.fill(borderColour)
-                self.packetReader.MarkTilesDirty()
+            self.border_colour = border_colour
+            if border_colour is not None:
+                manager.surface.fill(border_colour)
+                self.packetReader.mark_tiles_dirty()
 
-        dirtyTiles = self.packetReader.GetDirtyTiles()
-        if not dirtyTiles:
+        dirty_tiles = self.packetReader.get_dirty_tiles()
+        if not dirty_tiles:
             # If no tiles are dirty, don't bother.
             return
 
@@ -583,8 +583,8 @@ class CdgPlayer(PykPlayer):
         rect_list = []
 
         # Scale and blit only those tiles which have been updated
-        for row, col in dirtyTiles:
-            self.packetReader.FillTile(self.workingTile, row, col)
+        for row, col in dirty_tiles:
+            self.packetReader.fill_tile(self.workingTile, row, col)
 
             if manager.settings.cdg_zoom == "none":
                 # The no-scale approach.

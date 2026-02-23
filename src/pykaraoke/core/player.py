@@ -92,7 +92,7 @@ class PykPlayer:
             song = self.song_db.makeSongStruct(song)
 
         # Store the parameters
-        self.Song = song
+        self.song = song
         self.window_title = window_title
 
         # And look up the actual files corresponding to this SongStruct.
@@ -105,16 +105,16 @@ class PykPlayer:
         if error_notify_callback:
             self.error_notify_callback = error_notify_callback
         else:
-            self.error_notify_callback = self.__defaultErrorPrint
+            self.error_notify_callback = self.__default_error_print
 
         # Caller can register a callback by which we
         # let them know when the song is finished
         if done_callback:
-            self.SongFinishedCallback = done_callback
+            self.song_finished_callback = done_callback
         else:
-            self.SongFinishedCallback = None
+            self.song_finished_callback = None
 
-        self.State = STATE_INIT
+        self.state = STATE_INIT
         self.internal_offset_time = 0
 
         # These values are used to keep track of the current position
@@ -123,7 +123,7 @@ class PykPlayer:
         # unreliable for some reason.
         self.play_time = 0
         self.play_start_time = 0
-        self.PlayFrame = 0
+        self.play_frame = 0
 
         # self.play_start_time is valid while State == STATE_PLAYING; it
         # indicates the get_ticks() value at which the song started
@@ -132,7 +132,7 @@ class PykPlayer:
         # it indicates the total number of ticks (milliseconds) that
         # have elapsed in the song so far.
 
-        # self.PlayFrame starts at 0 and increments once for each
+        # self.play_frame starts at 0 and increments once for each
         # frame.  It's not very meaningful, except in STATE_CAPTURING
         # mode.
 
@@ -160,30 +160,30 @@ class PykPlayer:
             self.setup_dump()
         else:
             self.play_start_time = pygame.time.get_ticks()
-            self.State = STATE_PLAYING
+            self.state = STATE_PLAYING
 
     # pause the song - Use pause() again to unpause
     def pause(self):
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             self.do_pause()
             self.play_time = pygame.time.get_ticks() - self.play_start_time
-            self.State = STATE_PAUSED
-        elif self.State == STATE_PAUSED:
+            self.state = STATE_PAUSED
+        elif self.state == STATE_PAUSED:
             self.do_unpause()
             self.play_start_time = pygame.time.get_ticks() - self.play_time
-            self.State = STATE_PLAYING
+            self.state = STATE_PLAYING
 
     # close the whole thing down
     def close(self):
-        self.State = STATE_CLOSING
+        self.state = STATE_CLOSING
 
     # you must call play() to restart. Blocks until pygame is initialised
     def rewind(self):
         self.do_rewind()
         self.play_time = 0
         self.play_start_time = 0
-        self.PlayFrame = 0
-        self.State = STATE_NOT_PLAYING
+        self.play_frame = 0
+        self.state = STATE_NOT_PLAYING
 
     # stop the song and go back to the start. As you would
     # expect stop to do on a CD player. play() restarts from
@@ -199,7 +199,7 @@ class PykPlayer:
 
     # Get the current time (in milliseconds).
     def get_pos(self):
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             return pygame.time.get_ticks() - self.play_start_time
         else:
             return self.play_time
@@ -220,8 +220,8 @@ class PykPlayer:
         # Capture the output as a sequence of numbered frame images.
         self.play_time = 0
         self.play_start_time = 0
-        self.PlayFrame = 0
-        self.State = STATE_CAPTURING
+        self.play_frame = 0
+        self.state = STATE_CAPTURING
 
         self.dump_frame_rate = manager.options.dump_fps
         if not self.dump_frame_rate:
@@ -258,7 +258,7 @@ class PykPlayer:
 
         # Don't dump a video file; dump a sequence of frames instead.
         self.dump_ppm = ext_lower == ".ppm" or ext_lower == ".pnm"
-        self.dumpAppend = False
+        self.dump_append = False
 
         # Convert the filename to a pattern.
         if "#" in filename:
@@ -273,7 +273,7 @@ class PykPlayer:
             if self.dump_ppm:
                 # We can dump a series of frames all to the same file,
                 # if we're dumping ppm frames.  Mjpegtools likes this.
-                self.dumpAppend = True
+                self.dump_append = True
                 try:
                     os.remove(filename)
                 except OSError:
@@ -297,10 +297,10 @@ class PykPlayer:
             self.dump_file.write(d.data)
             return
 
-        if self.dumpAppend:
+        if self.dump_append:
             filename = self.dump_filename
         else:
-            filename = self.dump_filename % self.PlayFrame
+            filename = self.dump_filename % self.play_frame
             print(filename)
 
         if self.dump_ppm:
@@ -309,7 +309,7 @@ class PykPlayer:
             # useful.
 
             w, h = manager.surface.get_size()
-            if self.dumpAppend:
+            if self.dump_append:
                 f = open(filename, "ab")
             else:
                 f = open(filename, "wb")
@@ -345,20 +345,20 @@ class PykPlayer:
         # activity.
         # Common handling code for a close request or if the
         # pygame window was quit
-        if self.State == STATE_CLOSING:
+        if self.state == STATE_CLOSING:
             if manager.display:
                 manager.display.fill((0, 0, 0))
                 pygame.display.flip()
             self.shutdown()
 
-        elif self.State == STATE_CAPTURING:
+        elif self.state == STATE_CAPTURING:
             # We are capturing a video file.
             self.do_frame_dump()
 
             # Set the frame time for the next frame.
-            self.play_time = 1000.0 * self.PlayFrame / self.dump_frame_rate
+            self.play_time = 1000.0 * self.play_frame / self.dump_frame_rate
 
-        self.PlayFrame += 1
+        self.play_frame += 1
 
     def do_resize(self, new_size):
         # This will be called internally whenever the window is
@@ -400,7 +400,7 @@ class PykPlayer:
         elif event.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
             self.rewind()
             self.play()
-        elif self.State == STATE_PLAYING and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
+        elif self.state == STATE_PLAYING and event.mod & (pygame.KMOD_LCTRL | pygame.KMOD_RCTRL):
             self._handle_ctrl_arrow(event)
 
         if self.supports_font_zoom:
@@ -454,12 +454,12 @@ class PykPlayer:
         # immediately.
 
         # If the caller gave us a callback, let them know we're finished
-        if self.State != STATE_CLOSED:
-            self.State = STATE_CLOSED
-            if self.SongFinishedCallback is not None:
-                self.SongFinishedCallback()
+        if self.state != STATE_CLOSED:
+            self.state = STATE_CLOSED
+            if self.song_finished_callback is not None:
+                self.song_finished_callback()
 
-    def __defaultErrorPrint(self, error_string):
+    def __default_error_print(self, error_string):
         print(error_string)
 
     def find_pygame_font(self, font_data, font_size):

@@ -108,7 +108,7 @@ class TestCdgPacketReaderInit:
 
     def test_reader_has_mark_tiles_dirty(self):
         reader = self._make_reader()
-        assert hasattr(reader, "MarkTilesDirty")
+        assert hasattr(reader, "mark_tiles_dirty")
 
     def test_rewind_resets_state(self):
         reader = self._make_reader()
@@ -126,7 +126,7 @@ class TestCdgPacketReaderMethods:
 
     def test_mark_tiles_dirty(self):
         reader = self._make_reader_with_data(bytes(24))
-        reader.MarkTilesDirty()  # Should not raise
+        reader.mark_tiles_dirty()  # Should not raise
 
     def test_rewind_twice(self):
         reader = self._make_reader_with_data(bytes(24))

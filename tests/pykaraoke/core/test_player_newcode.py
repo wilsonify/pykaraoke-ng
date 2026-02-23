@@ -93,10 +93,10 @@ class TestPlayerDoStuffCapturingState:
     def test_do_stuff_with_capturing_state(self):
         from pykaraoke.config.constants import STATE_CAPTURING
         p = self._make_player()
-        p.State = STATE_CAPTURING
+        p.state = STATE_CAPTURING
         p.do_frame_dump = MagicMock()
         p.dump_frame_rate = 30.0
-        p.PlayFrame = 0
+        p.play_frame = 0
         p.play_time = 0.0
         result = p.do_stuff()
 
@@ -135,12 +135,12 @@ class TestPlayerAdditionalCoverage:
         p = self._make_player()
         p.doPause = MagicMock()
         p.doUnpause = MagicMock()
-        p.State = STATE_PLAYING
+        p.state = STATE_PLAYING
         p.play_start_time = 0
         p.pause()
-        assert p.State == STATE_PAUSED
+        assert p.state == STATE_PAUSED
         p.pause()
-        assert p.State == STATE_PLAYING
+        assert p.state == STATE_PLAYING
 
     def test_player_get_pos_default(self):
         p = self._make_player()
@@ -151,13 +151,13 @@ class TestPlayerAdditionalCoverage:
         from pykaraoke.config.constants import STATE_CLOSING
         p = self._make_player()
         p.close()
-        assert p.State == STATE_CLOSING
+        assert p.state == STATE_CLOSING
 
     def test_player_shutdown(self):
         from pykaraoke.config.constants import STATE_CLOSED
         p = self._make_player()
         p.shutdown()
-        assert p.State == STATE_CLOSED
+        assert p.state == STATE_CLOSED
 
     def test_player_stop(self):
         p = self._make_player()

@@ -235,14 +235,14 @@ class MpgPlayer(PykPlayer):
         # The Movie player must be paused while resizing otherwise we
         # get Xlib errors. pykmanager will call here before the resize
         # so that we can do it.
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             self.Movie.pause()
 
     # Internal. Only called by the pykManager.
     def do_resize_end(self):
         # Called by pykmanager when resizing has finished.
         # We only play if it was playing in the first place.
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             self.Movie.play()
 
 

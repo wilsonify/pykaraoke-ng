@@ -1563,7 +1563,7 @@ class SongDB:
 
     def _process_zip_member(self, full_path, filename, zf):
         """Process a single member of a ZIP file."""
-        root, ext = os.path.splitext(filename)
+        _, ext = os.path.splitext(filename)
         if self.settings.read_titles_txt and filename.endswith(_TITLES_FILENAME):
             self.titles_files.append(TitleStruct(full_path, zip_stored_name=filename))
         elif self.is_extension_valid(ext):

@@ -45,7 +45,7 @@ if env == ENV_GP2X:
     import _cpuctrl as cpuctrl
 
 
-class pykManager:
+class PykManager:
     """There is only one instance of this class in existence during
     program execution, and it is never destructed until program
     termination.  This class manages the pygame interface, keeping
@@ -85,7 +85,7 @@ class pykManager:
 
         # This factor may be changed by the user to make text bigger
         # or smaller on those players that support it.
-        self.fontScale = None
+        self.font_scale = None
 
     def set_cpu_speed(self, activity_name):
         """Sets the CPU speed appropriately according to what the
@@ -142,22 +142,22 @@ class pykManager:
 
     def get_font_scale(self):
         """Returns the current font scale."""
-        if self.fontScale is None:
-            self.fontScale = self.options.font_scale
-        return self.fontScale
+        if self.font_scale is None:
+            self.font_scale = self.options.font_scale
+        return self.font_scale
 
     def zoom_font(self, factor):
         """Zooms the font scale by the indicated factor.  This is
         treated like a resize event, even though the window is not
         changing size; player.do_resize() will be called."""
         self.get_font_scale()
-        self.fontScale *= factor
+        self.font_scale *= factor
         if self.player:
             self.player.do_resize(self.display_size)
 
     def init_player(self, player):
         """A PykPlayer will call this when it constructs.  This
-        registers the player with the pykManager, so that it will get
+        registers the player with the PykManager, so that it will get
         callbacks and control of the display.  This call also ensures
         that pygame has been initialized."""
 
@@ -170,7 +170,7 @@ class pykManager:
             self.pygame_init()
 
         self.player = player
-        self.player.State = STATE_NOT_PLAYING
+        self.player.state = STATE_NOT_PLAYING
 
         if self.display is not None and self.display_title is None:
             try:
@@ -370,7 +370,7 @@ class pykManager:
         self.handle_events()
 
         if self.player:
-            if self.player.State == STATE_CLOSED:
+            if self.player.state == STATE_CLOSED:
                 self.player = None
             else:
                 self.player.do_stuff()
@@ -383,7 +383,7 @@ class pykManager:
         repeatedly calling poll().  It will block until the currently
         active player has finished, and then return."""
 
-        while self.player and self.player.State != STATE_CLOSED:
+        while self.player and self.player.state != STATE_CLOSED:
             self.poll()
 
     def setup_options(self, usage, song_db):
@@ -744,5 +744,5 @@ class pykManager:
         )
 
 
-# Now instantiate a global pykManager object.
-manager = pykManager()
+# Now instantiate a global PykManager object.
+manager = PykManager()

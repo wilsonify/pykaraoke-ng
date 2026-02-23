@@ -187,9 +187,9 @@ TEXT_TITLE = 2
 debug = False
 
 
-class midiFile:
+class MidiFile:
     def __init__(self):
-        self.trackList = []  # List of TrackDesc track descriptors
+        self.track_list = []  # List of TrackDesc track descriptors
 
         # Chosen lyric list from above.  It is converted by
         # computeTiming() from a list of (clicks, text) into a list of
@@ -198,36 +198,36 @@ class midiFile:
 
         self.text_encoding = ""  # The encoding of text in midi file
 
-        self.ClickUnitsPerSMPTE = None
-        self.SMPTEFramesPerSec = None
-        self.ClickUnitsPerQuarter = None
+        self.click_units_per_smpte = None
+        self.smpte_frames_per_sec = None
+        self.click_units_per_quarter = None
 
         # The tempo of the song may change throughout, so we have to
         # record the click at which each tempo change occurred, and
         # the new tempo at that point.  Then, after we have read in
         # all the tracks (and thus collected all the tempo changes),
         # we can go back and apply this knowledge to the other tracks.
-        self.Tempo = [(0, 0)]
+        self.tempo = [(0, 0)]
 
-        self.Numerator = None  # Numerator
-        self.Denominator = None  # Denominator
-        self.ClocksPerMetronomeTick = None  # MIDI clocks per metronome tick
-        self.NotesPer24MIDIClocks = None  # 1/32 Notes per 24 MIDI clocks
+        self.numerator = None  # Numerator
+        self.denominator = None  # Denominator
+        self.clocks_per_metronome_tick = None  # MIDI clocks per metronome tick
+        self.notes_per_24_midi_clocks = None  # 1/32 Notes per 24 MIDI clocks
         self.earliest_note_ms = 0  # Start of earliest note in song
         self.last_note_ms = 0  # End of latest note in song
 
 
 class TrackDesc:
-    def __init__(self, trackNum):
-        self.TrackNum = trackNum  # Track number
-        self.TotalClicksFromStart = 0  # Store number of clicks elapsed from start
-        self.BytesRead = 0  # Number of file bytes read for track
-        self.FirstNoteClick = None  # Start of first note in track
-        self.FirstNoteMs = None  # The same, in milliseconds
+    def __init__(self, track_num):
+        self.track_num = track_num  # Track number
+        self.total_clicks_from_start = 0  # Store number of clicks elapsed from start
+        self.bytes_read = 0  # Number of file bytes read for track
+        self.first_note_click = None  # Start of first note in track
+        self.first_note_ms = None  # The same, in milliseconds
         self.last_note_click = None  # End of last note in track
         self.last_note_ms = None  # In millseconds
-        self.LyricsTrack = False  # This track contains lyrics
-        self.RunningStatus = 0  # MIDI Running Status byte
+        self.lyrics_track = False  # This track contains lyrics
+        self.running_status = 0  # MIDI Running Status byte
 
         self.text_events = Lyrics()  # Lyrics (0x1 events)
         self.lyric_events = Lyrics()  # Lyrics (0x5 events)
@@ -239,39 +239,39 @@ class MidiTimestamp:
     clicks from the beginning of the song."""
 
     def __init__(self, midifile):
-        self.ClickUnitsPerQuarter = midifile.ClickUnitsPerQuarter
-        self.Tempo = midifile.Tempo
+        self.click_units_per_quarter = midifile.click_units_per_quarter
+        self.tempo = midifile.tempo
         self.ms = 0
         self.click = 0
         self.i = 0
 
-    def advanceToClick(self, click):
+    def advance_to_click(self, click):
         # Moves time forward to the indicated click number.
         clicks = click - self.click
         if clicks < 0:
             # Ignore jumps backward in time.
             return
 
-        while clicks > 0 and self.i < len(self.Tempo):
+        while clicks > 0 and self.i < len(self.tempo):
             # How many clicks remain at the current tempo?
-            clicksRemaining = max(self.Tempo[self.i][0] - self.click, 0)
-            clicksUsed = min(clicks, clicksRemaining)
-            if clicksUsed != 0:
-                self.ms += self.getTimeForClicks(clicksUsed, self.Tempo[self.i - 1][1])
-            self.click += clicksUsed
-            clicks -= clicksUsed
-            clicksRemaining -= clicksUsed
-            if clicksRemaining == 0:
+            clicks_remaining = max(self.tempo[self.i][0] - self.click, 0)
+            clicks_used = min(clicks, clicks_remaining)
+            if clicks_used != 0:
+                self.ms += self.get_time_for_clicks(clicks_used, self.tempo[self.i - 1][1])
+            self.click += clicks_used
+            clicks -= clicks_used
+            clicks_remaining -= clicks_used
+            if clicks_remaining == 0:
                 self.i += 1
 
         if clicks > 0:
             # We have reached the last tempo mark of the song, so this
             # tempo holds forever.
-            self.ms += self.getTimeForClicks(clicks, self.Tempo[-1][1])
+            self.ms += self.get_time_for_clicks(clicks, self.tempo[-1][1])
             self.click += clicks
 
-    def getTimeForClicks(self, clicks, tempo):
-        microseconds = (float(clicks) / self.ClickUnitsPerQuarter) * tempo
+    def get_time_for_clicks(self, clicks, tempo):
+        microseconds = (float(clicks) / self.click_units_per_quarter) * tempo
         time_ms = microseconds / 1000
         return time_ms
 
@@ -292,7 +292,7 @@ class LyricSyllable:
         self.left = None
         self.right = None
 
-    def makeCopy(self, text):
+    def make_copy(self, text):
         # Returns a new LyricSyllable, exactly like this one, with
         # the text replaced by the indicated string
         syllable = LyricSyllable(self.click, text, self.line, self.type)
@@ -311,7 +311,7 @@ class Lyrics:
         self.list = []
         self.line = 0
 
-    def hasAny(self):
+    def has_any(self):
         # Returns true if there are any lyrics.
         return bool(self.list)
 
@@ -405,22 +405,22 @@ class Lyrics:
 
         ts = MidiTimestamp(midifile)
         for syllable in self.list:
-            ts.advanceToClick(syllable.click)
+            ts.advance_to_click(syllable.click)
             syllable.ms = int(ts.ms)
 
         # Also change the firstNoteClick to firstNoteMs, for each track.
-        for track_desc in midifile.trackList:
+        for track_desc in midifile.track_list:
             ts = MidiTimestamp(midifile)
-            if track_desc.FirstNoteClick is not None:
-                ts.advanceToClick(track_desc.FirstNoteClick)
-                track_desc.FirstNoteMs = ts.ms
+            if track_desc.first_note_click is not None:
+                ts.advance_to_click(track_desc.first_note_click)
+                track_desc.first_note_ms = ts.ms
                 if debug:
                     print(
                         "T%s first note at %s clicks, %s ms"
-                        % (track_desc.TrackNum, track_desc.FirstNoteClick, track_desc.FirstNoteMs)
+                        % (track_desc.track_num, track_desc.first_note_click, track_desc.first_note_ms)
                     )
             if track_desc.last_note_click is not None:
-                ts.advanceToClick(track_desc.last_note_click)
+                ts.advance_to_click(track_desc.last_note_click)
                 track_desc.last_note_ms = ts.ms
 
     def analyzeSpaces(self):
@@ -560,11 +560,11 @@ class Lyrics:
         syllable = current_line[i]
         if i == 0:
             # One long line.  Break it mid-phrase.
-            a = syllable.makeCopy(syllable.text[:fold_point])
+            a = syllable.make_copy(syllable.text[:fold_point])
             output_line.append(a)
-            current_line[i] = syllable.makeCopy("  " + syllable.text[fold_point:])
+            current_line[i] = syllable.make_copy("  " + syllable.text[fold_point:])
         else:
-            current_line[i] = syllable.makeCopy("  " + syllable.text)
+            current_line[i] = syllable.make_copy("  " + syllable.text)
 
         remaining_line = current_line[i:]
         remaining_text = "".join(s.text for s in remaining_line)
@@ -579,8 +579,8 @@ class Lyrics:
 
 
 def midi_parse_data(midi_data, error_notify_callback, encoding):
-    # Create the midiFile structure
-    midifile = midiFile()
+    # Create the MidiFile structure
+    midifile = MidiFile()
     midifile.text_encoding = encoding
 
     # Open the file
@@ -597,10 +597,10 @@ def midi_parse_data(midi_data, error_notify_callback, encoding):
     packet = filehdl.read(length)
     _, _, division = struct.unpack(">HHH", packet)
     if division & 0x8000:
-        midifile.ClickUnitsPerSMPTE = division & 0x00FF
-        midifile.SMPTEFramesPerSec = division & 0x7F00
+        midifile.click_units_per_smpte = division & 0x00FF
+        midifile.smpte_frames_per_sec = division & 0x7F00
     else:
-        midifile.ClickUnitsPerQuarter = division & 0x7FFF
+        midifile.click_units_per_quarter = division & 0x7FFF
 
     # Loop through parsing all tracks
     _parse_midi_tracks(filehdl, midifile)
@@ -622,7 +622,7 @@ def midi_parse_data(midi_data, error_notify_callback, encoding):
         print("first = %s" % (midifile.earliest_note_ms))
         print("last = %s" % (midifile.last_note_ms))
 
-    # Return the populated midiFile structure
+    # Return the populated MidiFile structure
     return midifile
 
 
@@ -640,9 +640,9 @@ def _parse_midi_tracks(filehdl, midifile):
         track_desc = midi_parse_track(filehdl, midifile, track_num, length)
         if not track_desc:
             break
-        midifile.trackList.append(track_desc)
+        midifile.track_list.append(track_desc)
         if debug:
-            print("T%d: First note(%s)" % (track_num, track_desc.FirstNoteClick))
+            print("T%d: First note(%s)" % (track_num, track_desc.first_note_click))
         track_num += 1
 
 
@@ -651,11 +651,11 @@ def _select_best_lyrics(midifile):
     best_sort_key = None
     best_lyrics = None
 
-    for track_desc in midifile.trackList:
+    for track_desc in midifile.track_list:
         lyrics = _choose_lyrics_from_track(track_desc)
         if not lyrics:
             continue
-        sort_key = (track_desc.LyricsTrack, len(lyrics.list))
+        sort_key = (track_desc.lyrics_track, len(lyrics.list))
         if sort_key > best_sort_key:
             best_sort_key = sort_key
             best_lyrics = lyrics
@@ -664,8 +664,8 @@ def _select_best_lyrics(midifile):
 
 def _choose_lyrics_from_track(track_desc):
     """Pick the best lyric event list from a single track."""
-    has_text = track_desc.text_events.hasAny()
-    has_lyric = track_desc.lyric_events.hasAny()
+    has_text = track_desc.text_events.has_any()
+    has_lyric = track_desc.lyric_events.has_any()
 
     if has_text and has_lyric:
         if len(track_desc.lyric_events.list) > len(track_desc.text_events.list):
@@ -682,10 +682,10 @@ def _compute_note_bounds(midifile):
     """Return (earliest_note_ms, last_note_ms) across all tracks."""
     earliest_note_ms = None
     last_note_ms = None
-    for track in midifile.trackList:
-        if track.FirstNoteMs is not None:
-            if earliest_note_ms is None or track.FirstNoteMs < earliest_note_ms:
-                earliest_note_ms = track.FirstNoteMs
+    for track in midifile.track_list:
+        if track.first_note_ms is not None:
+            if earliest_note_ms is None or track.first_note_ms < earliest_note_ms:
+                earliest_note_ms = track.first_note_ms
         if track.last_note_ms is not None:
             if last_note_ms is None or track.last_note_ms > last_note_ms:
                 last_note_ms = track.last_note_ms
@@ -699,11 +699,11 @@ def midi_parse_track(filehdl, midifile, track_num, length):
         print("Track %d" % track_num)
     # Loop through all events in the track, recording salient meta-events and times
     event_bytes = 0
-    while track.BytesRead < length:
+    while track.bytes_read < length:
         event_bytes = midi_process_event(filehdl, track, midifile)
         if (event_bytes is None) or (event_bytes == -1) or (event_bytes == 0):
             return None
-        track.BytesRead = track.BytesRead + event_bytes
+        track.bytes_read = track.bytes_read + event_bytes
     return track
 
 
@@ -714,7 +714,7 @@ def midi_process_event(filehdl, track_desc, midifile):
     if var_bytes == 0:
         return 0
     bytes_read = bytes_read + var_bytes
-    track_desc.TotalClicksFromStart += click
+    track_desc.total_clicks_from_start += click
     byte_str = filehdl.read(1)
     bytes_read = bytes_read + 1
     status_byte = ord(byte_str)
@@ -723,9 +723,9 @@ def midi_process_event(filehdl, track_desc, midifile):
     if status_byte & 0x80:
         event_type = status_byte
         if (event_type & 0xF0) != 0xF0:
-            track_desc.RunningStatus = event_type
+            track_desc.running_status = event_type
     else:
-        event_type = track_desc.RunningStatus
+        event_type = track_desc.running_status
         filehdl.seek(-1, 1)
         bytes_read = bytes_read - 1
 
@@ -778,7 +778,7 @@ def _meta_text_event(filehdl, track_desc, midifile):
         if midifile.text_encoding != "":
             text = text.decode(midifile.text_encoding, "replace")
         if _is_lyric_text(text):
-            track_desc.text_events.recordText(track_desc.TotalClicksFromStart, text)
+            track_desc.text_events.recordText(track_desc.total_clicks_from_start, text)
         if debug:
             print("Text: %s" % (repr(text)))
     elif debug:
@@ -801,7 +801,7 @@ def _meta_track_title(filehdl, track_desc, midifile):
     if debug:
         print("Track Title: " + repr(title))
     if title == "Words":
-        track_desc.LyricsTrack = True
+        track_desc.lyrics_track = True
     return bytes_read
 
 
@@ -820,7 +820,7 @@ def _meta_lyric_event(filehdl, track_desc, midifile):
         lyric = lyric.decode(midifile.text_encoding, "replace")
     bytes_read += length
     if _is_lyric_text(lyric):
-        track_desc.lyric_events.recordLyric(track_desc.TotalClicksFromStart, lyric)
+        track_desc.lyric_events.recordLyric(track_desc.total_clicks_from_start, lyric)
     if debug:
         print("Lyric: %s" % (repr(lyric)))
     return bytes_read
@@ -853,7 +853,7 @@ def _meta_set_tempo(filehdl, track_desc, midifile):
     if valid != 0x03:
         print("Error: Invalid tempo")
     tempo = (tempo_a << 16) | (tempo_b << 8) | tempo_c
-    midifile.Tempo.append((track_desc.TotalClicksFromStart, tempo))
+    midifile.tempo.append((track_desc.total_clicks_from_start, tempo))
     if debug:
         ms_per_quarter = tempo / 1000
         print("Tempo: %d (%d ms per quarter note)" % (tempo, ms_per_quarter))
@@ -875,10 +875,10 @@ def _meta_time_signature(filehdl, track_desc, midifile):
             "Error: Invalid time signature (valid=%d, num=%d, denom=%d)"
             % (valid, num, denom)
         )
-    midifile.Numerator = num
-    midifile.Denominator = denom
-    midifile.ClocksPerMetronomeTick = clocks
-    midifile.NotesPer24MIDIClocks = notes
+    midifile.numerator = num
+    midifile.denominator = denom
+    midifile.clocks_per_metronome_tick = clocks
+    midifile.notes_per_24_midi_clocks = notes
     return 5
 
 
@@ -972,15 +972,15 @@ def _process_channel_event(filehdl, track_desc, event_type):
     if high_nibble == 0x80:
         # Note off
         filehdl.read(2)
-        track_desc.last_note_click = track_desc.TotalClicksFromStart
+        track_desc.last_note_click = track_desc.total_clicks_from_start
         return 2
 
     if high_nibble == 0x90:
         # Note on
         filehdl.read(2)
-        if track_desc.FirstNoteClick is None:
-            track_desc.FirstNoteClick = track_desc.TotalClicksFromStart
-        track_desc.last_note_click = track_desc.TotalClicksFromStart
+        if track_desc.first_note_click is None:
+            track_desc.first_note_click = track_desc.total_clicks_from_start
+        track_desc.last_note_click = track_desc.total_clicks_from_start
         return 2
 
     if high_nibble in (0xA0, 0xB0, 0xE0):
