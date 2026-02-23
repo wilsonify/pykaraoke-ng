@@ -34,16 +34,16 @@ class DummyBusy(database.BusyCancelDialog):
 
 song_db = database.SongDB()
 
-song_db.Settings.FolderList = [os.environ['SONGS_DIR']]
+song_db.settings.folder_list = [os.environ['SONGS_DIR']]
 # Keep the scan small and deterministic for tests
-song_db.Settings.ReadTitlesTxt = False
-song_db.Settings.LookInsideZips = False
-song_db.Settings.CheckHashes = False
+song_db.settings.read_titles_txt = False
+song_db.settings.look_inside_zips = False
+song_db.settings.check_hashes = False
 
-song_db.BuildSearchDatabase(DummyYielder(), DummyBusy())
+song_db.build_search_database(DummyYielder(), DummyBusy())
 
-song_db.SaveSettings()
-song_db.SaveDatabase()
+song_db.save_settings()
+song_db.save_database()
 
 report_path = os.path.join(os.environ['OUT_DIR'], 'scan_report.html')
 with open(report_path, 'w') as f:
@@ -53,8 +53,8 @@ with open(report_path, 'w') as f:
     f.write('</head><body>')
     f.write('<h1>PyKaraoke Scan Report</h1>')
     f.write('<ul>')
-    for song in song_db.FullSongList:
-        f.write('<li>{}</li>'.format(song.DisplayFilename))
+    for song in song_db.full_song_list:
+        f.write('<li>{}</li>'.format(song.display_filename))
     f.write('</ul>')
     f.write('</body></html>')
 

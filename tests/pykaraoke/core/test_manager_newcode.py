@@ -19,22 +19,22 @@ from tests.conftest import install_pygame_mock
 
 mock_pygame = install_pygame_mock()
 
-from pykaraoke.core.manager import pykManager
+from pykaraoke.core.manager import PykManager
 
 
 class TestGetVolumeNewCode:
-    """Tests the refactored GetVolume with try/except pygame.error."""
+    """Tests the refactored get_volume with try/except pygame.error."""
 
     def test_get_volume_success(self):
         """Line 134: get_volume() succeeds → returns its value."""
-        mgr = pykManager()
+        mgr = PykManager()
         # The mock's get_volume returns 0.75 by default
-        vol = mgr.GetVolume()
+        vol = mgr.get_volume()
         assert vol == 0.75
 
     def test_get_volume_pygame_error_fallback(self):
         """Line 135: pygame.error → returns 0.50."""
-        mgr = pykManager()
+        mgr = PykManager()
         pygame_mod = sys.modules["pygame"]
         original_get_volume = pygame_mod.mixer.music.get_volume
 
@@ -43,41 +43,41 @@ class TestGetVolumeNewCode:
             side_effect=pygame_mod.error("no mixer")
         )
         try:
-            vol = mgr.GetVolume()
+            vol = mgr.get_volume()
             assert vol == 0.50
         finally:
             pygame_mod.mixer.music.get_volume = original_get_volume
 
     def test_get_volume_after_set_volume(self):
-        mgr = pykManager()
-        mgr.SetVolume(0.8)
+        mgr = PykManager()
+        mgr.set_volume(0.8)
         # After set, get should work (mock always returns 0.75 though)
-        vol = mgr.GetVolume()
+        vol = mgr.get_volume()
         assert isinstance(vol, (int, float))
 
 
 class TestGetAudioBufferMSNewCode:
-    """Tests refactored GetAudioBufferMS with _ and buffer_samples renames."""
+    """Tests refactored get_audio_buffer_ms with _ and buffer_samples renames."""
 
     def test_buffer_ms_with_audio_props(self):
         """Verify the renamed variable buffer_samples computes correctly."""
-        mgr = pykManager()
+        mgr = PykManager()
         # audioProps = (frequency, size, channels, buffer_samples)
-        mgr.audioProps = (44100, -16, 2, 4096)
-        ms = mgr.GetAudioBufferMS()
+        mgr.audio_props = (44100, -16, 2, 4096)
+        ms = mgr.get_audio_buffer_ms()
         expected = 4096 * 1000 / (44100 * 2)
         assert abs(ms - expected) < 0.1
 
     def test_buffer_ms_without_audio_props(self):
         """Returns 0 when audioProps is None."""
-        mgr = pykManager()
-        mgr.audioProps = None
-        assert mgr.GetAudioBufferMS() == 0
+        mgr = PykManager()
+        mgr.audio_props = None
+        assert mgr.get_audio_buffer_ms() == 0
 
     def test_buffer_ms_mono(self):
-        mgr = pykManager()
-        mgr.audioProps = (22050, -16, 1, 2048)
-        ms = mgr.GetAudioBufferMS()
+        mgr = PykManager()
+        mgr.audio_props = (22050, -16, 1, 2048)
+        ms = mgr.get_audio_buffer_ms()
         expected = 2048 * 1000 / (22050 * 1)
         assert abs(ms - expected) < 0.1
 
@@ -97,24 +97,24 @@ class TestManagerImports:
 
 
 class TestManagerCpuSpeedRemovedPass:
-    """Test setCpuSpeed (which had unnecessary pass removed)."""
+    """Test set_cpu_speed (which had unnecessary pass removed)."""
 
     def test_set_cpu_speed_no_gp2x(self):
-        """On non-GP2X, setCpuSpeed is a no-op."""
-        mgr = pykManager()
+        """On non-GP2X, set_cpu_speed is a no-op."""
+        mgr = PykManager()
         mgr.settings = MagicMock()
-        mgr.setCpuSpeed("playing")  # Should not raise
+        mgr.set_cpu_speed("playing")  # Should not raise
 
     def test_set_cpu_speed_none(self):
-        mgr = pykManager()
+        mgr = PykManager()
         mgr.settings = MagicMock()
-        mgr.setCpuSpeed(None)  # Should not raise
+        mgr.set_cpu_speed(None)  # Should not raise
 
     def test_set_cpu_speed_same_speed_noop(self):
-        mgr = pykManager()
+        mgr = PykManager()
         mgr.settings = MagicMock()
-        mgr.cpuSpeed = "playing"
-        mgr.setCpuSpeed("playing")  # No change, returns early
+        mgr.cpu_speed = "playing"
+        mgr.set_cpu_speed("playing")  # No change, returns early
 
 
 class TestManagerMapToComprehension:
@@ -125,37 +125,37 @@ class TestManagerMapToComprehension:
         # Just verify the module loaded without syntax errors from the
         # comprehension fix
         from pykaraoke.core import manager
-        assert hasattr(manager, "pykManager")
+        assert hasattr(manager, "PykManager")
 
 
 class TestManagerOpenCloseDisplay:
     """Additional coverage for display management."""
 
     def test_close_display_without_open(self):
-        mgr = pykManager()
+        mgr = PykManager()
         mgr.display = None
-        mgr.CloseDisplay()  # Should not raise
+        mgr.close_display()  # Should not raise
 
     def test_close_audio_without_open(self):
-        mgr = pykManager()
-        mgr.CloseAudio()  # Should not raise
+        mgr = PykManager()
+        mgr.close_audio()  # Should not raise
 
 
 class TestManagerQuitNewCode:
     """Test Quit with and without player."""
 
     def test_quit_with_player(self):
-        mgr = pykManager()
+        mgr = PykManager()
         mock_player = MagicMock()
         mgr.player = mock_player
         mgr.initialized = False
-        mgr.Quit()
+        mgr.quit()
         mock_player.shutdown.assert_called_once()
         assert mgr.player is None
 
     def test_quit_with_initialized(self):
-        mgr = pykManager()
+        mgr = PykManager()
         mgr.initialized = True
         mgr.player = None
-        mgr.Quit()
+        mgr.quit()
         assert mgr.initialized is False

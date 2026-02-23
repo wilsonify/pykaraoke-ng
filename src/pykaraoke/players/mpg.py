@@ -38,7 +38,7 @@ from pykaraoke.config.constants import (
 )
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
-from pykaraoke.core.player import pykPlayer
+from pykaraoke.core.player import PykPlayer
 
 # OVERVIEW
 #
@@ -72,12 +72,12 @@ from pykaraoke.core.player import pykPlayer
 #       python pympg.py /songs/theboxer.mpg
 #
 # You can also incorporate a MPG player in your own projects by
-# importing this module. The class mpgPlayer is exported by the
+# importing this module. The class MpgPlayer is exported by the
 # module. You can import and start it as follows:
 #   from pykaraoke.players import mpg
-#   player = mpg.mpgPlayer("/songs/theboxer.mpg")
-#   player.Play()
-# If you do this, you must also arrange to call manager.Poll()
+#   player = mpg.MpgPlayer("/songs/theboxer.mpg")
+#   player.play()
+# If you do this, you must also arrange to call manager.poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #
@@ -102,7 +102,7 @@ from pykaraoke.core.player import pykPlayer
 #       msgBox ("Song is finished")
 #
 # To register callbacks, pass the functions in to the initialiser:
-#   mpgPlayer ("/songs/theboxer.mpg", errorPopup, songFinishedCallback)
+#   MpgPlayer ("/songs/theboxer.mpg", errorPopup, songFinishedCallback)
 # These parameters are optional and default to None.
 #
 # If the initialiser fails (e.g. the song file is not present), __init__
@@ -121,7 +121,7 @@ from pykaraoke.core.player import pykPlayer
 #
 # Previous implementations ran the player within a thread; this is no
 # longer the case.  Instead, it is the caller's responsibility to call
-# pycdg.manager.Poll() every once in a while to ensure that the player
+# pycdg.manager.poll() every once in a while to ensure that the player
 # gets enough CPU time to do its work.  Ideally, this should be at
 # least every 100 milliseconds or so to guarantee good video and audio
 # response time.
@@ -136,27 +136,27 @@ except ImportError:
     movie = None
 
 
-# mpgPlayer Class
-class mpgPlayer(pykPlayer):
+# MpgPlayer Class
+class MpgPlayer(PykPlayer):
     # Initialise the player instace
-    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
+    def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
+        PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
 
         self.Movie = None
 
-        manager.setCpuSpeed("mpg")
+        manager.set_cpu_speed("mpg")
 
-        manager.InitPlayer(self)
-        manager.OpenDisplay(depth=DISPLAY_DEPTH)
+        manager.init_player(self)
+        manager.open_display(depth=DISPLAY_DEPTH)
 
         # Close the mixer while using Movie
-        manager.CloseAudio()
+        manager.close_audio()
 
         # Open the Movie module
-        filepath = self.SongDatas[0].GetFilepath()
+        filepath = self.song_datas[0].get_filepath()
         if isinstance(filepath, str):
             filepath = filepath.encode(sys.getfilesystemencoding())
         self.Movie = pygame.movie.Movie(filepath)
@@ -164,35 +164,35 @@ class mpgPlayer(pykPlayer):
             manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1])
         )
 
-    def doPlay(self):
+    def do_play(self):
         self.Movie.play()
 
-    def doPause(self):
+    def do_pause(self):
         self.Movie.pause()
 
-    def doUnpause(self):
+    def do_unpause(self):
         self.Movie.play()
 
-    def doRewind(self):
+    def do_rewind(self):
         self.Movie.stop()
         self.Movie.rewind()
 
     # Get the movie length (in seconds).
-    def GetLength(self):
+    def get_length(self):
         return self.Movie.get_length()
 
     # Get the current time (in milliseconds).
-    def GetPos(self):
+    def get_pos(self):
         return self.Movie.get_time() * 1000
 
-    def SetupOptions(self, usage=None):
+    def setup_options(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
         if usage is None:
             usage = "%prog [options] <mpg filename>"
-        parser = pykPlayer.SetupOptions(self, usage=usage)
+        parser = PykPlayer.setup_options(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--font-scale")
@@ -206,9 +206,9 @@ class mpgPlayer(pykPlayer):
             self.Movie.stop()
         # Must remove the object before using pygame.mixer module again
         self.Movie = None
-        pykPlayer.shutdown(self)
+        PykPlayer.shutdown(self)
 
-    def handleEvent(self, event):
+    def handle_event(self, event):
         if (
             event.type == pygame.KEYDOWN
             and event.key == pygame.K_RETURN
@@ -218,59 +218,59 @@ class mpgPlayer(pykPlayer):
             )
         ):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
-            self.Close()
+            self.close()
             return
 
-        pykPlayer.handleEvent(self, event)
+        PykPlayer.handle_event(self, event)
 
     # Internal. Only called by the pykManager.
-    def doResize(self, newSize):
+    def do_resize(self, new_size):
         # Resize the screen.
         self.Movie.set_display(
             manager.display, (0, 0, manager.displaySize[0], manager.displaySize[1])
         )
 
     # Internal. Only called by the pykManager.
-    def doResizeBegin(self):
+    def do_resize_begin(self):
         # The Movie player must be paused while resizing otherwise we
         # get Xlib errors. pykmanager will call here before the resize
         # so that we can do it.
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             self.Movie.pause()
 
     # Internal. Only called by the pykManager.
-    def doResizeEnd(self):
+    def do_resize_end(self):
         # Called by pykmanager when resizing has finished.
         # We only play if it was playing in the first place.
-        if self.State == STATE_PLAYING:
+        if self.state == STATE_PLAYING:
             self.Movie.play()
 
 
-class externalPlayer(pykPlayer):
+class ExternalPlayer(PykPlayer):
     """This class is used to invoke an external command and wait for
     it to finish.  It is usually used to play a video file using an
     external player."""
 
-    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
+    def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
+        PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
 
         self.Movie = None
 
-        manager.setCpuSpeed("mpg")
-        manager.InitPlayer(self)
+        manager.set_cpu_speed("mpg")
+        manager.init_player(self)
 
         # Close the audio and the display
-        manager.CloseAudio()
-        manager.CloseDisplay()
-        manager.CloseCPUControl()
+        manager.close_audio()
+        manager.close_display()
+        manager.close_cpu_control()
 
         self.procReturnCode = None
         self.proc = None
 
-    def doPlay(self):
+    def do_play(self):
         if self.procReturnCode is not None:
             # The movie is done.
             self.__stop()
@@ -278,31 +278,31 @@ class externalPlayer(pykPlayer):
         if not self.proc:
             self.__start()
 
-    def GetLength(self):
+    def get_length(self):
         # We cannot fetch the length from arbitrary external players.
         # Return zero-length.
         return 0
 
-    def GetPos(self):
+    def get_pos(self):
         # Use the default GetPos() which simply checks the time
         # since we started playing. This does not take account
         # for any fast-forward/rewind that may occur in the
         # external player, but we cannot support getting the
         # song position from arbitrary user-supplied players.
-        return pykPlayer.GetPos(self)
+        return PykPlayer.get_pos(self)
 
-    def doStuff(self):
+    def do_stuff(self):
         if self.procReturnCode is not None:
             # The movie is done.
             self.__stop()
-            self.Close()
+            self.close()
 
-        pykPlayer.doStuff(self)
+        PykPlayer.do_stuff(self)
 
     def __start(self):
-        filepath = self.SongDatas[0].GetFilepath()
+        filepath = self.song_datas[0].get_filepath()
 
-        external = manager.settings.MpgExternal
+        external = manager.settings.mpg_external
         if "%" in external:
             # Assume the filename parameter is embedded in the string.
             # Parse the command string into a list to avoid shell injection
@@ -323,7 +323,7 @@ class externalPlayer(pykPlayer):
             raise RuntimeError("Process already running")
         sys.stdout.flush()
         self.proc = subprocess.Popen(cmd, shell=False)
-        if manager.settings.MpgExternalThreaded:
+        if manager.settings.mpg_external_threaded:
             # Wait for it to complete in a thread.
             self.thread = threading.Thread(target=self.__runThread)
             self.thread.start()
@@ -351,13 +351,10 @@ class externalPlayer(pykPlayer):
 
 # Can be called from the command line with the MPG filepath as parameter
 def main():
-    player = mpgPlayer(None, None)
-    player.Play()
-    manager.WaitForPlayer()
+    player = MpgPlayer(None, None)
+    player.play()
+    manager.wait_for_player()
 
 
 if __name__ == "__main__":
     sys.exit(main())
-    # import profile
-    # result = profile.run('main()', 'pympg.prof')
-    # sys.exit(result)

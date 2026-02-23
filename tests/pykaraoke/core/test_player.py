@@ -1,7 +1,7 @@
 """
 Comprehensive tests for pykaraoke.core.player module.
 
-Tests the base pykPlayer class with pygame mocked to allow headless testing.
+Tests the base PykPlayer class with pygame mocked to allow headless testing.
 """
 
 import sys
@@ -24,10 +24,10 @@ from pykaraoke.config.constants import (
 
 
 def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, window_title=None):
-    """Create a pykPlayer with manager.options pre-set to avoid SetupOptions call."""
+    """Create a PykPlayer with manager.options pre-set to avoid setup_options call."""
     from pykaraoke.core.manager import manager
 
-    # Pre-set options so pykPlayer.__init__ skips SetupOptions/parse_args
+    # Pre-set options so PykPlayer.__init__ skips setup_options/parse_args
     if manager.options is None:
         opts = MagicMock()
         opts.dump = None
@@ -40,184 +40,184 @@ def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, win
     # Create a mock songDb
     mock_db = MagicMock()
     mock_settings = MagicMock()
-    mock_settings.CdgExtensions = [".cdg"]
-    mock_settings.KarExtensions = [".kar", ".mid"]
-    mock_settings.MpgExtensions = [".mpg", ".mpeg"]
-    mock_settings.CdgDeriveSongInformation = False
-    mock_settings.FilesystemCoding = "utf-8"
-    mock_settings.ZipfileCoding = "cp1252"
-    mock_db.Settings = mock_settings
+    mock_settings.cdg_extensions = [".cdg"]
+    mock_settings.kar_extensions = [".kar", ".mid"]
+    mock_settings.mpg_extensions = [".mpg", ".mpeg"]
+    mock_settings.cdg_derive_song_information = False
+    mock_settings.filesystem_coding = "utf-8"
+    mock_settings.zipfile_coding = "cp1252"
+    mock_db.settings = mock_settings
 
     # Create a mock song object
     mock_song = MagicMock()
-    mock_song.Filepath = song_filepath
-    mock_song.DisplayFilename = song_filepath
-    mock_song.GetSongDatas.return_value = []
+    mock_song.filepath = song_filepath
+    mock_song.display_filename = song_filepath
+    mock_song.get_song_datas.return_value = []
     mock_db.makeSongStruct.return_value = mock_song
 
-    from pykaraoke.core.player import pykPlayer
-    return pykPlayer(
+    from pykaraoke.core.player import PykPlayer
+    return PykPlayer(
         song_filepath,
         mock_db,
-        errorNotifyCallback=error_cb,
-        doneCallback=done_cb,
-        windowTitle=window_title,
+        error_notify_callback=error_cb,
+        done_callback=done_cb,
+        window_title=window_title,
     )
 
 
 class TestPykPlayerInit:
     def test_player_has_song(self):
         player = _make_player()
-        assert hasattr(player, "Song")
-        assert player.Song is not None
+        assert hasattr(player, "song")
+        assert player.song is not None
 
     def test_player_has_error_callback(self):
         err_cb = MagicMock()
         player = _make_player(error_cb=err_cb)
-        assert player.ErrorNotifyCallback == err_cb
+        assert player.error_notify_callback == err_cb
 
     def test_player_has_done_callback(self):
         done_cb = MagicMock()
         player = _make_player(done_cb=done_cb)
-        assert player.SongFinishedCallback == done_cb
+        assert player.song_finished_callback == done_cb
 
     def test_player_initial_state(self):
         player = _make_player()
-        assert player.State == STATE_INIT
+        assert player.state == STATE_INIT
 
     def test_player_has_window_title(self):
         player = _make_player(window_title="My Song")
-        assert player.WindowTitle == "My Song"
+        assert player.window_title == "My Song"
 
     def test_player_default_window_title(self):
         player = _make_player()
-        assert hasattr(player, "WindowTitle")
+        assert hasattr(player, "window_title")
 
     def test_player_play_time_zero(self):
         player = _make_player()
-        assert player.PlayTime == 0
+        assert player.play_time == 0
 
     def test_player_play_frame_zero(self):
         player = _make_player()
-        assert player.PlayFrame == 0
+        assert player.play_frame == 0
 
     def test_player_internal_offset_time(self):
         player = _make_player()
-        assert player.InternalOffsetTime == 0
+        assert player.internal_offset_time == 0
 
     def test_player_supports_font_zoom_default(self):
         player = _make_player()
-        assert player.SupportsFontZoom is False
+        assert player.supports_font_zoom is False
 
 
 class TestPykPlayerState:
     def test_close_sets_closing(self):
         player = _make_player()
-        player.Close()
-        assert player.State == STATE_CLOSING
+        player.close()
+        assert player.state == STATE_CLOSING
 
     def test_shutdown_from_playing(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
     def test_shutdown_calls_done_callback(self):
         cb = MagicMock()
         player = _make_player(done_cb=cb)
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
         cb.assert_called_once()
 
     def test_shutdown_no_callback(self):
         player = _make_player()
-        player.State = STATE_PLAYING
+        player.state = STATE_PLAYING
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
     def test_shutdown_idempotent(self):
         player = _make_player()
-        player.State = STATE_CLOSED
+        player.state = STATE_CLOSED
         player.shutdown()
-        assert player.State == STATE_CLOSED
+        assert player.state == STATE_CLOSED
 
 
 class TestPykPlayerMethods:
     def test_pause_from_playing(self):
         player = _make_player()
-        player.State = STATE_PLAYING
-        player.Pause()
-        assert player.State == STATE_PAUSED
+        player.state = STATE_PLAYING
+        player.pause()
+        assert player.state == STATE_PAUSED
 
     def test_unpause(self):
         player = _make_player()
-        player.State = STATE_PAUSED
-        player.PlayTime = 1000
-        player.Pause()
-        assert player.State == STATE_PLAYING
+        player.state = STATE_PAUSED
+        player.play_time = 1000
+        player.pause()
+        assert player.state == STATE_PLAYING
 
     def test_validate_returns_true(self):
         player = _make_player()
-        result = player.Validate()
+        result = player.validate()
         assert result is True
 
     def test_do_resize(self):
         player = _make_player()
-        player.doResize((800, 600))
+        player.do_resize((800, 600))
 
     def test_do_resize_begin(self):
         player = _make_player()
-        player.doResizeBegin()
+        player.do_resize_begin()
 
     def test_do_resize_end(self):
         player = _make_player()
-        player.doResizeEnd()
+        player.do_resize_end()
 
     def test_rewind(self):
         player = _make_player()
-        player.State = STATE_PLAYING
-        player.PlayTime = 5000
-        player.Rewind()
-        assert player.PlayTime == 0
-        assert player.State == STATE_NOT_PLAYING
+        player.state = STATE_PLAYING
+        player.play_time = 5000
+        player.rewind()
+        assert player.play_time == 0
+        assert player.state == STATE_NOT_PLAYING
 
     def test_stop(self):
         player = _make_player()
-        player.State = STATE_PLAYING
-        player.Stop()
-        assert player.State == STATE_NOT_PLAYING
+        player.state = STATE_PLAYING
+        player.stop()
+        assert player.state == STATE_NOT_PLAYING
 
     def test_get_pos_not_playing(self):
         player = _make_player()
-        player.State = STATE_NOT_PLAYING
-        player.PlayTime = 2000
-        assert player.GetPos() == 2000
+        player.state = STATE_NOT_PLAYING
+        player.play_time = 2000
+        assert player.get_pos() == 2000
 
     def test_get_length_returns_none(self):
         player = _make_player()
-        result = player.GetLength()
+        result = player.get_length()
         assert result is None
 
     def test_do_stuff_increments_frame(self):
         player = _make_player()
-        player.State = STATE_PLAYING
-        player.doStuff()
-        assert player.PlayFrame == 1
+        player.state = STATE_PLAYING
+        player.do_stuff()
+        assert player.play_frame == 1
 
     def test_handle_event_quit(self):
         player = _make_player()
         event = MagicMock()
         event.type = mock_pygame.QUIT
-        player.handleEvent(event)
-        assert player.State == STATE_CLOSING
+        player.handle_event(event)
+        assert player.state == STATE_CLOSING
 
 
 class TestPykPlayerSongData:
     def test_player_has_song_datas(self):
         player = _make_player()
-        assert hasattr(player, "SongDatas")
+        assert hasattr(player, "song_datas")
 
     def test_player_song_db(self):
         player = _make_player()
-        assert hasattr(player, "songDb")
-        assert player.songDb is not None
+        assert hasattr(player, "song_db")
+        assert player.song_db is not None

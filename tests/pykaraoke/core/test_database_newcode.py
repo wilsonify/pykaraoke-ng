@@ -6,14 +6,14 @@ Covers specific variable renames, method fixes, and logic changes:
 - __getAssociatedFiles (lines 437-495): `dir` → `directory`, `zip` → `zf`
 - __lt__ / __eq__ (lines 573-589): `__cmp__`/`cmp()` → new comparison methods
 - TitleStruct.__renameZipElement (lines 638-669): `zip` → `zf`
-- TitleStruct.__readTitles (lines 694-698): `tuple` → `parts`
-- SongDB.getSaveDirectory (line 1042): `dir` → `save_dir`
-- SongDB.getTempDirectory (lines 1060-1066): `dir` → `temp_env`
+- TitleStruct.__read_titles (lines 694-698): `tuple` → `parts`
+- SongDB.get_save_directory (line 1042): `dir` → `save_dir`
+- SongDB.get_temp_directory (lines 1060-1066): `dir` → `temp_env`
 - SongDB.GetZipFile (lines 1365-1388): `tuple` → `entry`, `zip` → `zf`
 - SongDB.DropZipFile (lines 1384-1388): `tuple` → `entry`
-- SongDB.__computeProgressValue (lines 1506-1511): `range` → `span`, `len` → `count`
+- SongDB.__compute_progress_value (lines 1506-1511): `range` → `span`, `len` → `count`
 - SongDB.BuildSearchDatabase zip scan (lines 1557-1604): `zip` → `zf`, `zippath` → `filename`
-- SongDB.SaveSettings (line 1297): `keys.sort()` → `sorted(keys)`
+- SongDB.save_settings (line 1297): `keys.sort()` → `sorted(keys)`
 - SongStruct disc/track slicing (lines 330, 352): Qt `.mid()` → Python slicing
 """
 
@@ -59,44 +59,44 @@ class TestMakeSortKeyNewCode:
 
     def test_sort_key_strips_whitespace(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("  hello  ") == "hello"
+        assert song.make_sort_key("  hello  ") == "hello"
 
     def test_sort_key_lowercases(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("HELLO") == "hello"
+        assert song.make_sort_key("HELLO") == "hello"
 
     def test_sort_key_removes_leading_article_the(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("The Beatles") == "beatles"
+        assert song.make_sort_key("The Beatles") == "beatles"
 
     def test_sort_key_removes_leading_article_a(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("A Song") == "song"
+        assert song.make_sort_key("A Song") == "song"
 
     def test_sort_key_removes_leading_article_an(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("An Apple") == "apple"
+        assert song.make_sort_key("An Apple") == "apple"
 
     def test_sort_key_removes_parenthetical(self):
         song = _make_song("test.cdg")
-        result = song.MakeSortKey("(remix) Song Title")
+        result = song.make_sort_key("(remix) Song Title")
         assert result == "song title"
 
     def test_sort_key_empty_string(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("") == ""
+        assert song.make_sort_key("") == ""
 
     def test_sort_key_only_spaces(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("   ") == ""
+        assert song.make_sort_key("   ") == ""
 
     def test_sort_key_no_article(self):
         song = _make_song("test.cdg")
-        assert song.MakeSortKey("Yesterday") == "yesterday"
+        assert song.make_sort_key("Yesterday") == "yesterday"
 
     def test_sort_key_parenthetical_then_article(self):
         song = _make_song("test.cdg")
-        result = song.MakeSortKey("(live) The Song")
+        result = song.make_sort_key("(live) The Song")
         assert result == "song"
 
 
@@ -106,8 +106,8 @@ class TestSongStructComparisonNewCode:
     """Tests the refactored __lt__ and __eq__ methods."""
 
     def _set_sort_key(self):
-        """Set fileSortKey to use Filepath for sorting."""
-        db_module.fileSortKey = lambda s: s.Filepath
+        """Set file_sort_key to use Filepath for sorting."""
+        db_module.file_sort_key = lambda s: s.filepath
 
     def test_lt_different_keys(self):
         self._set_sort_key()
@@ -155,8 +155,8 @@ class TestGetAssociatedFilesNewCode:
         mp3_file.write_bytes(b"MP3 data")
 
         song = _make_song(str(cdg_file))
-        datas = song.GetSongDatas()
-        filenames = [d.GetFilepath() for d in datas]
+        datas = song.get_song_datas()
+        filenames = [d.get_filepath() for d in datas]
         assert str(cdg_file) in filenames
         assert str(mp3_file) in filenames
 
@@ -166,19 +166,19 @@ class TestGetAssociatedFilesNewCode:
         kar_file.write_bytes(b"KAR data")
 
         song = _make_song(str(kar_file))
-        datas = song.GetSongDatas()
+        datas = song.get_song_datas()
         assert len(datas) == 1
-        assert datas[0].GetFilepath() == str(kar_file)
+        assert datas[0].get_filepath() == str(kar_file)
 
     def test_nonexistent_file_raises(self):
         song = _make_song("/nonexistent/path/song.cdg")
         with pytest.raises(ValueError, match="No such file"):
-            song.GetSongDatas()
+            song.get_song_datas()
 
     def test_empty_filepath(self):
         song = _make_song("")
-        song.Filepath = ""
-        datas = song.GetSongDatas()
+        song.filepath = ""
+        datas = song.get_song_datas()
         assert datas == []
 
 
@@ -194,10 +194,10 @@ class TestGetZipFileCaching:
             zf.writestr("song.cdg", b"CDG data")
 
         song_db = SongDB()
-        result = song_db.GetZipFile(str(zpath))
+        result = song_db.get_zip_file(str(zpath))
         assert result is not None
-        assert len(song_db.ZipFiles) == 1
-        assert song_db.ZipFiles[0][0] == str(zpath)
+        assert len(song_db.zip_files) == 1
+        assert song_db.zip_files[0][0] == str(zpath)
 
     def test_get_zip_file_returns_cached(self, tmp_path):
         """Second call returns same cached ZipFile."""
@@ -206,8 +206,8 @@ class TestGetZipFileCaching:
             zf.writestr("song.cdg", b"CDG data")
 
         song_db = SongDB()
-        first = song_db.GetZipFile(str(zpath))
-        second = song_db.GetZipFile(str(zpath))
+        first = song_db.get_zip_file(str(zpath))
+        second = song_db.get_zip_file(str(zpath))
         assert first is second
 
     def test_get_zip_file_moves_to_front(self, tmp_path):
@@ -219,11 +219,11 @@ class TestGetZipFileCaching:
                 zf.writestr("song.cdg", b"data")
 
         song_db = SongDB()
-        song_db.GetZipFile(str(z1))  # z1 at front
-        song_db.GetZipFile(str(z2))  # z2 at front, z1 second
-        assert song_db.ZipFiles[0][0] == str(z2)
-        song_db.GetZipFile(str(z1))  # z1 back to front
-        assert song_db.ZipFiles[0][0] == str(z1)
+        song_db.get_zip_file(str(z1))  # z1 at front
+        song_db.get_zip_file(str(z2))  # z2 at front, z1 second
+        assert song_db.zip_files[0][0] == str(z2)
+        song_db.get_zip_file(str(z1))  # z1 back to front
+        assert song_db.zip_files[0][0] == str(z1)
 
 
 # ---------- SongDB.DropZipFile (lines 1384-1388) ----------
@@ -237,64 +237,64 @@ class TestDropZipFile:
             zf.writestr("song.cdg", b"data")
 
         song_db = SongDB()
-        song_db.GetZipFile(str(zpath))
-        assert len(song_db.ZipFiles) == 1
-        song_db.DropZipFile(str(zpath))
-        assert len(song_db.ZipFiles) == 0
+        song_db.get_zip_file(str(zpath))
+        assert len(song_db.zip_files) == 1
+        song_db.drop_zip_file(str(zpath))
+        assert len(song_db.zip_files) == 0
 
     def test_drop_nonexistent_does_nothing(self):
         song_db = SongDB()
-        song_db.DropZipFile("/nonexistent.zip")  # Should not raise
-        assert len(song_db.ZipFiles) == 0
+        song_db.drop_zip_file("/nonexistent.zip")  # Should not raise
+        assert len(song_db.zip_files) == 0
 
 
-# ---------- __computeProgressValue (lines 1506-1511) ----------
+# ---------- __compute_progress_value (lines 1506-1511) ----------
 
 class TestComputeProgressValue:
-    """Tests __computeProgressValue with span/count variable renames."""
+    """Tests __compute_progress_value with span/count variable renames."""
 
     def test_empty_progress(self):
         song_db = SongDB()
         # Name-mangled private method
-        result = song_db._SongDB__computeProgressValue([])
+        result = song_db._SongDB__compute_progress_value([])
         assert result == 0.0
 
     def test_single_level(self):
         song_db = SongDB()
-        result = song_db._SongDB__computeProgressValue([(5, 10)])
+        result = song_db._SongDB__compute_progress_value([(5, 10)])
         assert abs(result - 0.5) < 0.001
 
     def test_single_level_zero_of_ten(self):
         song_db = SongDB()
-        result = song_db._SongDB__computeProgressValue([(0, 10)])
+        result = song_db._SongDB__compute_progress_value([(0, 10)])
         assert result == 0.0
 
     def test_multi_level(self):
         song_db = SongDB()
-        result = song_db._SongDB__computeProgressValue([(5, 10), (3, 6)])
+        result = song_db._SongDB__compute_progress_value([(5, 10), (3, 6)])
         # 0.5 + (1/10) * (3/6) = 0.5 + 0.05 = 0.55
         assert abs(result - 0.55) < 0.001
 
     def test_count_one_skipped(self):
         """If count is 1, the level is skipped (no division)."""
         song_db = SongDB()
-        result = song_db._SongDB__computeProgressValue([(0, 1), (5, 10)])
+        result = song_db._SongDB__compute_progress_value([(0, 1), (5, 10)])
         assert abs(result - 0.5) < 0.001
 
 
-# ---------- SongDB.SaveSettings with sorted() (line 1297) ----------
+# ---------- SongDB.save_settings with sorted() (line 1297) ----------
 
 class TestSaveSettingsSorted:
-    """Tests that SaveSettings uses sorted() instead of dict.keys().sort()."""
+    """Tests that save_settings uses sorted() instead of dict.keys().sort()."""
 
     def test_save_settings_does_not_raise(self, tmp_path):
-        """SaveSettings should work with sorted() on dict keys."""
+        """save_settings should work with sorted() on dict keys."""
         song_db = SongDB()
         save_dir = tmp_path / "save"
         save_dir.mkdir()
-        song_db.SaveDir = str(save_dir)
-        song_db.Settings = SettingsStruct()
-        song_db.SaveSettings()
+        song_db.save_dir = str(save_dir)
+        song_db.settings = SettingsStruct()
+        song_db.save_settings()
         # Check that a settings file was created
         settings_file = save_dir / "settings.dat"
         assert settings_file.exists()
@@ -308,12 +308,12 @@ class TestDirectoryEnvVars:
     def test_get_save_directory_from_env(self, tmp_path):
         song_db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_DIR": str(tmp_path)}):
-            assert song_db.getSaveDirectory() == str(tmp_path)
+            assert song_db.get_save_directory() == str(tmp_path)
 
     def test_get_temp_directory_from_pykaraoke_temp_dir(self, tmp_path):
         song_db = SongDB()
         with patch.dict(os.environ, {"PYKARAOKE_TEMP_DIR": str(tmp_path)}, clear=False):
-            result = song_db.getTempDirectory()
+            result = song_db.get_temp_directory()
             assert result == str(tmp_path)
 
     def test_get_temp_directory_from_temp_env(self, tmp_path):
@@ -325,7 +325,7 @@ class TestDirectoryEnvVars:
         ):
             # Remove PYKARAOKE_TEMP_DIR if present
             os.environ.pop("PYKARAOKE_TEMP_DIR", None)
-            result = song_db.getTempDirectory()
+            result = song_db.get_temp_directory()
             assert "pykaraoke" in result
 
 
@@ -337,7 +337,7 @@ class TestDiscTrackSlicing:
     def test_disc_track_cdg_type1(self):
         """Type-1 song: disc is all but last 2 chars, track is last 2."""
         song = _make_song("test.cdg")
-        key = song.MakeSortKey("SomeAlbum01")
+        key = song.make_sort_key("SomeAlbum01")
         assert isinstance(key, str)
 
 
@@ -355,12 +355,12 @@ class TestZipAssociatedFiles:
             zf.writestr("other.txt", b"unrelated")
 
         song = _make_song(str(zpath))
-        song.ZipStoredName = "song.cdg"
-        song.Type = SongStruct.T_CDG
-        datas = song.GetSongDatas()
+        song.zip_stored_name = "song.cdg"
+        song.type = SongStruct.T_CDG
+        datas = song.get_song_datas()
         # SongData stores temp file paths; check we got both cdg and mp3
         assert len(datas) >= 2
-        paths = [d.GetFilepath() for d in datas]
+        paths = [d.get_filepath() for d in datas]
         has_cdg = any("song.cdg" in p for p in paths)
         has_mp3 = any("song.mp3" in p for p in paths)
         assert has_cdg
@@ -374,11 +374,11 @@ class TestZipAssociatedFiles:
             zf.writestr("other.mp3", b"MP3 data")
 
         song = _make_song(str(zpath))
-        song.ZipStoredName = "song.kar"
-        song.Type = SongStruct.T_KAR
-        datas = song.GetSongDatas()
+        song.zip_stored_name = "song.kar"
+        song.type = SongStruct.T_KAR
+        datas = song.get_song_datas()
         assert len(datas) >= 1
-        paths = [d.GetFilepath() for d in datas]
+        paths = [d.get_filepath() for d in datas]
         assert any("song.kar" in p for p in paths)
 
 
@@ -389,17 +389,17 @@ class TestTitleStructReadTitles:
 
     def test_title_struct_init(self):
         ts = TitleStruct("path/to/titles.txt")
-        assert ts.Filepath == "path/to/titles.txt"
-        assert ts.ZipStoredName is None
+        assert ts.filepath == "path/to/titles.txt"
+        assert ts.zip_stored_name is None
         assert ts.songs == []
 
     def test_title_struct_init_with_zip(self):
         ts = TitleStruct("archive.zip", "titles.txt")
-        assert ts.Filepath == "archive.zip"
-        assert ts.ZipStoredName == "titles.txt"
+        assert ts.filepath == "archive.zip"
+        assert ts.zip_stored_name == "titles.txt"
 
     def test_title_struct_read_from_zip(self, tmp_path):
-        """TitleStruct.read() with zip → covers lines 612-613 and __readTitles 694-699."""
+        """TitleStruct.read() with zip → covers lines 612-613 and __read_titles 694-699."""
         # Create a zip with a titles.txt containing tab-separated data
         titles_content = b"song.cdg\tMy Song\tArtist Name\n"
         zpath = tmp_path / "karaoke.zip"
@@ -413,16 +413,16 @@ class TestTitleStructReadTitles:
         song_db = SongDB()
         mock_song = MagicMock()
         song_path = os.path.join(str(zpath), "song.cdg")
-        song_db.filesByFullpath = {song_path: mock_song}
-        song_db.GotTitles = False
-        song_db.GotArtists = False
+        song_db.files_by_fullpath = {song_path: mock_song}
+        song_db.got_titles = False
+        song_db.got_artists = False
 
         ts.read(song_db)
         # The song should have been found and updated
         assert len(ts.songs) >= 0  # May or may not match depending on path normalization
 
     def test_title_struct_read_from_file(self, tmp_path):
-        """TitleStruct.read() with plain file → covers __readTitles open path."""
+        """TitleStruct.read() with plain file → covers __read_titles open path."""
         titles_file = tmp_path / "titles.txt"
         titles_file.write_bytes(b"song.cdg\tMy Title\tThe Artist\n")
 
@@ -431,9 +431,9 @@ class TestTitleStructReadTitles:
         song_db = SongDB()
         mock_song = MagicMock()
         song_path = os.path.join(str(tmp_path), "song.cdg")
-        song_db.filesByFullpath = {song_path: mock_song}
-        song_db.GotTitles = False
-        song_db.GotArtists = False
+        song_db.files_by_fullpath = {song_path: mock_song}
+        song_db.got_titles = False
+        song_db.got_artists = False
 
         ts.read(song_db)
 
@@ -447,9 +447,9 @@ class TestTitleStructReadTitles:
         ts = TitleStruct(str(zpath), "titles.txt")
 
         song_db = SongDB()
-        song_db.filesByFullpath = {}
-        song_db.GotTitles = False
-        song_db.GotArtists = False
+        song_db.files_by_fullpath = {}
+        song_db.got_titles = False
+        song_db.got_artists = False
 
         ts.read(song_db)
         assert ts.songs == []  # No matching files
@@ -464,9 +464,9 @@ class TestTitleStructReadTitles:
         ts = TitleStruct(str(zpath), "titles.txt")
 
         song_db = SongDB()
-        song_db.filesByFullpath = {}
-        song_db.GotTitles = False
-        song_db.GotArtists = False
+        song_db.files_by_fullpath = {}
+        song_db.got_titles = False
+        song_db.got_artists = False
 
         ts.read(song_db)  # Should not raise
 
@@ -486,6 +486,6 @@ class TestAssociatedFilesCurrentDir:
 
         monkeypatch.chdir(tmp_path)
         song = _make_song("test.cdg")
-        datas = song.GetSongDatas()
+        datas = song.get_song_datas()
         # Should find the cdg and mp3 in the current directory
         assert len(datas) >= 1

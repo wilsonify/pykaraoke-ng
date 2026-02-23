@@ -9,8 +9,8 @@ from pykaraoke.core.database import SettingsStruct, SongDB, SongStruct
 
 def _settings_with_filename_type(file_name_type):
     settings = SettingsStruct()
-    settings.CdgDeriveSongInformation = True
-    settings.CdgFileNameType = file_name_type
+    settings.cdg_derive_song_information = True
+    settings.cdg_file_name_type = file_name_type
     return settings
 
 
@@ -21,8 +21,8 @@ def test_issue14_parses_title_with_extra_dashes_type0():
 
     song = SongStruct(filepath, settings)
 
-    assert song.Artist == "Artist"
-    assert song.Title == "Title-With-Dashes"
+    assert song.artist == "Artist"
+    assert song.title == "Title-With-Dashes"
 
 
 def test_issue14_parses_artist_with_dashes_type3():
@@ -32,8 +32,8 @@ def test_issue14_parses_artist_with_dashes_type3():
 
     song = SongStruct(filepath, settings)
 
-    assert song.Artist == "AC-DC"
-    assert song.Title == "Back-In-Black"
+    assert song.artist == "AC-DC"
+    assert song.title == "Back-In-Black"
 
 
 def test_issue5_zip_stored_name_parsing_uses_inner_path():
@@ -43,17 +43,17 @@ def test_issue5_zip_stored_name_parsing_uses_inner_path():
     song = SongStruct(
         "/tmp/Archive.zip",
         settings,
-        ZipStoredName="English/Queen/Bohemian Rhapsody.kar",
-        DatabaseAdd=True,
+        zip_stored_name="English/Queen/Bohemian Rhapsody.kar",
+        database_add=True,
     )
 
-    assert song.Artist == "Queen"
-    assert song.Title == "Bohemian Rhapsody"
+    assert song.artist == "Queen"
+    assert song.title == "Bohemian Rhapsody"
 
 
 def test_issue6_divx_xvid_extensions_should_scan():
     """Issue #6: DIVX and XVID extensions should be recognized."""
     song_db = SongDB()
 
-    assert song_db.IsExtensionValid(".divx") is True
-    assert song_db.IsExtensionValid(".xvid") is True
+    assert song_db.is_extension_valid(".divx") is True
+    assert song_db.is_extension_valid(".xvid") is True

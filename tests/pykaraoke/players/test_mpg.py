@@ -23,12 +23,12 @@ class TestMpgModule:
     def test_module_has_external_player(self):
         from pykaraoke.players import mpg
 
-        assert hasattr(mpg, "externalPlayer")
+        assert hasattr(mpg, "ExternalPlayer")
 
     def test_external_player_is_class(self):
         from pykaraoke.players import mpg
 
-        assert isinstance(mpg.externalPlayer, type)
+        assert isinstance(mpg.ExternalPlayer, type)
 
     def test_module_has_movie_attribute(self):
         from pykaraoke.players import mpg

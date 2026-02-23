@@ -43,7 +43,7 @@ COPY assets/ /app/assets/
 # =============================================================================
 FROM python:3.12-slim AS backend
 
-# Install runtime dependencies for pygame/SDL
+# Install runtime dependencies for pygame/SDL and create non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libfreetype6 \
     libportmidi0 \
@@ -51,10 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash pykaraoke
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash pykaraoke
 
 WORKDIR /app
 
@@ -86,45 +84,37 @@ CMD ["python", "-m", "pykaraoke.core.backend", "--http"]
 # =============================================================================
 # Stage 3: Tauri Development Environment
 # =============================================================================
-FROM rust:1.75-bookworm AS tauri-dev
+FROM rust:slim-bookworm AS tauri-dev
 
 # Install system dependencies for Tauri
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Build essentials
     build-essential \
-    pkg-config \
-    # Tauri/WebKit dependencies
-    libwebkit2gtk-4.0-dev \
-    libgtk-3-dev \
+    curl \
+    git \
+    libasound2-dev \
     libayatana-appindicator3-dev \
+    libgtk-3-dev \
     librsvg2-dev \
-    # Audio/Video dependencies
     libsdl2-dev \
     libsdl2-image-dev \
     libsdl2-mixer-dev \
     libsdl2-ttf-dev \
-    libasound2-dev \
-    # Python runtime
+    libwebkit2gtk-4.0-dev \
+    libxcb1-dev \
+    libxi-dev \
+    libxrandr-dev \
+    pkg-config \
     python3 \
     python3-pip \
     python3-venv \
-    # GUI tools
-    libxcb1-dev \
-    libxrandr-dev \
-    libxi-dev \
-    # Utilities
-    curl \
     wget \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js for potential frontend tooling
+# Install Node.js and Tauri CLI
 RUN curl -fsSL --proto '=https' https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Tauri CLI
-RUN cargo install tauri-cli
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo install tauri-cli
 
 # Install uv for Python
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -146,10 +136,12 @@ ENV PYTHONPATH=/app/src
 ENV CARGO_HOME=/app/.cargo
 ENV RUSTUP_HOME=/app/.rustup
 
-WORKDIR /app/tauri
+WORKDIR /app/tauri/src-tauri
 
 # Pre-fetch Rust dependencies for caching
-RUN cd src-tauri && cargo fetch
+RUN cargo fetch
+
+WORKDIR /app/tauri
 
 # Default: interactive shell for development
 CMD ["bash"]
@@ -161,22 +153,18 @@ FROM debian:bookworm-slim AS tauri-runtime
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # WebKit/GTK runtime
-    libwebkit2gtk-4.0-37 \
-    libgtk-3-0 \
-    libayatana-appindicator3-1 \
-    librsvg2-2 \
-    # Audio runtime
     libasound2 \
+    libayatana-appindicator3-1 \
+    libgtk-3-0 \
     libpulse0 \
-    # Python runtime
-    python3 \
-    python3-pip \
-    # SDL runtime
+    librsvg2-2 \
     libsdl2-2.0-0 \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
+    libwebkit2gtk-4.0-37 \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -191,7 +179,7 @@ COPY --from=python-builder /app/assets /app/assets
 
 # Copy built Tauri application (this requires a pre-build step)
 # In practice, build with tauri-dev stage and copy the binary
-COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng 2>/dev/null || true
+COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng
 
 # Set ownership
 RUN chown -R pykaraoke:pykaraoke /app
@@ -216,8 +204,8 @@ USER root
 
 # Install development dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
     curl \
+    git \
     vim \
     && rm -rf /var/lib/apt/lists/*
 

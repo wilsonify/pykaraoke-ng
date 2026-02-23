@@ -63,12 +63,12 @@
 #       python pykar.py /songs/theboxer.kar
 #
 # You can also incorporate a KAR player in your own projects by
-# importing this module. The class midPlayer is exported by the
+# importing this module. The class MidPlayer is exported by the
 # module. You can import and start it as follows:
 #   from pykaraoke.players import kar
-#   player = kar.midPlayer("/songs/theboxer.kar")
-#   player.Play()
-# If you do this, you must also arrange to call manager.Poll()
+#   player = kar.MidPlayer("/songs/theboxer.kar")
+#   player.play()
+# If you do this, you must also arrange to call manager.poll()
 # from time to time, at least every 100 milliseconds or so, to allow
 # the player to do its work.
 #
@@ -93,7 +93,7 @@
 #       msgBox ("Song is finished")
 #
 # To register callbacks, pass the functions in to the initialiser:
-#   midPlayer ("/songs/theboxer.kar", errorPopup, songFinishedCallback)
+#   MidPlayer ("/songs/theboxer.kar", errorPopup, songFinishedCallback)
 # These parameters are optional and default to None.
 #
 # If the initialiser fails (e.g. the song file is not present), __init__
@@ -132,7 +132,7 @@
 #
 # Previous implementations ran the player within a thread; this is no
 # longer the case.  Instead, it is the caller's responsibility to call
-# pykar.manager.Poll() every once in a while to ensure that the player
+# pykar.manager.poll() every once in a while to ensure that the player
 # gets enough CPU time to do its work.  Ideally, this should be at
 # least every 100 milliseconds or so to guarantee good video and audio
 # response time.
@@ -145,7 +145,7 @@ import io
 
 class _CStringIOShim(object):
     # Use BytesIO because MIDI/KAR data is binary
-    StringIO = io.BytesIO
+    string_io = io.BytesIO
 
 cStringIO = _CStringIOShim()
 import pygame
@@ -163,7 +163,7 @@ from pykaraoke.config.constants import (
 )
 from pykaraoke.config.environment import env
 from pykaraoke.core.manager import manager
-from pykaraoke.core.player import pykPlayer
+from pykaraoke.core.player import PykPlayer
 
 # At what percentage of the screen height should we try to keep the
 # current singing cursor?  33% keeps it on the top third, 50% keeps it
@@ -187,9 +187,9 @@ TEXT_TITLE = 2
 debug = False
 
 
-class midiFile:
+class MidiFile:
     def __init__(self):
-        self.trackList = []  # List of TrackDesc track descriptors
+        self.track_list = []  # List of TrackDesc track descriptors
 
         # Chosen lyric list from above.  It is converted by
         # computeTiming() from a list of (clicks, text) into a list of
@@ -198,36 +198,36 @@ class midiFile:
 
         self.text_encoding = ""  # The encoding of text in midi file
 
-        self.ClickUnitsPerSMPTE = None
-        self.SMPTEFramesPerSec = None
-        self.ClickUnitsPerQuarter = None
+        self.click_units_per_smpte = None
+        self.smpte_frames_per_sec = None
+        self.click_units_per_quarter = None
 
         # The tempo of the song may change throughout, so we have to
         # record the click at which each tempo change occurred, and
         # the new tempo at that point.  Then, after we have read in
         # all the tracks (and thus collected all the tempo changes),
         # we can go back and apply this knowledge to the other tracks.
-        self.Tempo = [(0, 0)]
+        self.tempo = [(0, 0)]
 
-        self.Numerator = None  # Numerator
-        self.Denominator = None  # Denominator
-        self.ClocksPerMetronomeTick = None  # MIDI clocks per metronome tick
-        self.NotesPer24MIDIClocks = None  # 1/32 Notes per 24 MIDI clocks
-        self.earliestNoteMS = 0  # Start of earliest note in song
-        self.lastNoteMS = 0  # End of latest note in song
+        self.numerator = None  # Numerator
+        self.denominator = None  # Denominator
+        self.clocks_per_metronome_tick = None  # MIDI clocks per metronome tick
+        self.notes_per_24_midi_clocks = None  # 1/32 Notes per 24 MIDI clocks
+        self.earliest_note_ms = 0  # Start of earliest note in song
+        self.last_note_ms = 0  # End of latest note in song
 
 
 class TrackDesc:
-    def __init__(self, trackNum):
-        self.TrackNum = trackNum  # Track number
-        self.TotalClicksFromStart = 0  # Store number of clicks elapsed from start
-        self.BytesRead = 0  # Number of file bytes read for track
-        self.FirstNoteClick = None  # Start of first note in track
-        self.FirstNoteMs = None  # The same, in milliseconds
-        self.LastNoteClick = None  # End of last note in track
-        self.LastNoteMs = None  # In millseconds
-        self.LyricsTrack = False  # This track contains lyrics
-        self.RunningStatus = 0  # MIDI Running Status byte
+    def __init__(self, track_num):
+        self.track_num = track_num  # Track number
+        self.total_clicks_from_start = 0  # Store number of clicks elapsed from start
+        self.bytes_read = 0  # Number of file bytes read for track
+        self.first_note_click = None  # Start of first note in track
+        self.first_note_ms = None  # The same, in milliseconds
+        self.last_note_click = None  # End of last note in track
+        self.last_note_ms = None  # In millseconds
+        self.lyrics_track = False  # This track contains lyrics
+        self.running_status = 0  # MIDI Running Status byte
 
         self.text_events = Lyrics()  # Lyrics (0x1 events)
         self.lyric_events = Lyrics()  # Lyrics (0x5 events)
@@ -239,39 +239,39 @@ class MidiTimestamp:
     clicks from the beginning of the song."""
 
     def __init__(self, midifile):
-        self.ClickUnitsPerQuarter = midifile.ClickUnitsPerQuarter
-        self.Tempo = midifile.Tempo
+        self.click_units_per_quarter = midifile.click_units_per_quarter
+        self.tempo = midifile.tempo
         self.ms = 0
         self.click = 0
         self.i = 0
 
-    def advanceToClick(self, click):
+    def advance_to_click(self, click):
         # Moves time forward to the indicated click number.
         clicks = click - self.click
         if clicks < 0:
             # Ignore jumps backward in time.
             return
 
-        while clicks > 0 and self.i < len(self.Tempo):
+        while clicks > 0 and self.i < len(self.tempo):
             # How many clicks remain at the current tempo?
-            clicksRemaining = max(self.Tempo[self.i][0] - self.click, 0)
-            clicksUsed = min(clicks, clicksRemaining)
-            if clicksUsed != 0:
-                self.ms += self.getTimeForClicks(clicksUsed, self.Tempo[self.i - 1][1])
-            self.click += clicksUsed
-            clicks -= clicksUsed
-            clicksRemaining -= clicksUsed
-            if clicksRemaining == 0:
+            clicks_remaining = max(self.tempo[self.i][0] - self.click, 0)
+            clicks_used = min(clicks, clicks_remaining)
+            if clicks_used != 0:
+                self.ms += self.get_time_for_clicks(clicks_used, self.tempo[self.i - 1][1])
+            self.click += clicks_used
+            clicks -= clicks_used
+            clicks_remaining -= clicks_used
+            if clicks_remaining == 0:
                 self.i += 1
 
         if clicks > 0:
             # We have reached the last tempo mark of the song, so this
             # tempo holds forever.
-            self.ms += self.getTimeForClicks(clicks, self.Tempo[-1][1])
+            self.ms += self.get_time_for_clicks(clicks, self.tempo[-1][1])
             self.click += clicks
 
-    def getTimeForClicks(self, clicks, tempo):
-        microseconds = (float(clicks) / self.ClickUnitsPerQuarter) * tempo
+    def get_time_for_clicks(self, clicks, tempo):
+        microseconds = (float(clicks) / self.click_units_per_quarter) * tempo
         time_ms = microseconds / 1000
         return time_ms
 
@@ -292,7 +292,7 @@ class LyricSyllable:
         self.left = None
         self.right = None
 
-    def makeCopy(self, text):
+    def make_copy(self, text):
         # Returns a new LyricSyllable, exactly like this one, with
         # the text replaced by the indicated string
         syllable = LyricSyllable(self.click, text, self.line, self.type)
@@ -311,7 +311,7 @@ class Lyrics:
         self.list = []
         self.line = 0
 
-    def hasAny(self):
+    def has_any(self):
         # Returns true if there are any lyrics.
         return bool(self.list)
 
@@ -405,23 +405,23 @@ class Lyrics:
 
         ts = MidiTimestamp(midifile)
         for syllable in self.list:
-            ts.advanceToClick(syllable.click)
+            ts.advance_to_click(syllable.click)
             syllable.ms = int(ts.ms)
 
         # Also change the firstNoteClick to firstNoteMs, for each track.
-        for track_desc in midifile.trackList:
+        for track_desc in midifile.track_list:
             ts = MidiTimestamp(midifile)
-            if track_desc.FirstNoteClick is not None:
-                ts.advanceToClick(track_desc.FirstNoteClick)
-                track_desc.FirstNoteMs = ts.ms
+            if track_desc.first_note_click is not None:
+                ts.advance_to_click(track_desc.first_note_click)
+                track_desc.first_note_ms = ts.ms
                 if debug:
                     print(
                         "T%s first note at %s clicks, %s ms"
-                        % (track_desc.TrackNum, track_desc.FirstNoteClick, track_desc.FirstNoteMs)
+                        % (track_desc.track_num, track_desc.first_note_click, track_desc.first_note_ms)
                     )
-            if track_desc.LastNoteClick is not None:
-                ts.advanceToClick(track_desc.LastNoteClick)
-                track_desc.LastNoteMs = ts.ms
+            if track_desc.last_note_click is not None:
+                ts.advance_to_click(track_desc.last_note_click)
+                track_desc.last_note_ms = ts.ms
 
     def analyzeSpaces(self):
         """Checks for a degenerate case: no (or very few) spaces
@@ -429,53 +429,53 @@ class Lyrics:
         between words, which makes the text very hard to read.  If we
         detect this case, repair it by adding spaces back in."""
 
-        lines = self._groupSyllablesIntoLines()
+        lines = self._group_syllables_into_lines()
 
         # Now, count the spaces between the syllables of the lines.
-        totalNumSyls, totalNumGaps = self._countGaps(lines)
+        total_num_syls, total_num_gaps = self._count_gaps(lines)
 
-        if totalNumSyls and float(totalNumGaps) / float(totalNumSyls) < 0.1:
+        if total_num_syls and float(total_num_gaps) / float(total_num_syls) < 0.1:
             # Too few spaces.  Insert more.
-            self._insertSpaces(lines)
+            self._insert_spaces(lines)
 
-    def _groupSyllablesIntoLines(self):
+    def _group_syllables_into_lines(self):
         """Group the syllables into lines based on their line attribute."""
-        lineNumber = None
+        line_number = None
         lines = []
-        currentLine = []
+        current_line = []
 
         for syllable in self.list:
-            if syllable.line != lineNumber:
-                if currentLine:
-                    lines.append(currentLine)
-                currentLine = []
-                lineNumber = syllable.line
-            currentLine.append(syllable)
+            if syllable.line != line_number:
+                if current_line:
+                    lines.append(current_line)
+                current_line = []
+                line_number = syllable.line
+            current_line.append(syllable)
 
-        if currentLine:
-            lines.append(currentLine)
+        if current_line:
+            lines.append(current_line)
         return lines
 
     @staticmethod
-    def _countGaps(lines):
+    def _count_gaps(lines):
         """Count syllables and inter-syllable gaps across all lines."""
-        totalNumSyls = 0
-        totalNumGaps = 0
+        total_num_syls = 0
+        total_num_gaps = 0
         for line in lines:
-            numSyls = len(line) - 1
-            numGaps = 0
-            for i in range(numSyls):
+            num_syls = len(line) - 1
+            num_gaps = 0
+            for i in range(num_syls):
                 if (
                     line[i].text.rstrip() != line[i].text
                     or line[i + 1].text.lstrip() != line[i + 1].text
                 ):
-                    numGaps += 1
-            totalNumSyls += numSyls
-            totalNumGaps += numGaps
-        return totalNumSyls, totalNumGaps
+                    num_gaps += 1
+            total_num_syls += num_syls
+            total_num_gaps += num_gaps
+        return total_num_syls, total_num_gaps
 
     @staticmethod
-    def _insertSpaces(lines):
+    def _insert_spaces(lines):
         """Add spaces between syllables that lack them."""
         for line in lines:
             for syllable in line[:-1]:
@@ -494,38 +494,38 @@ class Lyrics:
         if not self.list:
             return []
 
-        maxWidth = manager.displaySize[0] - X_BORDER * 2
+        max_width = manager.displaySize[0] - X_BORDER * 2
 
         lines = []
 
         x = 0
-        currentLine = []
-        currentText = ""
-        lineNumber = self.list[0].line
+        current_line = []
+        current_text = ""
+        line_number = self.list[0].line
         for syllable in self.list:
             syllable.left = None
             syllable.right = None
 
-            while lineNumber < syllable.line:
-                lines.append(currentLine)
+            while line_number < syllable.line:
+                lines.append(current_line)
                 x = 0
-                currentLine = []
-                currentText = ""
-                lineNumber += 1
+                current_line = []
+                current_text = ""
+                line_number += 1
 
             width, height = font.size(syllable.text)
-            currentLine.append(syllable)
-            currentText += syllable.text
+            current_line.append(syllable)
+            current_text += syllable.text
             x += width
-            while x > maxWidth:
-                result = self._foldLine(currentLine, currentText, font, maxWidth)
+            while x > max_width:
+                result = self._fold_line(current_line, current_text, font, max_width)
                 if result is None:
                     break
-                outputLine, currentLine, currentText = result
-                lines.append(outputLine)
-                x, height = font.size(currentText)
+                output_line, current_line, current_text = result
+                lines.append(output_line)
+                x, height = font.size(current_text)
 
-        lines.append(currentLine)
+        lines.append(current_line)
 
         # Indicated that the first syllable of each line is flush with
         # the left edge of the screen.
@@ -533,43 +533,42 @@ class Lyrics:
             if l:
                 l[0].left = X_BORDER
 
-        # print lines
         return lines
 
     @staticmethod
-    def _foldLine(currentLine, currentText, font, maxWidth):
-        """Fold a line that exceeds maxWidth at the best fold point.
+    def _fold_line(current_line, current_text, font, max_width):
+        """Fold a line that exceeds max_width at the best fold point.
 
-        Returns (outputLine, remainingLine, remainingText) or None if
+        Returns (output_line, remaining_line, remaining_text) or None if
         the line should not be folded (trailing whitespace only).
         """
-        foldPoint = manager.FindFoldPoint(currentText, font, maxWidth)
-        if foldPoint == len(currentText):
+        fold_point = manager.find_fold_point(current_text, font, max_width)
+        if fold_point == len(current_text):
             return None
 
-        # All the characters before foldPoint get output as the first line.
+        # All the characters before fold_point get output as the first line.
         n = 0
         i = 0
-        text = currentLine[i].text
-        outputLine = []
-        while n + len(text) <= foldPoint:
-            outputLine.append(currentLine[i])
+        text = current_line[i].text
+        output_line = []
+        while n + len(text) <= fold_point:
+            output_line.append(current_line[i])
             n += len(text)
             i += 1
-            text = currentLine[i].text
+            text = current_line[i].text
 
-        syllable = currentLine[i]
+        syllable = current_line[i]
         if i == 0:
             # One long line.  Break it mid-phrase.
-            a = syllable.makeCopy(syllable.text[:foldPoint])
-            outputLine.append(a)
-            currentLine[i] = syllable.makeCopy("  " + syllable.text[foldPoint:])
+            a = syllable.make_copy(syllable.text[:fold_point])
+            output_line.append(a)
+            current_line[i] = syllable.make_copy("  " + syllable.text[fold_point:])
         else:
-            currentLine[i] = syllable.makeCopy("  " + syllable.text)
+            current_line[i] = syllable.make_copy("  " + syllable.text)
 
-        remainingLine = currentLine[i:]
-        remainingText = "".join(s.text for s in remainingLine)
-        return outputLine, remainingLine, remainingText
+        remaining_line = current_line[i:]
+        remaining_text = "".join(s.text for s in remaining_line)
+        return output_line, remaining_line, remaining_text
 
     def write(self):
         # Outputs the lyrics, one line at a time.
@@ -579,95 +578,94 @@ class Lyrics:
             )
 
 
-def midiParseData(midiData, ErrorNotifyCallback, Encoding):
-    # Create the midiFile structure
-    midifile = midiFile()
-    midifile.text_encoding = Encoding
+def midi_parse_data(midi_data, error_notify_callback, encoding):
+    # Create the MidiFile structure
+    midifile = MidiFile()
+    midifile.text_encoding = encoding
 
     # Open the file
-    filehdl = cStringIO.StringIO(midiData)
+    filehdl = cStringIO.string_io(midi_data)
 
     # Check it's a MThd chunk
     packet = filehdl.read(8)
-    ChunkType, Length = struct.unpack(">4sL", packet)
-    if ChunkType != "MThd":
-        ErrorNotifyCallback("No MIDI Header chunk at start")
+    chunk_type, length = struct.unpack(">4sL", packet)
+    if chunk_type != "MThd":
+        error_notify_callback("No MIDI Header chunk at start")
         return None
 
     # Read header
-    packet = filehdl.read(Length)
-    format, tracks, division = struct.unpack(">HHH", packet)
+    packet = filehdl.read(length)
+    _, _, division = struct.unpack(">HHH", packet)
     if division & 0x8000:
-        midifile.ClickUnitsPerSMPTE = division & 0x00FF
-        midifile.SMPTEFramesPerSec = division & 0x7F00
+        midifile.click_units_per_smpte = division & 0x00FF
+        midifile.smpte_frames_per_sec = division & 0x7F00
     else:
-        midifile.ClickUnitsPerQuarter = division & 0x7FFF
+        midifile.click_units_per_quarter = division & 0x7FFF
 
     # Loop through parsing all tracks
-    _parseMidiTracks(filehdl, midifile, ErrorNotifyCallback)
+    _parse_midi_tracks(filehdl, midifile)
     filehdl.close()
 
     # Get the lyrics from the best track.
-    midifile.lyrics = _selectBestLyrics(midifile)
+    midifile.lyrics = _select_best_lyrics(midifile)
     if not midifile.lyrics:
-        ErrorNotifyCallback("No lyrics in the track")
+        error_notify_callback("No lyrics in the track")
         return None
 
     midifile.lyrics.computeTiming(midifile)
     midifile.lyrics.analyzeSpaces()
 
     # Calculate the song start/end from note events across all tracks.
-    midifile.earliestNoteMS, midifile.lastNoteMS = _computeNoteBounds(midifile)
+    midifile.earliest_note_ms, midifile.last_note_ms = _compute_note_bounds(midifile)
 
     if debug:
-        print("first = %s" % (midifile.earliestNoteMS))
-        print("last = %s" % (midifile.lastNoteMS))
+        print("first = %s" % (midifile.earliest_note_ms))
+        print("last = %s" % (midifile.last_note_ms))
 
-    # Return the populated midiFile structure
+    # Return the populated MidiFile structure
     return midifile
 
 
-def _parseMidiTracks(filehdl, midifile, ErrorNotifyCallback):
+def _parse_midi_tracks(filehdl, midifile):
     """Read and parse all MIDI tracks from the file handle."""
-    trackNum = 0
+    track_num = 0
     while True:
         packet = filehdl.read(8)
         if packet == "" or len(packet) < 8:
             break
-        ChunkType, Length = struct.unpack(">4sL", packet)
-        if ChunkType != "MTrk":
-            if debug:
-                print("Didn't find expected MIDI Track")
+        chunk_type, length = struct.unpack(">4sL", packet)
+        if chunk_type != "MTrk" and debug:
+            print("Didn't find expected MIDI Track")
 
-        track_desc = midiParseTrack(filehdl, midifile, trackNum, Length, ErrorNotifyCallback)
+        track_desc = midi_parse_track(filehdl, midifile, track_num, length)
         if not track_desc:
             break
-        midifile.trackList.append(track_desc)
+        midifile.track_list.append(track_desc)
         if debug:
-            print("T%d: First note(%s)" % (trackNum, track_desc.FirstNoteClick))
-        trackNum += 1
+            print("T%d: First note(%s)" % (track_num, track_desc.first_note_click))
+        track_num += 1
 
 
-def _selectBestLyrics(midifile):
+def _select_best_lyrics(midifile):
     """Select the best lyrics track: prefer 'lyrics' tracks, then most syllables."""
-    bestSortKey = None
-    bestLyrics = None
+    best_sort_key = None
+    best_lyrics = None
 
-    for track_desc in midifile.trackList:
-        lyrics = _chooseLyricsFromTrack(track_desc)
+    for track_desc in midifile.track_list:
+        lyrics = _choose_lyrics_from_track(track_desc)
         if not lyrics:
             continue
-        sortKey = (track_desc.LyricsTrack, len(lyrics.list))
-        if sortKey > bestSortKey:
-            bestSortKey = sortKey
-            bestLyrics = lyrics
-    return bestLyrics
+        sort_key = (track_desc.lyrics_track, len(lyrics.list))
+        if sort_key > best_sort_key:
+            best_sort_key = sort_key
+            best_lyrics = lyrics
+    return best_lyrics
 
 
-def _chooseLyricsFromTrack(track_desc):
+def _choose_lyrics_from_track(track_desc):
     """Pick the best lyric event list from a single track."""
-    has_text = track_desc.text_events.hasAny()
-    has_lyric = track_desc.lyric_events.hasAny()
+    has_text = track_desc.text_events.has_any()
+    has_lyric = track_desc.lyric_events.has_any()
 
     if has_text and has_lyric:
         if len(track_desc.lyric_events.list) > len(track_desc.text_events.list):
@@ -680,196 +678,195 @@ def _chooseLyricsFromTrack(track_desc):
     return None
 
 
-def _computeNoteBounds(midifile):
-    """Return (earliestNoteMS, lastNoteMS) across all tracks."""
-    earliestNoteMS = None
-    lastNoteMS = None
-    for track in midifile.trackList:
-        if track.FirstNoteMs is not None:
-            if earliestNoteMS is None or track.FirstNoteMs < earliestNoteMS:
-                earliestNoteMS = track.FirstNoteMs
-        if track.LastNoteMs is not None:
-            if lastNoteMS is None or track.LastNoteMs > lastNoteMS:
-                lastNoteMS = track.LastNoteMs
-    return earliestNoteMS, lastNoteMS
+def _compute_note_bounds(midifile):
+    """Return (earliest_note_ms, last_note_ms) across all tracks."""
+    earliest_note_ms = None
+    last_note_ms = None
+    for track in midifile.track_list:
+        if track.first_note_ms is not None:
+            if earliest_note_ms is None or track.first_note_ms < earliest_note_ms:
+                earliest_note_ms = track.first_note_ms
+        if track.last_note_ms is not None:
+            if last_note_ms is None or track.last_note_ms > last_note_ms:
+                last_note_ms = track.last_note_ms
+    return earliest_note_ms, last_note_ms
 
 
-def midiParseTrack(filehdl, midifile, trackNum, Length, ErrorNotifyCallback):
+def midi_parse_track(filehdl, midifile, track_num, length):
     # Create the new TrackDesc structure
-    track = TrackDesc(trackNum)
+    track = TrackDesc(track_num)
     if debug:
-        print("Track %d" % trackNum)
+        print("Track %d" % track_num)
     # Loop through all events in the track, recording salient meta-events and times
-    eventBytes = 0
-    while track.BytesRead < Length:
-        eventBytes = midiProcessEvent(filehdl, track, midifile, ErrorNotifyCallback)
-        if (eventBytes is None) or (eventBytes == -1) or (eventBytes == 0):
+    event_bytes = 0
+    while track.bytes_read < length:
+        event_bytes = midi_process_event(filehdl, track, midifile)
+        if (event_bytes is None) or (event_bytes == -1) or (event_bytes == 0):
             return None
-        track.BytesRead = track.BytesRead + eventBytes
+        track.bytes_read = track.bytes_read + event_bytes
     return track
 
 
-def midiProcessEvent(filehdl, track_desc, midifile, ErrorNotifyCallback):
-    bytesRead = 0
+def midi_process_event(filehdl, track_desc, midifile):
+    bytes_read = 0
     _running_status = 0
-    click, varBytes = varLength(filehdl)
-    if varBytes == 0:
+    click, var_bytes = var_length(filehdl)
+    if var_bytes == 0:
         return 0
-    bytesRead = bytesRead + varBytes
-    track_desc.TotalClicksFromStart += click
-    byteStr = filehdl.read(1)
-    bytesRead = bytesRead + 1
-    status_byte = ord(byteStr)
+    bytes_read = bytes_read + var_bytes
+    track_desc.total_clicks_from_start += click
+    byte_str = filehdl.read(1)
+    bytes_read = bytes_read + 1
+    status_byte = ord(byte_str)
 
     # Handle the MIDI running status.
     if status_byte & 0x80:
         event_type = status_byte
         if (event_type & 0xF0) != 0xF0:
-            track_desc.RunningStatus = event_type
+            track_desc.running_status = event_type
     else:
-        event_type = track_desc.RunningStatus
+        event_type = track_desc.running_status
         filehdl.seek(-1, 1)
-        bytesRead = bytesRead - 1
+        bytes_read = bytes_read - 1
 
     # Handle all event types
     if event_type == 0xFF:
-        bytesRead += _processMetaEvent(filehdl, track_desc, midifile)
+        bytes_read += _process_meta_event(filehdl, track_desc, midifile)
     else:
-        bytesRead += _processChannelEvent(filehdl, track_desc, event_type)
-    return bytesRead
+        bytes_read += _process_channel_event(filehdl, track_desc, event_type)
+    return bytes_read
 
 
-def _processMetaEvent(filehdl, track_desc, midifile):
+def _process_meta_event(filehdl, track_desc, midifile):
     """Process a MIDI meta-event (0xFF). Returns bytes read."""
-    bytesRead = 0
-    byteStr = filehdl.read(1)
-    bytesRead += 1
-    event = ord(byteStr)
+    bytes_read = 0
+    byte_str = filehdl.read(1)
+    bytes_read += 1
+    event = ord(byte_str)
     if debug:
         print("MetaEvent: 0x%X" % event)
 
     handler = _META_EVENT_HANDLERS.get(event)
     if handler:
-        bytesRead += handler(filehdl, track_desc, midifile)
+        bytes_read += handler(filehdl, track_desc, midifile)
     else:
-        bytesRead += _metaDiscardVar(filehdl, event)
-    return bytesRead
+        bytes_read += _meta_discard_var(filehdl, event)
+    return bytes_read
 
 
-def _metaSequenceNumber(filehdl, track_desc, midifile):
+def _meta_sequence_number(filehdl, track_desc, midifile):
     """Meta-event 0x00: Sequence number."""
-    bytesRead = 0
+    bytes_read = 0
     packet = filehdl.read(2)
-    bytesRead += 2
-    zero, type_val = map(ord, packet)
+    bytes_read += 2
+    _, type_val = map(ord, packet)
     if type_val == 0x02:
         filehdl.read(2)
-    elif type_val != 0x00:
-        if debug:
-            print("Invalid sequence number (%d)" % type_val)
-    return bytesRead
+    elif type_val != 0x00 and debug:
+        print("Invalid sequence number (%d)" % type_val)
+    return bytes_read
 
 
-def _metaTextEvent(filehdl, track_desc, midifile):
+def _meta_text_event(filehdl, track_desc, midifile):
     """Meta-event 0x01: Text Event."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    text = filehdl.read(Length)
-    bytesRead += Length
-    if Length <= 1000:
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    text = filehdl.read(length)
+    bytes_read += length
+    if length <= 1000:
         if midifile.text_encoding != "":
             text = text.decode(midifile.text_encoding, "replace")
-        if _isLyricText(text):
-            track_desc.text_events.recordText(track_desc.TotalClicksFromStart, text)
+        if _is_lyric_text(text):
+            track_desc.text_events.recordText(track_desc.total_clicks_from_start, text)
         if debug:
             print("Text: %s" % (repr(text)))
     elif debug:
-        print("Ignoring text of length %s" % (Length))
-    return bytesRead
+        print("Ignoring text of length %s" % (length))
+    return bytes_read
 
 
-def _metaCopyright(filehdl, track_desc, midifile):
+def _meta_copyright(filehdl, track_desc, midifile):
     """Meta-event 0x02: Copyright (discard)."""
-    return _readAndDiscardVar(filehdl)
+    return _read_and_discard_var(filehdl)
 
 
-def _metaTrackTitle(filehdl, track_desc, midifile):
+def _meta_track_title(filehdl, track_desc, midifile):
     """Meta-event 0x03: Title of track."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    title = filehdl.read(Length)
-    bytesRead += Length
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    title = filehdl.read(length)
+    bytes_read += length
     if debug:
         print("Track Title: " + repr(title))
     if title == "Words":
-        track_desc.LyricsTrack = True
-    return bytesRead
+        track_desc.lyrics_track = True
+    return bytes_read
 
 
-def _metaInstrument(filehdl, track_desc, midifile):
+def _meta_instrument(filehdl, track_desc, midifile):
     """Meta-event 0x04: Instrument (discard)."""
-    return _readAndDiscardVar(filehdl)
+    return _read_and_discard_var(filehdl)
 
 
-def _metaLyricEvent(filehdl, track_desc, midifile):
+def _meta_lyric_event(filehdl, track_desc, midifile):
     """Meta-event 0x05: Lyric Event."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    lyric = filehdl.read(Length)
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    lyric = filehdl.read(length)
     if midifile.text_encoding != "":
         lyric = lyric.decode(midifile.text_encoding, "replace")
-    bytesRead += Length
-    if _isLyricText(lyric):
-        track_desc.lyric_events.recordLyric(track_desc.TotalClicksFromStart, lyric)
+    bytes_read += length
+    if _is_lyric_text(lyric):
+        track_desc.lyric_events.recordLyric(track_desc.total_clicks_from_start, lyric)
     if debug:
         print("Lyric: %s" % (repr(lyric)))
-    return bytesRead
+    return bytes_read
 
 
-def _metaDiscardVarLength(filehdl, track_desc, midifile):
+def _meta_discard_var_length(filehdl, track_desc, midifile):
     """Discard a variable-length meta-event."""
-    return _readAndDiscardVar(filehdl)
+    return _read_and_discard_var(filehdl)
 
 
-def _metaFixedDiscard2(filehdl, track_desc, midifile):
+def _meta_fixed_discard_2(filehdl, track_desc, midifile):
     """Discard 2 fixed bytes (MIDI Channel / MIDI Port)."""
     filehdl.read(2)
     return 2
 
 
-def _metaEndOfTrack(filehdl, track_desc, midifile):
+def _meta_end_of_track(filehdl, track_desc, midifile):
     """Meta-event 0x2F: End of track."""
-    byteStr = filehdl.read(1)
-    valid = ord(byteStr)
+    byte_str = filehdl.read(1)
+    valid = ord(byte_str)
     if valid != 0:
         print("Invalid End of track")
     return 1
 
 
-def _metaSetTempo(filehdl, track_desc, midifile):
+def _meta_set_tempo(filehdl, track_desc, midifile):
     """Meta-event 0x51: Set Tempo."""
     packet = filehdl.read(4)
-    valid, tempoA, tempoB, tempoC = map(ord, packet)
+    valid, tempo_a, tempo_b, tempo_c = map(ord, packet)
     if valid != 0x03:
         print("Error: Invalid tempo")
-    tempo = (tempoA << 16) | (tempoB << 8) | tempoC
-    midifile.Tempo.append((track_desc.TotalClicksFromStart, tempo))
+    tempo = (tempo_a << 16) | (tempo_b << 8) | tempo_c
+    midifile.tempo.append((track_desc.total_clicks_from_start, tempo))
     if debug:
         ms_per_quarter = tempo / 1000
         print("Tempo: %d (%d ms per quarter note)" % (tempo, ms_per_quarter))
     return 4
 
 
-def _metaSMPTE(filehdl, track_desc, midifile):
+def _meta_smpte(filehdl, track_desc, midifile):
     """Meta-event 0x54: SMPTE (discard)."""
     filehdl.read(6)
     return 6
 
 
-def _metaTimeSignature(filehdl, track_desc, midifile):
+def _meta_time_signature(filehdl, track_desc, midifile):
     """Meta-event 0x58: Time Signature."""
     packet = filehdl.read(5)
     valid, num, denom, clocks, notes = map(ord, packet)
@@ -878,14 +875,14 @@ def _metaTimeSignature(filehdl, track_desc, midifile):
             "Error: Invalid time signature (valid=%d, num=%d, denom=%d)"
             % (valid, num, denom)
         )
-    midifile.Numerator = num
-    midifile.Denominator = denom
-    midifile.ClocksPerMetronomeTick = clocks
-    midifile.NotesPer24MIDIClocks = notes
+    midifile.numerator = num
+    midifile.denominator = denom
+    midifile.clocks_per_metronome_tick = clocks
+    midifile.notes_per_24_midi_clocks = notes
     return 5
 
 
-def _metaKeySignature(filehdl, track_desc, midifile):
+def _meta_key_signature(filehdl, track_desc, midifile):
     """Meta-event 0x59: Key signature (discard)."""
     packet = filehdl.read(3)
     valid, sf, mi = map(ord, packet)
@@ -894,54 +891,54 @@ def _metaKeySignature(filehdl, track_desc, midifile):
     return 3
 
 
-def _metaSequencerSpecific(filehdl, track_desc, midifile):
+def _meta_sequencer_specific(filehdl, track_desc, midifile):
     """Meta-event 0x7F: Sequencer Specific."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    byteStr = filehdl.read(1)
-    bytesRead += 1
-    ID = ord(byteStr)
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    byte_str = filehdl.read(1)
+    bytes_read += 1
+    ID = ord(byte_str)
     if ID == 0:
         packet = filehdl.read(2)
-        bytesRead += 2
+        bytes_read += 2
         ID = struct.unpack(">H", packet)[0]
-        Length -= 3
+        length -= 3
     else:
-        Length -= 1
-    data = filehdl.read(Length)
-    bytesRead += Length
+        length -= 1
+    data = filehdl.read(length)
+    bytes_read += length
     if debug:
-        print("Sequencer Specific Event (Data Length %d)" % Length)
+        print("Sequencer Specific Event (Data Length %d)" % length)
         print("Manufacturer's ID: " + str(ID))
         print("Manufacturer Data: " + data)
-    return bytesRead
+    return bytes_read
 
 
 # Lookup table mapping meta-event codes to their handler functions
 _META_EVENT_HANDLERS = {
-    0x00: _metaSequenceNumber,
-    0x01: _metaTextEvent,
-    0x02: _metaCopyright,
-    0x03: _metaTrackTitle,
-    0x04: _metaInstrument,
-    0x05: _metaLyricEvent,
-    0x06: _metaDiscardVarLength,  # Marker
-    0x07: _metaDiscardVarLength,  # Cue point
-    0x08: _metaDiscardVarLength,  # Program name
-    0x09: _metaDiscardVarLength,  # Device name
-    0x20: _metaFixedDiscard2,     # MIDI Channel
-    0x21: _metaFixedDiscard2,     # MIDI Port
-    0x2F: _metaEndOfTrack,
-    0x51: _metaSetTempo,
-    0x54: _metaSMPTE,
-    0x58: _metaTimeSignature,
-    0x59: _metaKeySignature,
-    0x7F: _metaSequencerSpecific,
+    0x00: _meta_sequence_number,
+    0x01: _meta_text_event,
+    0x02: _meta_copyright,
+    0x03: _meta_track_title,
+    0x04: _meta_instrument,
+    0x05: _meta_lyric_event,
+    0x06: _meta_discard_var_length,  # Marker
+    0x07: _meta_discard_var_length,  # Cue point
+    0x08: _meta_discard_var_length,  # Program name
+    0x09: _meta_discard_var_length,  # Device name
+    0x20: _meta_fixed_discard_2,     # MIDI Channel
+    0x21: _meta_fixed_discard_2,     # MIDI Port
+    0x2F: _meta_end_of_track,
+    0x51: _meta_set_tempo,
+    0x54: _meta_smpte,
+    0x58: _meta_time_signature,
+    0x59: _meta_key_signature,
+    0x7F: _meta_sequencer_specific,
 }
 
 
-def _isLyricText(text):
+def _is_lyric_text(text):
     """Return True if the text should be treated as lyrics (not sysex markers)."""
     return (
         " SYX" not in text
@@ -951,39 +948,39 @@ def _isLyricText(text):
     )
 
 
-def _readAndDiscardVar(filehdl):
+def _read_and_discard_var(filehdl):
     """Read a variable-length block and discard it. Returns total bytes read."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    filehdl.read(Length)
-    bytesRead += Length
-    return bytesRead
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    filehdl.read(length)
+    bytes_read += length
+    return bytes_read
 
 
-def _metaDiscardVar(filehdl, event):
+def _meta_discard_var(filehdl, event):
     """Discard an unknown meta-event with variable-length data."""
     if debug:
         print("Unknown meta-event: 0x%X" % event)
-    return _readAndDiscardVar(filehdl)
+    return _read_and_discard_var(filehdl)
 
 
-def _processChannelEvent(filehdl, track_desc, event_type):
+def _process_channel_event(filehdl, track_desc, event_type):
     """Process MIDI channel voice / system messages. Returns bytes read."""
     high_nibble = event_type & 0xF0
 
     if high_nibble == 0x80:
         # Note off
         filehdl.read(2)
-        track_desc.LastNoteClick = track_desc.TotalClicksFromStart
+        track_desc.last_note_click = track_desc.total_clicks_from_start
         return 2
 
     if high_nibble == 0x90:
         # Note on
         filehdl.read(2)
-        if track_desc.FirstNoteClick is None:
-            track_desc.FirstNoteClick = track_desc.TotalClicksFromStart
-        track_desc.LastNoteClick = track_desc.TotalClicksFromStart
+        if track_desc.first_note_click is None:
+            track_desc.first_note_click = track_desc.total_clicks_from_start
+        track_desc.last_note_click = track_desc.total_clicks_from_start
         return 2
 
     if high_nibble in (0xA0, 0xB0, 0xE0):
@@ -1000,26 +997,26 @@ def _processChannelEvent(filehdl, track_desc, event_type):
         return 1
 
     if event_type == 0xF0:
-        return _processSysexF0(filehdl)
+        return _process_sysex_f0(filehdl)
 
     if event_type == 0xF7:
-        return _readAndDiscardVar(filehdl)
+        return _read_and_discard_var(filehdl)
 
     # Unknown event
     if debug:
         print("Unknown event: 0x%x" % event_type)
-    return _readAndDiscardVar(filehdl)
+    return _read_and_discard_var(filehdl)
 
 
-def _processSysexF0(filehdl):
+def _process_sysex_f0(filehdl):
     """Process F0 Sysex Event."""
-    bytesRead = 0
-    Length, varBytes = varLength(filehdl)
-    bytesRead += varBytes
-    filehdl.read(Length - 1)
+    bytes_read = 0
+    length, var_bytes = var_length(filehdl)
+    bytes_read += var_bytes
+    filehdl.read(length - 1)
     end_byte = filehdl.read(1)
     end = ord(end_byte)
-    bytesRead += Length
+    bytes_read += length
     if end != 0xF7:
         print("Invalid F0 Sysex end byte (0x%X)" % end)
     return bytesRead
@@ -1028,48 +1025,48 @@ def _processSysexF0(filehdl):
 # Read a variable length quantity from the file's current read position.
 # Reads the file one byte at a time until the full value has been read,
 # and returns a tuple of the full integer and the number of bytes read
-def varLength(filehdl):
-    convertedInt = 0
-    bitShift = 0
-    bytesRead = 0
-    while bitShift <= 42:
-        byteStr = filehdl.read(1)
-        bytesRead = bytesRead + 1
-        if byteStr:
-            byteVal = ord(byteStr)
-            convertedInt = (convertedInt << 7) | (byteVal & 0x7F)
-            # print ("<0x%X/0x%X>"% (byteVal, convertedInt))
-            if byteVal & 0x80:
-                bitShift = bitShift + 7
+def var_length(filehdl):
+    converted_int = 0
+    bit_shift = 0
+    bytes_read = 0
+    while bit_shift <= 42:
+        byte_str = filehdl.read(1)
+        bytes_read = bytes_read + 1
+        if byte_str:
+            byte_val = ord(byte_str)
+            converted_int = (converted_int << 7) | (byte_val & 0x7F)
+            # print ("<0x%X/0x%X>"% (byte_val, converted_int))
+            if byte_val & 0x80:
+                bit_shift = bit_shift + 7
             else:
                 break
         else:
             return (0, 0)
-    return (convertedInt, bytesRead)
+    return (converted_int, bytes_read)
 
 
-class midPlayer(pykPlayer):
-    def __init__(self, song, songDb, errorNotifyCallback=None, doneCallback=None):
+class MidPlayer(PykPlayer):
+    def __init__(self, song, song_db, error_notify_callback=None, done_callback=None):
         """The first parameter, song, may be either a pykdb.SongStruct
         instance, or it may be a filename."""
 
-        pykPlayer.__init__(self, song, songDb, errorNotifyCallback, doneCallback)
-        settings = self.songDb.Settings
+        PykPlayer.__init__(self, song, song_db, error_notify_callback, done_callback)
+        settings = self.song_db.settings
 
-        self.SupportsFontZoom = True
+        self.supports_font_zoom = True
         self.isValid = False
 
         # Parse the MIDI file
-        self.midifile = midiParseData(
-            self.SongDatas[0].GetData(), self.ErrorNotifyCallback, settings.KarEncoding
+        self.midifile = midi_parse_data(
+            self.song_datas[0].get_data(), self.error_notify_callback, settings.kar_encoding
         )
         if self.midifile is None:
-            ErrorString = "ERROR: Could not parse the MIDI file"
-            self.ErrorNotifyCallback(ErrorString)
+            error_string = "ERROR: Could not parse the MIDI file"
+            self.error_notify_callback(error_string)
             return
         elif self.midifile.lyrics is None:
-            ErrorString = "ERROR: Could not get any lyric data from file"
-            self.ErrorNotifyCallback(ErrorString)
+            error_string = "ERROR: Could not get any lyric data from file"
+            self.error_notify_callback(error_string)
             return
 
         self.isValid = True
@@ -1078,19 +1075,19 @@ class midPlayer(pykPlayer):
         if debug:
             self.midifile.lyrics.write()
 
-        manager.setCpuSpeed("kar")
-        manager.InitPlayer(self)
-        manager.OpenDisplay()
+        manager.set_cpu_speed("kar")
+        manager.init_player(self)
+        manager.open_display()
 
         if not manager.options.nomusic:
-            manager.OpenAudio(frequency=manager.settings.MIDISampleRate, channels=1)
+            manager.open_audio(frequency=manager.settings.midi_sample_rate, channels=1)
 
         # Account for the size of the playback buffer in the lyrics
         # display.  Assume that the buffer will be mostly full.  On a
         # slower computer that's struggling to keep up, this may not
         # be the right amount of delay, but it should usually be
         # pretty close.
-        self.InternalOffsetTime = -manager.GetAudioBufferMS()
+        self.internal_offset_time = -manager.get_audio_buffer_ms()
 
         self.screenDirty = False
         self.initFont()
@@ -1105,7 +1102,7 @@ class midPlayer(pykPlayer):
         # run MIDI via Timidity instead, which appears to work better
         # than the native support, so we recommend this.
         if env != ENV_WINDOWS:
-            self.InternalOffsetTime += self.midifile.earliestNoteMS
+            self.internal_offset_time += self.midifile.earliest_note_ms
 
         # Now word-wrap the text to fit our window.
         self.lyrics = self.midifile.lyrics.wordWrapLyrics(self.font)
@@ -1130,7 +1127,7 @@ class midPlayer(pykPlayer):
 
         else:
             # Load the sound normally for playback.
-            audio_path = self.SongDatas[0].GetFilepath()
+            audio_path = self.song_datas[0].get_filepath()
             if isinstance(audio_path, str):
                 audio_path = audio_path.encode(sys.getfilesystemencoding())
             pygame.mixer.music.load(audio_path)
@@ -1142,20 +1139,20 @@ class midPlayer(pykPlayer):
         # paint the first numRows lines.
         self.resetPlayingState()
 
-    def GetPos(self):
+    def get_pos(self):
         if self.useMidiTimer:
             return pygame.mixer.music.get_pos()
         else:
-            return pykPlayer.GetPos(self)
+            return PykPlayer.get_pos(self)
 
-    def SetupOptions(self, usage=None):
+    def setup_options(self, usage=None):
         """Initialise and return optparse OptionParser object,
         suitable for parsing the command line options to this
         application."""
 
         if usage is None:
             usage = "%prog [options] <KAR file>"
-        parser = pykPlayer.SetupOptions(self, usage=usage)
+        parser = PykPlayer.setup_options(self, usage=usage)
 
         # Remove irrelevant options.
         parser.remove_option("--fps")
@@ -1164,8 +1161,8 @@ class midPlayer(pykPlayer):
         return parser
 
     def initFont(self):
-        fontSize = int(FONT_SIZE * manager.GetFontScale() * manager.displaySize[1] / 480.0)
-        self.font = self.findPygameFont(self.songDb.Settings.KarFont, fontSize)
+        font_size = int(FONT_SIZE * manager.get_font_scale() * manager.displaySize[1] / 480.0)
+        self.font = self.find_pygame_font(self.song_db.settings.kar_font, font_size)
         self.lineSize = max(self.font.get_height(), self.font.get_linesize())
         self.numRows = int((manager.displaySize[1] - Y_BORDER * 2) / self.lineSize)
 
@@ -1210,8 +1207,8 @@ class midPlayer(pykPlayer):
         # Redraws the contents of the currently onscreen text.
 
         # Clear the screen
-        settings = self.songDb.Settings
-        manager.surface.fill(settings.KarBackgroundColour)
+        settings = self.song_db.settings
+        manager.surface.fill(settings.kar_background_colour)
 
         # Paint the first numRows lines
         for i in range(self.numRows):
@@ -1223,7 +1220,7 @@ class midPlayer(pykPlayer):
                     self.drawSyllable(syllable, i, None)
                     x = syllable.right
 
-        manager.Flip()
+        manager.flip()
         self.screenDirty = False
 
     def drawSyllable(self, syllable, row, x):
@@ -1243,21 +1240,21 @@ class midPlayer(pykPlayer):
 
         y = Y_BORDER + row * self.lineSize
 
-        settings = self.songDb.Settings
+        settings = self.song_db.settings
 
         if syllable.type == TEXT_LYRIC:
             if self.currentMs < syllable.ms:
-                color = settings.KarReadyColour
+                color = settings.kar_ready_colour
             else:
-                color = settings.KarSweepColour
+                color = settings.kar_sweep_colour
         elif syllable.type == TEXT_INFO:
-            color = settings.KarInfoColour
+            color = settings.kar_info_colour
         elif syllable.type == TEXT_TITLE:
-            color = settings.KarTitleColour
+            color = settings.kar_title_colour
 
         # Render text on a black background (instead of transparent)
         # to save a hair of CPU time.
-        text = self.font.render(syllable.text, True, color, settings.KarBackgroundColour)
+        text = self.font.render(syllable.text, True, color, settings.kar_background_colour)
 
         width, height = text.get_size()
         syllable.right = syllable.left + width
@@ -1276,13 +1273,13 @@ class midPlayer(pykPlayer):
                 return True
         return False
 
-    def doValidate(self):
+    def do_validate(self):
         if not self.__hasLyrics():
             return False
 
         return True
 
-    def doPlay(self):
+    def do_play(self):
         if not manager.options.nomusic:
             pygame.mixer.music.play()
 
@@ -1292,15 +1289,15 @@ class midPlayer(pykPlayer):
             # front.
             pygame.time.wait(50)
 
-    def doPause(self):
+    def do_pause(self):
         if not manager.options.nomusic:
             pygame.mixer.music.pause()
 
-    def doUnpause(self):
+    def do_unpause(self):
         if not manager.options.nomusic:
             pygame.mixer.music.unpause()
 
-    def doRewind(self):
+    def do_rewind(self):
         # Reset all the state (current lyric index etc)
         self.resetPlayingState()
         # Stop the audio
@@ -1308,33 +1305,32 @@ class midPlayer(pykPlayer):
             pygame.mixer.music.rewind()
             pygame.mixer.music.stop()
 
-    def GetLength(self):
+    def get_length(self):
         """Give the number of seconds in the song."""
-        return self.midifile.lastNoteMS / 1000
+        return self.midifile.last_note_ms / 1000
 
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
-        if not manager.options.nomusic:
-            if manager.audioProps:
-                pygame.mixer.music.stop()
-        pykPlayer.shutdown(self)
+        if not manager.options.nomusic and manager.audioProps:
+            pygame.mixer.music.stop()
+        PykPlayer.shutdown(self)
 
-    def doStuff(self):
-        pykPlayer.doStuff(self)
+    def do_stuff(self):
+        PykPlayer.do_stuff(self)
 
         if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
             self.currentMs = int(
-                self.GetPos() + self.InternalOffsetTime + manager.settings.SyncDelayMs
+                self.get_pos() + self.internal_offset_time + manager.settings.sync_delay_ms
             )
             self.colourUpdateMs()
 
             # If we're not using the automatic midi timer, we have to
             # know to when stop the song at the end ourselves.
-            if self.currentMs > self.midifile.lastNoteMS:
-                self.Close()
+            if self.currentMs > self.midifile.last_note_ms:
+                self.close()
 
-    def handleEvent(self, event):
+    def handle_event(self, event):
         if (
             event.type == pygame.KEYDOWN
             and event.key == pygame.K_RETURN
@@ -1344,12 +1340,12 @@ class midPlayer(pykPlayer):
             )
         ):
             # Shift/meta return: start/stop song.  Useful for keybinding apps.
-            self.Close()
+            self.close()
             return
 
-        pykPlayer.handleEvent(self, event)
+        PykPlayer.handle_event(self, event)
 
-    def doResize(self, newSize):
+    def do_resize(self, new_size):
         # This will be called internally whenever the window is
         # resized for any reason, either due to an application resize
         # request being processed, or due to the user dragging the
@@ -1391,7 +1387,7 @@ class midPlayer(pykPlayer):
                 self.drawSyllable(syllable, line - self.topLine, x)
                 x = syllable.right
 
-            manager.Flip()
+            manager.flip()
 
         return True
 
@@ -1484,8 +1480,8 @@ class midPlayer(pykPlayer):
         y = Y_BORDER + linesRemaining * self.lineSize
         h = linesScrolled * self.lineSize
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
-        settings = self.songDb.Settings
-        manager.surface.fill(settings.KarBackgroundColour, rect)
+        settings = self.song_db.settings
+        manager.surface.fill(settings.kar_background_colour, rect)
 
         # We can remove any syllables from the list that might have
         # scrolled off the screen now.
@@ -1511,10 +1507,10 @@ def usage():
 
 # Can be called from the command line with the CDG filepath as parameter
 def main():
-    player = midPlayer(None, None)
+    player = MidPlayer(None, None)
     if player.isValid:
-        player.Play()
-        manager.WaitForPlayer()
+        player.play()
+        manager.wait_for_player()
 
 
 if __name__ == "__main__":

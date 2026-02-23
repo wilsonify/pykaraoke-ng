@@ -37,19 +37,19 @@ class TestInitDatabaseError:
 
     def test_init_database_oserror(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = OSError("disk fail")
+            mock_db.globalSongDB.load_settings.side_effect = OSError("disk fail")
             backend = PyKaraokeBackend()
             assert backend.error_message == "disk fail"
 
     def test_init_database_runtime_error(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = RuntimeError("corrupt")
+            mock_db.globalSongDB.load_settings.side_effect = RuntimeError("corrupt")
             backend = PyKaraokeBackend()
             assert backend.error_message == "corrupt"
 
     def test_init_database_value_error(self):
         with patch("pykaraoke.core.backend.database") as mock_db:
-            mock_db.globalSongDB.LoadSettings.side_effect = ValueError("bad val")
+            mock_db.globalSongDB.load_settings.side_effect = ValueError("bad val")
             backend = PyKaraokeBackend()
             assert backend.error_message == "bad val"
 
@@ -166,20 +166,20 @@ class TestHandlePlayFailure:
         assert result["status"] == "error"
 
     def test_play_with_null_player(self):
-        """MakePlayer returns None → RuntimeError."""
+        """make_player returns None → RuntimeError."""
         backend = _make_backend()
         mock_song = MagicMock()
-        mock_song.MakePlayer.return_value = None
+        mock_song.make_player.return_value = None
         backend.current_song = mock_song
         result = backend.handle_command({"action": "play", "params": {}})
         assert result["status"] == "error"
         assert backend.state == BackendState.ERROR
 
     def test_play_make_player_raises(self):
-        """MakePlayer raises an exception."""
+        """make_player raises an exception."""
         backend = _make_backend()
         mock_song = MagicMock()
-        mock_song.MakePlayer.side_effect = RuntimeError("player init failed")
+        mock_song.make_player.side_effect = RuntimeError("player init failed")
         backend.current_song = mock_song
         result = backend.handle_command({"action": "play", "params": {}})
         assert result["status"] == "error"
