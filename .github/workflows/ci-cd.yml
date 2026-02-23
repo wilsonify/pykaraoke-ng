@@ -437,11 +437,10 @@ jobs:
         with:
           fetch-depth: 0  # full history required for changelog generation
 
-      # Determine next semver version from conventional commit messages:
-      #   feat!: / BREAKING CHANGE → major bump
-      #   feat:                    → minor bump
-      #   fix: / chore: / etc.    → patch bump (default)
-      - name: Compute next semantic version and create tag
+      # Determine next semver version from conventional commit messages.
+      # dry_run avoids the API call that fails on forks with restricted GITHUB_TOKEN;
+      # the tag is created later by softprops/action-gh-release.
+      - name: Compute next semantic version
         id: tag
         uses: mathieudutour/github-tag-action@a22cf08638b34d5badda920f9daf6e72c477b07b # v6.2
         with:
@@ -449,6 +448,7 @@ jobs:
           default_bump: patch
           release_branches: main,master
           tag_prefix: v
+          dry_run: true
 
       - name: Download all platform artifacts
         uses: actions/download-artifact@v4
@@ -481,6 +481,5 @@ jobs:
           body: ${{ steps.tag.outputs.changelog }}
           draft: false
           prerelease: false
+          make_latest: true
           files: release-files/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
