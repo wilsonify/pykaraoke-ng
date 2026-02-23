@@ -158,7 +158,7 @@ jobs:
           set -euo pipefail
           chmod +x specs/ci/validate-spec-completion.sh
           # Sanitize inside the shell using a quoted variable
-          SAFE_BRANCH_NAME="$(printf '%s' "$PR_HEAD_REF" | tr -cd '[:alnum:]._-/')"
+          SAFE_BRANCH_NAME="$(printf '%s' "$PR_HEAD_REF" | tr -cd '[:alnum:]._/-')"
           ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH_NAME"
 
   # ═══════════════════════════════════════════════════════════════════════════
