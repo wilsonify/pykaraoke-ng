@@ -513,7 +513,7 @@ class Lyrics:
                 current_text = ""
                 line_number += 1
 
-            width, height = font.size(syllable.text)
+            width, _ = font.size(syllable.text)
             current_line.append(syllable)
             current_text += syllable.text
             x += width
@@ -1441,44 +1441,44 @@ class MidPlayer(PykPlayer):
 
         # But don't scroll unless we have less than
         # PARAGRAPH_LEAD_TIME milliseconds to go.
-        timeGap = 0
+        time_gap = 0
         if self.next_colour_ms is not None:
-            timeGap = self.next_colour_ms - self.current_colour_ms
-            scrollTime = self.next_colour_ms - PARAGRAPH_LEAD_TIME
-            if self.current_ms < scrollTime:
-                self.next_change_ms = scrollTime
+            time_gap = self.next_colour_ms - self.current_colour_ms
+            scroll_time = self.next_colour_ms - PARAGRAPH_LEAD_TIME
+            if self.current_ms < scroll_time:
+                self.next_change_ms = scroll_time
                 return syllables
 
         # Put the current line on self.view_row by choosing
         # self.top_line appropriately.  If there is a long gap between
         # lyrics, go straight to the next line.
-        currentLine = self.current_line
-        if timeGap > PARAGRAPH_LEAD_TIME:
-            currentLine = self.next_line
-        topLine = max(min(currentLine - self.view_row, len(self.lyrics) - self.num_rows), 0)
-        if topLine == self.top_line:
+        current_line = self.current_line
+        if time_gap > PARAGRAPH_LEAD_TIME:
+            current_line = self.next_line
+        top_line = max(min(current_line - self.view_row, len(self.lyrics) - self.num_rows), 0)
+        if top_line == self.top_line:
             # No need to scroll.
             return syllables
 
         # OK, we have to scroll.  How many lines?
-        linesScrolled = topLine - self.top_line
-        self.top_line = topLine
-        if linesScrolled < 0 or linesScrolled >= self.num_rows:
+        lines_scrolled = top_line - self.top_line
+        self.top_line = top_line
+        if lines_scrolled < 0 or lines_scrolled >= self.num_rows:
             # Never mind; we'll need to repaint the whole screen anyway.
             self.screen_dirty = True
             return []
 
-        linesRemaining = self.num_rows - linesScrolled
+        lines_remaining = self.num_rows - lines_scrolled
 
         # Blit the lower part of the screen to the top.
-        y = Y_BORDER + linesScrolled * self.line_size
-        h = linesRemaining * self.line_size
+        y = Y_BORDER + lines_scrolled * self.line_size
+        h = lines_remaining * self.line_size
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
         manager.surface.blit(manager.surface, (X_BORDER, Y_BORDER), rect)
 
         # And now fill the lower part of the screen with black.
-        y = Y_BORDER + linesRemaining * self.line_size
-        h = linesScrolled * self.line_size
+        y = Y_BORDER + lines_remaining * self.line_size
+        h = lines_scrolled * self.line_size
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
         settings = self.song_db.settings
         manager.surface.fill(settings.kar_background_colour, rect)
@@ -1493,7 +1493,7 @@ class MidPlayer(PykPlayer):
 
         # And furthermore, we need to draw all the syllables that are
         # found in the newly-appearing lines.
-        for i in range(self.top_line + self.num_rows - linesScrolled, self.top_line + self.num_rows):
+        for i in range(self.top_line + self.num_rows - lines_scrolled, self.top_line + self.num_rows):
             line = self.lyrics[i]
             for syllable in line:
                 syllables.append((syllable, i))

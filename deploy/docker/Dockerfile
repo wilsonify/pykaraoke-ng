@@ -57,12 +57,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy virtual environment and source from builder
-COPY --from=python-builder /app/.venv /app/.venv
-COPY --from=python-builder /app/src /app/src
-COPY --from=python-builder /app/assets /app/assets
-
-# Set ownership
-RUN chown -R pykaraoke:pykaraoke /app
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/.venv /app/.venv
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/src /app/src
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/assets /app/assets
 
 USER pykaraoke
 
@@ -171,16 +168,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy Python environment
-COPY --from=python-builder /app/.venv /app/.venv
-COPY --from=python-builder /app/src /app/src
-COPY --from=python-builder /app/assets /app/assets
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/.venv /app/.venv
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/src /app/src
+COPY --from=python-builder --chown=pykaraoke:pykaraoke /app/assets /app/assets
 
 # Copy built Tauri application (this requires a pre-build step)
 # In practice, build with tauri-dev stage and copy the binary
-COPY --from=tauri-dev /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng
-
-# Set ownership
-RUN chown -R pykaraoke:pykaraoke /app
+COPY --from=tauri-dev --chown=pykaraoke:pykaraoke /app/tauri/src-tauri/target/release/pykaraoke-ng /app/pykaraoke-ng
 
 USER pykaraoke
 
