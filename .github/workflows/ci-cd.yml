@@ -34,6 +34,35 @@ env:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 0: Change Detection — determine which jobs are needed.
+  #          Skips the heavy Rust job when no Tauri/Rust files changed,
+  #          saving ~40s of apt installs + Rust toolchain setup per run.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  changes:
+    name: Detect Changed Files
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Emit a 'rust' output that is 'true' only when Tauri/Rust files change.
+      # workflow_dispatch always sets outputs to 'true' (no base to diff against).
+      - name: Detect Rust-related file changes
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'src/runtimes/tauri/src-tauri/**'
+              - '.github/workflows/**'
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 1: Unit Tests — Python, Rust, and Frontend run in parallel.
   #          Coverage is collected for the SonarQube stage.
   # ═══════════════════════════════════════════════════════════════════════════
@@ -89,24 +118,35 @@ jobs:
   unit-tests-rust:
     name: Unit Tests / Rust
     runs-on: ubuntu-22.04      # Tauri v1 requires webkit2gtk-4.0, only on 22.04
+    # Only run when Tauri/Rust files actually changed (or on workflow_dispatch).
+    # This avoids ~40s of apt installs + Rust toolchain setup on Python/frontend PRs.
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            libwebkit2gtk-4.0-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            librsvg2-dev
+      # Cache the four heavy Tauri system packages across runs.
+      # Trade-off: cached tarballs add ~5 MB to cache storage but save ~31s of
+      # apt-get download + install on every Rust job run.
+      # The 'version' input acts as a manual cache-buster (increment to force refresh).
+      #
+      # Alternative: use a custom Docker image with these packages pre-installed
+      # to avoid apt caching entirely — see comment block at the bottom of this file.
+      - name: Cache apt packages (Tauri system dependencies)
+        uses: awalber/cache-apt-pkgs-action@e5fd44f63c79e98e7ddff46acd44e6975c843f7e # v1.0.5
+        with:
+          packages: libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev librsvg2-dev
+          version: 1  # increment to invalidate cache when package versions must change
 
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
 
+      # Swatinem/rust-cache caches ~/.cargo/registry, ~/.cargo/git, and target/
+      # with a key derived from Cargo.lock + OS + Rust toolchain version.
+      # It also prunes stale build artifacts to prevent unbounded cache growth.
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
         with:
@@ -171,7 +211,8 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend, spec-validation]
-    if: always() && needs.unit-tests-python.result == 'success' && needs.unit-tests-rust.result == 'success' && needs.unit-tests-frontend.result == 'success' && (needs.spec-validation.result == 'success' || needs.spec-validation.result == 'skipped')
+    # unit-tests-rust may be 'skipped' when no Rust files changed; treat skipped as acceptable.
+    if: always() && needs.unit-tests-python.result == 'success' && (needs.unit-tests-rust.result == 'success' || needs.unit-tests-rust.result == 'skipped') && needs.unit-tests-frontend.result == 'success' && (needs.spec-validation.result == 'success' || needs.spec-validation.result == 'skipped')
     permissions:
       contents: read
       pull-requests: read
@@ -284,16 +325,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies
+      - name: Cache apt packages (Tauri system dependencies)
         if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            libwebkit2gtk-4.0-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            librsvg2-dev \
-            patchelf
+        uses: awalber/cache-apt-pkgs-action@e5fd44f63c79e98e7ddff46acd44e6975c843f7e # v1.0.5
+        with:
+          # patchelf is included here (not in unit-tests-rust) as it is only
+          # needed during the packaging/bundle step of a production build.
+          packages: libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev librsvg2-dev patchelf
+          version: 1  # increment to invalidate cache when package versions must change
 
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -483,3 +522,40 @@ jobs:
           prerelease: false
           make_latest: true
           files: release-files/*
+
+# ═══════════════════════════════════════════════════════════════════════════
+# OPTIONAL IMPROVEMENT STRATEGIES (not yet implemented)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 1. Custom Docker image with Tauri deps preinstalled
+#    Instead of caching apt packages, build a Docker image once with all
+#    Tauri dependencies pre-baked, publish it to GHCR, and use it as the
+#    container for the Rust job.  Eliminates apt entirely for subsequent runs.
+#
+#    unit-tests-rust:
+#      container: ghcr.io/${{ github.repository }}/tauri-builder:ubuntu-22.04
+#      ...
+#      # No apt-get step needed — all packages are in the image
+#
+#    Trade-off: requires maintaining the Docker image and a separate workflow
+#    to rebuild it when system dependencies change.
+#
+# 2. Migrate to Tauri v2 (webkit2gtk-4.1) to unpin ubuntu-22.04
+#    Tauri v2 targets webkit2gtk-4.1, which ships with Ubuntu 24.04 (ubuntu-latest).
+#    This would allow switching the Rust job from ubuntu-22.04 to ubuntu-latest,
+#    simplifying the runner configuration and eliminating the webkit4.0 constraint.
+#
+#    unit-tests-rust:
+#      runs-on: ubuntu-latest   # after Tauri v2 migration
+#      # apt package changes: libwebkit2gtk-4.1-dev instead of 4.0-dev
+#
+# 3. Convert the Rust job to a reusable workflow
+#    Extract the Rust unit-test job into .github/workflows/rust-tests.yml
+#    and call it with 'uses:' from this pipeline.  This allows other workflows
+#    (e.g., nightly builds, release candidates) to reuse the same job definition
+#    without duplication.
+#
+#    jobs:
+#      unit-tests-rust:
+#        uses: ./.github/workflows/rust-tests.yml
+#        secrets: inherit
