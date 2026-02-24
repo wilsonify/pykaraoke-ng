@@ -319,11 +319,11 @@ class CdgPlayer(PykPlayer):
     def do_pause(self):
         if self.sound_file_data:
             pygame.mixer.music.pause()
-            self.PauseStartTime = self.get_pos()
+            self.pause_start_time = self.get_pos()
 
     def do_unpause(self):
         if self.sound_file_data:
-            self.pauseOffsetTime = self.pauseOffsetTime + (self.get_pos() - self.PauseStartTime)
+            self.pauseOffsetTime = self.pauseOffsetTime + (self.get_pos() - self.pause_start_time)
             pygame.mixer.music.unpause()
 
     # you must call Play() to restart. Blocks until pygame is initialised

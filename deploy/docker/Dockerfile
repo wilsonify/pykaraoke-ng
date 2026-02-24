@@ -151,7 +151,7 @@ CMD ["bash"]
 # =============================================================================
 FROM debian:bookworm-slim AS tauri-runtime
 
-# Install runtime dependencies only
+# Install runtime dependencies only and create non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libayatana-appindicator3-1 \
@@ -165,10 +165,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwebkit2gtk-4.0-37 \
     python3 \
     python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create non-root user
-RUN useradd --create-home --shell /bin/bash pykaraoke
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --shell /bin/bash pykaraoke
 
 WORKDIR /app
 

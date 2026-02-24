@@ -192,7 +192,7 @@ class MidiFile:
         self.track_list = []  # List of TrackDesc track descriptors
 
         # Chosen lyric list from above.  It is converted by
-        # computeTiming() from a list of (clicks, text) into a list of
+        # compute_timing() from a list of (clicks, text) into a list of
         # (ms, text).
         self.lyrics = []
 
@@ -315,7 +315,7 @@ class Lyrics:
         # Returns true if there are any lyrics.
         return bool(self.list)
 
-    def recordText(self, click, text):
+    def record_text(self, click, text):
         # Records a MIDI 0x1 text event (a syllable).
 
         # Make sure there are no stray null characters in the string.
@@ -362,7 +362,7 @@ class Lyrics:
                 self.line += 1
                 self.list.append(LyricSyllable(click, line, self.line))
 
-    def recordLyric(self, click, text):
+    def record_lyric(self, click, text):
         # Records a MIDI 0x5 lyric event (a syllable).
 
         # Make sure there are no stray null characters in the string.
@@ -399,7 +399,7 @@ class Lyrics:
                 self.line += 1
                 self.list.append(LyricSyllable(click, line, self.line))
 
-    def computeTiming(self, midifile):
+    def compute_timing(self, midifile):
         # Walk through the lyrics and convert the click information to
         # elapsed time in milliseconds.
 
@@ -423,7 +423,7 @@ class Lyrics:
                 ts.advance_to_click(track_desc.last_note_click)
                 track_desc.last_note_ms = ts.ms
 
-    def analyzeSpaces(self):
+    def analyze_spaces(self):
         """Checks for a degenerate case: no (or very few) spaces
         between words.  Sometimes Karaoke writers omit the spaces
         between words, which makes the text very hard to read.  If we
@@ -484,7 +484,7 @@ class Lyrics:
                 else:
                     syllable.text += " "
 
-    def wordWrapLyrics(self, font):
+    def word_wrap_lyrics(self, font):
         # Walks through the lyrics and folds each line to the
         # indicated width.  Returns the new lyrics as a list of lists
         # of syllables; that is, each element in the returned list
@@ -612,8 +612,8 @@ def midi_parse_data(midi_data, error_notify_callback, encoding):
         error_notify_callback("No lyrics in the track")
         return None
 
-    midifile.lyrics.computeTiming(midifile)
-    midifile.lyrics.analyzeSpaces()
+    midifile.lyrics.compute_timing(midifile)
+    midifile.lyrics.analyze_spaces()
 
     # Calculate the song start/end from note events across all tracks.
     midifile.earliest_note_ms, midifile.last_note_ms = _compute_note_bounds(midifile)
@@ -778,7 +778,7 @@ def _meta_text_event(filehdl, track_desc, midifile):
         if midifile.text_encoding != "":
             text = text.decode(midifile.text_encoding, "replace")
         if _is_lyric_text(text):
-            track_desc.text_events.recordText(track_desc.total_clicks_from_start, text)
+            track_desc.text_events.record_text(track_desc.total_clicks_from_start, text)
         if debug:
             print("Text: %s" % (repr(text)))
     elif debug:
@@ -820,7 +820,7 @@ def _meta_lyric_event(filehdl, track_desc, midifile):
         lyric = lyric.decode(midifile.text_encoding, "replace")
     bytes_read += length
     if _is_lyric_text(lyric):
-        track_desc.lyric_events.recordLyric(track_desc.total_clicks_from_start, lyric)
+        track_desc.lyric_events.record_lyric(track_desc.total_clicks_from_start, lyric)
     if debug:
         print("Lyric: %s" % (repr(lyric)))
     return bytes_read
@@ -1019,7 +1019,7 @@ def _process_sysex_f0(filehdl):
     bytes_read += length
     if end != 0xF7:
         print("Invalid F0 Sysex end byte (0x%X)" % end)
-    return bytesRead
+    return bytes_read
 
 
 # Read a variable length quantity from the file's current read position.
@@ -1054,7 +1054,7 @@ class MidPlayer(PykPlayer):
         settings = self.song_db.settings
 
         self.supports_font_zoom = True
-        self.isValid = False
+        self.is_valid = False
 
         # Parse the MIDI file
         self.midifile = midi_parse_data(
@@ -1069,7 +1069,7 @@ class MidPlayer(PykPlayer):
             self.error_notify_callback(error_string)
             return
 
-        self.isValid = True
+        self.is_valid = True
 
         # Debug out the found lyrics
         if debug:
@@ -1089,8 +1089,8 @@ class MidPlayer(PykPlayer):
         # pretty close.
         self.internal_offset_time = -manager.get_audio_buffer_ms()
 
-        self.screenDirty = False
-        self.initFont()
+        self.screen_dirty = False
+        self.init_font()
 
         # Windows reports the song time correctly (including period up
         # to the first note), so no need for the earliest note hack
@@ -1105,25 +1105,25 @@ class MidPlayer(PykPlayer):
             self.internal_offset_time += self.midifile.earliest_note_ms
 
         # Now word-wrap the text to fit our window.
-        self.lyrics = self.midifile.lyrics.wordWrapLyrics(self.font)
+        self.lyrics = self.midifile.lyrics.word_wrap_lyrics(self.font)
 
         # By default, we will use the get_pos() functionality returned
         # by pygame to get the current time through the song, to
         # synchronize lyric display with the music.
-        self.useMidiTimer = True
+        self.use_midi_timer = True
 
         if env == ENV_WINDOWS:
             # Unless we're running on Windows (i.e., not timidity).
             # For some reason, hardware MIDI playback can report an
             # unreliable time.  To avoid that problem, we'll always
             # use the CPU timer instead of the MIDI timer.
-            self.useMidiTimer = False
+            self.use_midi_timer = False
 
         # Load the MIDI player
         if manager.options.nomusic:
             # If we're not playing music, use the CPU timer instead of
             # the MIDI timer.
-            self.useMidiTimer = False
+            self.use_midi_timer = False
 
         else:
             # Load the sound normally for playback.
@@ -1137,10 +1137,10 @@ class MidPlayer(PykPlayer):
 
         # Reset all the state (current lyric index etc) and
         # paint the first numRows lines.
-        self.resetPlayingState()
+        self.reset_playing_state()
 
     def get_pos(self):
-        if self.useMidiTimer:
+        if self.use_midi_timer:
             return pygame.mixer.music.get_pos()
         else:
             return PykPlayer.get_pos(self)
@@ -1160,50 +1160,50 @@ class MidPlayer(PykPlayer):
 
         return parser
 
-    def initFont(self):
+    def init_font(self):
         font_size = int(FONT_SIZE * manager.get_font_scale() * manager.displaySize[1] / 480.0)
         self.font = self.find_pygame_font(self.song_db.settings.kar_font, font_size)
-        self.lineSize = max(self.font.get_height(), self.font.get_linesize())
-        self.numRows = int((manager.displaySize[1] - Y_BORDER * 2) / self.lineSize)
+        self.line_size = max(self.font.get_height(), self.font.get_linesize())
+        self.num_rows = int((manager.displaySize[1] - Y_BORDER * 2) / self.line_size)
 
         # Put the current singing row at the specified fraction of the
         # screen.
-        self.viewRow = int(self.numRows * VIEW_PERCENT / 100)
+        self.view_row = int(self.num_rows * VIEW_PERCENT / 100)
 
-    def resetPlayingState(self):
+    def reset_playing_state(self):
         # Set the state variables
 
         # The current point the user was hearing within the song, as
         # of the last screen update.
-        self.currentMs = 0
+        self.current_ms = 0
 
         # The line currently on display at the top of the screen.
-        self.topLine = 0
+        self.top_line = 0
 
         # The line on which the player is currently singing (that is,
         # the lowest line onscreen containing white syllables).
-        self.currentLine = 0
+        self.current_line = 0
 
         # The time at which this current syllable was sung.
-        self.currentColourMs = 0
+        self.current_colour_ms = 0
 
         # The next line with syllables that will need to be painted
         # white.
-        self.nextLine = 0
+        self.next_line = 0
 
         # The next syllable within the line that needs to be painted.
-        self.nextSyllable = 0
+        self.next_syllable = 0
 
         # The time at which the next syllable is to be painted.
-        self.nextColourMs = 0
+        self.next_colour_ms = 0
 
         # The time at which something is next scheduled to change
-        # onscreen (usually the same as self.nextColourMs).
-        self.nextChangeMs = 0
+        # onscreen (usually the same as self.next_colour_ms).
+        self.next_change_ms = 0
 
-        self.repaintScreen()
+        self.repaint_screen()
 
-    def repaintScreen(self):
+    def repaint_screen(self):
         # Redraws the contents of the currently onscreen text.
 
         # Clear the screen
@@ -1211,21 +1211,21 @@ class MidPlayer(PykPlayer):
         manager.surface.fill(settings.kar_background_colour)
 
         # Paint the first numRows lines
-        for i in range(self.numRows):
-            l = self.topLine + i
+        for i in range(self.num_rows):
+            l = self.top_line + i
             x = X_BORDER
             if l < len(self.lyrics):
                 for syllable in self.lyrics[l]:
                     syllable.left = x
-                    self.drawSyllable(syllable, i, None)
+                    self.draw_syllable(syllable, i, None)
                     x = syllable.right
 
         manager.flip()
-        self.screenDirty = False
+        self.screen_dirty = False
 
-    def drawSyllable(self, syllable, row, x):
+    def draw_syllable(self, syllable, row, x):
         """Draws a new syllable on the screen in the appropriate
-        color, either red or white, according to self.currentMs.  The
+        color, either red or white, according to self.current_ms.  The
         syllable is draw on the screen at the specified row, numbering
         0 from the top of the screen.  The value x indicates the x
         position of the end of the previous syllable, which is used to
@@ -1238,12 +1238,12 @@ class MidPlayer(PykPlayer):
             if syllable.left is None:
                 return
 
-        y = Y_BORDER + row * self.lineSize
+        y = Y_BORDER + row * self.line_size
 
         settings = self.song_db.settings
 
         if syllable.type == TEXT_LYRIC:
-            if self.currentMs < syllable.ms:
+            if self.current_ms < syllable.ms:
                 color = settings.kar_ready_colour
             else:
                 color = settings.kar_sweep_colour
@@ -1261,7 +1261,7 @@ class MidPlayer(PykPlayer):
 
         manager.surface.blit(text, (syllable.left, y, width, height))
 
-    def __hasLyrics(self):
+    def __has_lyrics(self):
         """Returns true if the midi file contains any lyrics at all,
         false if it doesn't (or contains only comments)."""
 
@@ -1274,7 +1274,7 @@ class MidPlayer(PykPlayer):
         return False
 
     def do_validate(self):
-        if not self.__hasLyrics():
+        if not self.__has_lyrics():
             return False
 
         return True
@@ -1299,7 +1299,7 @@ class MidPlayer(PykPlayer):
 
     def do_rewind(self):
         # Reset all the state (current lyric index etc)
-        self.resetPlayingState()
+        self.reset_playing_state()
         # Stop the audio
         if not manager.options.nomusic:
             pygame.mixer.music.rewind()
@@ -1319,15 +1319,15 @@ class MidPlayer(PykPlayer):
     def do_stuff(self):
         PykPlayer.do_stuff(self)
 
-        if self.State == STATE_PLAYING or self.State == STATE_CAPTURING:
-            self.currentMs = int(
+        if self.state == STATE_PLAYING or self.state == STATE_CAPTURING:
+            self.current_ms = int(
                 self.get_pos() + self.internal_offset_time + manager.settings.sync_delay_ms
             )
-            self.colourUpdateMs()
+            self.colour_update_ms()
 
             # If we're not using the automatic midi timer, we have to
             # know to when stop the song at the end ourselves.
-            if self.currentMs > self.midifile.last_note_ms:
+            if self.current_ms > self.midifile.last_note_ms:
                 self.close()
 
     def handle_event(self, event):
@@ -1350,80 +1350,80 @@ class MidPlayer(PykPlayer):
         # resized for any reason, either due to an application resize
         # request being processed, or due to the user dragging the
         # window handles.
-        self.initFont()
-        self.lyrics = self.midifile.lyrics.wordWrapLyrics(self.font)
+        self.init_font()
+        self.lyrics = self.midifile.lyrics.word_wrap_lyrics(self.font)
 
-        self.topLine = 0
-        self.currentLine = 0
-        self.currentColourMs = 0
-        self.nextLine = 0
-        self.nextSyllable = 0
-        self.nextColourMs = 0
-        self.nextChangeMs = 0
+        self.top_line = 0
+        self.current_line = 0
+        self.current_colour_ms = 0
+        self.next_line = 0
+        self.next_syllable = 0
+        self.next_colour_ms = 0
+        self.next_change_ms = 0
 
-        self.screenDirty = True
-        self.colourUpdateMs()
+        self.screen_dirty = True
+        self.colour_update_ms()
 
-    def colourUpdateMs(self):
+    def colour_update_ms(self):
         # If there's nothing yet to happen, just return.
-        if self.nextChangeMs is None or self.currentMs < self.nextChangeMs:
+        if self.next_change_ms is None or self.current_ms < self.next_change_ms:
             return False
 
-        syllables = self.getNewSyllables()
-        self.nextChangeMs = self.nextColourMs
+        syllables = self.get_new_syllables()
+        self.next_change_ms = self.next_colour_ms
 
         # Is it time to scroll?
-        syllables = self.considerScroll(syllables)
+        syllables = self.consider_scroll(syllables)
 
-        if self.screenDirty:
+        if self.screen_dirty:
             # If the whole screen needs to be redrawn anyway, just do
             # that.
-            self.repaintScreen()
+            self.repaint_screen()
 
         else:
             # Otherwise, draw only the syllables that have changed.
             x = None
             for syllable, line in syllables:
-                self.drawSyllable(syllable, line - self.topLine, x)
+                self.draw_syllable(syllable, line - self.top_line, x)
                 x = syllable.right
 
             manager.flip()
 
         return True
 
-    def getNewSyllables(self):
+    def get_new_syllables(self):
         """Scans the list of syllables and returns a list of (syllable,
         line) tuples that represent the syllables that need to be
         updated (changed color) onscreen.
 
-        Also updates self.currentLine, self.currentColourMs, self.nextLine,
-        self.nextSyllable, and self.nextColourMs."""
+        Also updates self.current_line, self.current_colour_ms, self.next_line,
+        self.next_syllable, and self.next_colour_ms."""
 
         syllables = []
 
-        while self.nextLine < len(self.lyrics):
-            line = self.lyrics[self.nextLine]
-            while self.nextSyllable < len(line):
-                syllable = line[self.nextSyllable]
-                if self.currentMs < syllable.ms:
+        while self.next_line < len(self.lyrics):
+            line = self.lyrics[self.next_line]
+            while self.next_syllable < len(line):
+                syllable = line[self.next_syllable]
+                if self.current_ms < syllable.ms:
                     # This is the first syllable we should *not*
                     # display.  Stop here.
-                    self.nextColourMs = syllable.ms
+                    self.next_colour_ms = syllable.ms
                     return syllables
 
-                syllables.append((syllable, self.nextLine))
-                self.currentLine = self.nextLine
-                self.currentColourMs = syllable.ms
-                self.nextSyllable += 1
+                syllables.append((syllable, self.next_line))
+                self.current_line = self.next_line
+                self.current_colour_ms = syllable.ms
+                self.next_syllable += 1
 
-            self.nextLine += 1
-            self.nextSyllable = 0
+            self.next_line += 1
+            self.next_syllable = 0
 
         # There are no more syllables to be displayed.
-        self.nextColourMs = None
+        self.next_colour_ms = None
         return syllables
 
-    def considerScroll(self, syllables):
+    def consider_scroll(self, syllables):
         """Determines whether it is time to scroll the screen.  If it
         is, performs the scroll (without flipping the display yet),
         and returns the new list of syllables that need to be painted.
@@ -1432,53 +1432,53 @@ class MidPlayer(PykPlayer):
 
         # If the player's still singing the top line, we can't scroll
         # it off yet.
-        if self.currentLine <= self.topLine:
+        if self.current_line <= self.top_line:
             return syllables
 
         # If the rest of the lines fit onscreen, don't bother scrolling.
-        if self.topLine + self.numRows >= len(self.lyrics):
+        if self.top_line + self.num_rows >= len(self.lyrics):
             return syllables
 
         # But don't scroll unless we have less than
         # PARAGRAPH_LEAD_TIME milliseconds to go.
         timeGap = 0
-        if self.nextColourMs is not None:
-            timeGap = self.nextColourMs - self.currentColourMs
-            scrollTime = self.nextColourMs - PARAGRAPH_LEAD_TIME
-            if self.currentMs < scrollTime:
-                self.nextChangeMs = scrollTime
+        if self.next_colour_ms is not None:
+            timeGap = self.next_colour_ms - self.current_colour_ms
+            scrollTime = self.next_colour_ms - PARAGRAPH_LEAD_TIME
+            if self.current_ms < scrollTime:
+                self.next_change_ms = scrollTime
                 return syllables
 
-        # Put the current line on self.viewRow by choosing
-        # self.topLine appropriately.  If there is a long gap between
+        # Put the current line on self.view_row by choosing
+        # self.top_line appropriately.  If there is a long gap between
         # lyrics, go straight to the next line.
-        currentLine = self.currentLine
+        currentLine = self.current_line
         if timeGap > PARAGRAPH_LEAD_TIME:
-            currentLine = self.nextLine
-        topLine = max(min(currentLine - self.viewRow, len(self.lyrics) - self.numRows), 0)
-        if topLine == self.topLine:
+            currentLine = self.next_line
+        topLine = max(min(currentLine - self.view_row, len(self.lyrics) - self.num_rows), 0)
+        if topLine == self.top_line:
             # No need to scroll.
             return syllables
 
         # OK, we have to scroll.  How many lines?
-        linesScrolled = topLine - self.topLine
-        self.topLine = topLine
-        if linesScrolled < 0 or linesScrolled >= self.numRows:
+        linesScrolled = topLine - self.top_line
+        self.top_line = topLine
+        if linesScrolled < 0 or linesScrolled >= self.num_rows:
             # Never mind; we'll need to repaint the whole screen anyway.
-            self.screenDirty = True
+            self.screen_dirty = True
             return []
 
-        linesRemaining = self.numRows - linesScrolled
+        linesRemaining = self.num_rows - linesScrolled
 
         # Blit the lower part of the screen to the top.
-        y = Y_BORDER + linesScrolled * self.lineSize
-        h = linesRemaining * self.lineSize
+        y = Y_BORDER + linesScrolled * self.line_size
+        h = linesRemaining * self.line_size
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
         manager.surface.blit(manager.surface, (X_BORDER, Y_BORDER), rect)
 
         # And now fill the lower part of the screen with black.
-        y = Y_BORDER + linesRemaining * self.lineSize
-        h = linesScrolled * self.lineSize
+        y = Y_BORDER + linesRemaining * self.line_size
+        h = linesScrolled * self.line_size
         rect = pygame.Rect(X_BORDER, y, manager.displaySize[0] - X_BORDER * 2, h)
         settings = self.song_db.settings
         manager.surface.fill(settings.kar_background_colour, rect)
@@ -1486,14 +1486,14 @@ class MidPlayer(PykPlayer):
         # We can remove any syllables from the list that might have
         # scrolled off the screen now.
         i = 0
-        while i < len(syllables) and syllables[i][1] < self.topLine:
+        while i < len(syllables) and syllables[i][1] < self.top_line:
             i += 1
         if i:
             syllables = syllables[i:]
 
         # And furthermore, we need to draw all the syllables that are
         # found in the newly-appearing lines.
-        for i in range(self.topLine + self.numRows - linesScrolled, self.topLine + self.numRows):
+        for i in range(self.top_line + self.num_rows - linesScrolled, self.top_line + self.num_rows):
             line = self.lyrics[i]
             for syllable in line:
                 syllables.append((syllable, i))
