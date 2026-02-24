@@ -25,6 +25,13 @@ if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
     exit 0
 fi
 
+# Automated tooling branches (copilot, dependabot, renovate, etc.) are exempt
+# from spec validation because they are generated without a Spec Kit workflow.
+if [[ "$BRANCH" =~ ^(copilot|dependabot|renovate)/ ]]; then
+    echo "✅ Branch '$BRANCH' is an automated tooling branch — spec validation not required."
+    exit 0
+fi
+
 if [[ ! "$BRANCH" =~ ^[0-9]{3}-.+ ]]; then
     echo "❌ FAIL: Branch name '$BRANCH' does not match required format: NNN-feature-name"
     echo "   Example: 001-filename-parser-edge-cases"

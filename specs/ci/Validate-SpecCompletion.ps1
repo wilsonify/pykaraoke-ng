@@ -33,6 +33,13 @@ if ($BranchName -in @("main", "master")) {
     exit 0
 }
 
+# Automated tooling branches (copilot, dependabot, renovate, etc.) are exempt
+# from spec validation because they are generated without a Spec Kit workflow.
+if ($BranchName -match '^(copilot|dependabot|renovate)/') {
+    Write-Host "✅ Branch '$BranchName' is an automated tooling branch — spec validation not required." -ForegroundColor Green
+    exit 0
+}
+
 # ─── Step 2: Validate branch naming convention ──────────────────────────
 
 if ($BranchName -notmatch '^\d{3}-.+') {

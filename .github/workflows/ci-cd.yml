@@ -128,18 +128,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Cache the four heavy Tauri system packages across runs.
+      # Cache downloaded .deb files across runs using actions/cache.
+      # apt-get install uses the cached archives on cache hit, skipping the download.
       # Trade-off: cached tarballs add ~5 MB to cache storage but save ~31s of
-      # apt-get download + install on every Rust job run.
-      # The 'version' input acts as a manual cache-buster (increment to force refresh).
-      #
-      # Alternative: use a custom Docker image with these packages pre-installed
-      # to avoid apt caching entirely — see comment block at the bottom of this file.
-      - name: Cache apt packages (Tauri system dependencies)
-        uses: awalber/cache-apt-pkgs-action@e5fd44f63c79e98e7ddff46acd44e6975c843f7e # v1.0.5
+      # network downloads on every Rust job run.
+      # Increment the cache key suffix ('tauri-deps-v1') when the package list changes.
+      - name: Cache apt package archives (Tauri system dependencies)
+        uses: actions/cache@v4
         with:
-          packages: libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev librsvg2-dev
-          version: 1  # increment to invalidate cache when package versions must change
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-tauri-deps-v1
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libwebkit2gtk-4.0-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            librsvg2-dev
 
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -325,14 +332,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache apt packages (Tauri system dependencies)
+      # Cache downloaded .deb files across runs using actions/cache.
+      # apt-get install uses the cached archives on cache hit, skipping the download.
+      # patchelf is included here (not in unit-tests-rust) as it is only needed
+      # during the packaging/bundle step of a production build.
+      # Increment the cache key suffix ('tauri-deps-v1') when the package list changes.
+      - name: Cache apt package archives (Tauri system dependencies)
         if: matrix.platform == 'linux'
-        uses: awalber/cache-apt-pkgs-action@e5fd44f63c79e98e7ddff46acd44e6975c843f7e # v1.0.5
+        uses: actions/cache@v4
         with:
-          # patchelf is included here (not in unit-tests-rust) as it is only
-          # needed during the packaging/bundle step of a production build.
-          packages: libwebkit2gtk-4.0-dev libssl-dev libgtk-3-dev librsvg2-dev patchelf
-          version: 1  # increment to invalidate cache when package versions must change
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-tauri-deps-v1
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libwebkit2gtk-4.0-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            patchelf
 
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
