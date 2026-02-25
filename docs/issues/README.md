@@ -5,6 +5,7 @@ This directory contains documentation of issues from the original PyKaraoke proj
 ## Files
 
 - **[legacy-issues.md](legacy-issues.md)** - Complete documentation of all 18 open issues from the original project
+- **[webkit-dmabuf-empty-window.md](webkit-dmabuf-empty-window.md)** - Empty window on launch due to WebKitGTK DMA-BUF failure (fixed)
 
 ## Summary
 

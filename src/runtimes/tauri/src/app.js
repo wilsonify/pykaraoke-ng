@@ -1,8 +1,17 @@
 // PyKaraoke NG - Frontend Application
 // Handles UI interactions and communicates with Tauri backend
 
-const { invoke } = window.__TAURI__.tauri;
-const { listen } = window.__TAURI__.event;
+let invoke, listen;
+
+try {
+    invoke = window.__TAURI__.tauri.invoke;
+    listen = window.__TAURI__.event.listen;
+} catch (e) {
+    console.warn('Tauri API not available:', e);
+    // Provide no-op stubs so the UI still renders
+    invoke = async () => { throw new Error('Tauri API not available'); };
+    listen = async () => {};
+}
 
 class PyKaraokeApp {
     constructor() {

@@ -6,6 +6,7 @@ use std::process::{Child, Command, Stdio};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
+use std::path::PathBuf;
 
 /// Backend state shared across the application
 struct BackendState {
@@ -40,20 +41,34 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         return Ok("Backend already running".to_string());
     }
     
-    // Get the path to the Python backend script
-    let resource_path = app_handle.path_resolver()
+    // Get the path to the Python backend script.
+    // Try multiple candidate locations so it works in both development
+    // (source tree) and production (.deb install with bundled resources).
+    let resource_dir = app_handle.path_resolver()
         .resource_dir()
         .unwrap_or_else(|| std::env::current_dir().unwrap());
-    
-    // Navigate to the src/pykaraoke/core directory from project root
-    let backend_script = resource_path
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("src")
-        .join("pykaraoke")
-        .join("core")
-        .join("backend.py");
+
+    let candidates: Vec<PathBuf> = vec![
+        // 1. Bundled resource inside installed app (tauri.conf.json "resources")
+        resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
+        // 2. Flat bundled resource
+        resource_dir.join("backend.py"),
+        // 3. Development: project root -> src/pykaraoke/core/backend.py
+        resource_dir.join("..").join("..").join("..").join("src")
+            .join("pykaraoke").join("core").join("backend.py"),
+        // 4. Development: CWD-based fallback
+        std::env::current_dir().unwrap_or_default()
+            .join("src").join("pykaraoke").join("core").join("backend.py"),
+    ];
+
+    let backend_script = candidates.iter()
+        .find(|p| p.exists())
+        .cloned()
+        .unwrap_or_else(|| {
+            // Last resort: use the bundled resource path (will produce a clear
+            // "file not found" error from Command::new below)
+            candidates[0].clone()
+        });
     
     // Start the Python backend process
     let mut child = Command::new("python3")
@@ -141,6 +156,18 @@ fn stop_backend(state: State<SafeBackendState>) -> Result<String, String> {
 }
 
 fn main() {
+    // Work around blank/empty WebKitGTK windows on Linux systems where
+    // GPU buffer allocation (GBM/DRM) is denied.  This tells WebKit to
+    // fall back to a shared-memory renderer instead of DMA-BUF, which
+    // avoids the "DRM_IOCTL_MODE_CREATE_DUMB failed: Permission denied"
+    // and "Failed to create GBM buffer" errors that cause a blank window.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(BackendState {
             process: None,
@@ -357,5 +384,90 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(raw).unwrap();
         assert_eq!(parsed["type"], "response");
         assert_eq!(parsed["response"]["status"], "ok");
+    }
+
+    // ── Regression: empty-window workaround ──────────────────────
+
+    #[test]
+    fn dmabuf_env_var_is_set_on_linux() {
+        // Regression test for https://github.com/wilsonify/pykaraoke-ng/issues/...
+        // WebKitGTK renders a blank window when GBM buffer creation fails.
+        // The workaround sets WEBKIT_DISABLE_DMABUF_RENDERER=1.
+        //
+        // On non-Linux this test just verifies the source contains the
+        // workaround code (the #[cfg] gate means the code won't execute).
+        let source = include_str!("main.rs");
+        assert!(
+            source.contains("WEBKIT_DISABLE_DMABUF_RENDERER"),
+            "main.rs must set WEBKIT_DISABLE_DMABUF_RENDERER to prevent \
+             blank WebKitGTK windows on Linux"
+        );
+    }
+
+    #[test]
+    fn dmabuf_workaround_is_linux_gated() {
+        let source = include_str!("main.rs");
+        let dmabuf_pos = source.find("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap();
+        let preceding = &source[dmabuf_pos.saturating_sub(300)..dmabuf_pos];
+        assert!(
+            preceding.contains(r#"target_os = "linux""#),
+            "WEBKIT_DISABLE_DMABUF_RENDERER should be behind #[cfg(target_os = \"linux\")]"
+        );
+    }
+
+    #[test]
+    fn dmabuf_workaround_checks_existing_value() {
+        let source = include_str!("main.rs");
+        // Between the cfg gate and the set_var, we should see is_err() check
+        let dmabuf_pos = source.find("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap();
+        let region = &source[dmabuf_pos.saturating_sub(100)..dmabuf_pos + 100];
+        assert!(
+            region.contains("is_err()"),
+            "Should check is_err() before setting the env var, \
+             so user-provided values are respected"
+        );
+    }
+
+    #[test]
+    fn dmabuf_set_before_tauri_builder() {
+        let source = include_str!("main.rs");
+        let dmabuf_pos = source.find("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap();
+        let builder_pos = source.find("tauri::Builder::default()").unwrap();
+        assert!(
+            dmabuf_pos < builder_pos,
+            "WEBKIT_DISABLE_DMABUF_RENDERER must be set before tauri::Builder"
+        );
+    }
+
+    // ── Regression: backend path resolution ──────────────────────
+
+    #[test]
+    fn backend_path_uses_multiple_candidates() {
+        let source = include_str!("main.rs");
+        let count = source.matches(r#".join("backend.py")"#).count();
+        assert!(
+            count >= 2,
+            "start_backend should try at least 2 candidate paths for \
+             backend.py (found {count})"
+        );
+    }
+
+    #[test]
+    fn backend_path_checks_exists() {
+        let source = include_str!("main.rs");
+        // The candidates should be filtered with .exists()
+        assert!(
+            source.contains(".exists()"),
+            "start_backend should verify candidate paths with .exists()"
+        );
+    }
+
+    #[test]
+    fn backend_path_uses_resource_dir() {
+        let source = include_str!("main.rs");
+        assert!(
+            source.contains("resource_dir"),
+            "start_backend should use resource_dir() for bundled installs"
+        );
     }
 }

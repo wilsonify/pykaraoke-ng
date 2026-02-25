@@ -27,6 +27,23 @@
         "icons/128x128.png",
         "icons/128x128@2x.png",
         "icons/icon.ico"
+      ],
+      "resources": [
+        "../../../../src/pykaraoke/core/backend.py",
+        "../../../../src/pykaraoke/core/__init__.py",
+        "../../../../src/pykaraoke/core/database.py",
+        "../../../../src/pykaraoke/core/manager.py",
+        "../../../../src/pykaraoke/core/player.py",
+        "../../../../src/pykaraoke/config/__init__.py",
+        "../../../../src/pykaraoke/config/constants.py",
+        "../../../../src/pykaraoke/config/environment.py",
+        "../../../../src/pykaraoke/config/version.py",
+        "../../../../src/pykaraoke/__init__.py",
+        "../../../../src/pykaraoke/players/__init__.py",
+        "../../../../src/pykaraoke/players/cdg.py",
+        "../../../../src/pykaraoke/players/cdg_aux.py",
+        "../../../../src/pykaraoke/players/kar.py",
+        "../../../../src/pykaraoke/players/mpg.py"
       ]
     },
     "security": {

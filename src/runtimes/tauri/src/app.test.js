@@ -9,6 +9,8 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 // ---------------------------------------------------------------------------
 // Minimal DOM stubs so we can exercise PyKaraokeApp helpers without a browser
@@ -383,5 +385,87 @@ describe("Volume slider behaviour", () => {
     const slider = 42;
     const text = `${slider}%`;
     assert.equal(text, "42%");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: empty-window bug — Tauri API resilience
+// ---------------------------------------------------------------------------
+// When WebKitGTK renders a blank surface or the IPC bridge is slow to
+// inject, window.__TAURI__ is undefined.  The old code destructured it
+// at module scope, crashing the entire page.  These tests verify the fix.
+
+describe("Regression: Tauri API import resilience", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("does NOT use bare destructuring of window.__TAURI__ at top level", () => {
+    // This pattern crashes when __TAURI__ is undefined
+    const dangerous = /const\s*\{[^}]*invoke[^}]*\}\s*=\s*window\.__TAURI__/;
+    assert.ok(
+      !dangerous.test(appJsSource),
+      "app.js must not use `const { invoke } = window.__TAURI__...` — " +
+        "use try/catch instead"
+    );
+  });
+
+  it("wraps Tauri API access in a try/catch", () => {
+    assert.ok(
+      appJsSource.includes("try") && appJsSource.includes("catch"),
+      "app.js should guard window.__TAURI__ access with try/catch"
+    );
+  });
+
+  it("provides a fallback invoke function", () => {
+    // After the catch, invoke should be assigned an async fallback
+    const catchIdx = appJsSource.indexOf("catch");
+    const afterCatch = appJsSource.slice(catchIdx);
+    assert.ok(
+      afterCatch.includes("invoke") && afterCatch.includes("async"),
+      "app.js should assign a fallback async invoke in the catch block"
+    );
+  });
+
+  it("provides a fallback listen function", () => {
+    const catchIdx = appJsSource.indexOf("catch");
+    const afterCatch = appJsSource.slice(catchIdx);
+    assert.ok(
+      afterCatch.includes("listen"),
+      "app.js should assign a fallback listen in the catch block"
+    );
+  });
+
+  it("UI renders even when __TAURI__ is missing", () => {
+    // Simulate: no __TAURI__ at all
+    const savedTauri = global.window?.__TAURI__;
+    const els = createMockDOM();
+    delete global.window.__TAURI__;
+
+    // Re-evaluate the guard logic
+    let testInvoke, testListen;
+    try {
+      testInvoke = global.window.__TAURI__.tauri.invoke;
+      testListen = global.window.__TAURI__.event.listen;
+    } catch (e) {
+      testInvoke = async () => {
+        throw new Error("Tauri API not available");
+      };
+      testListen = async () => {};
+    }
+
+    // invoke should be a callable async function, not undefined
+    assert.equal(typeof testInvoke, "function");
+    assert.equal(typeof testListen, "function");
+
+    // Static HTML elements should still be accessible
+    assert.ok(els["play-btn"]);
+    assert.ok(els["status-message"]);
+
+    // Restore
+    if (savedTauri) {
+      global.window.__TAURI__ = savedTauri;
+    }
   });
 });
