@@ -523,7 +523,7 @@ class Lyrics:
                     break
                 output_line, current_line, current_text = result
                 lines.append(output_line)
-                x, height = font.size(current_text)
+                x, _ = font.size(current_text)
 
         lines.append(current_line)
 
