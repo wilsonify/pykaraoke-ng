@@ -353,6 +353,7 @@ describe("HTML DOM contract", () => {
       "search-input",
       "add-folder-btn",
       "scan-library-btn",
+      "settings-btn",
       "clear-playlist-btn",
       "current-song-title",
       "current-song-artist",
@@ -467,5 +468,87 @@ describe("Regression: Tauri API import resilience", () => {
     if (savedTauri) {
       global.window.__TAURI__ = savedTauri;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: buttons that did nothing in the packaged Debian build
+// ---------------------------------------------------------------------------
+// Three buttons — Settings, Add Folder, Scan Library — were non-functional:
+//  1. settings-btn had no click event listener registered.
+//  2. handleAddFolder used alert() which is suppressed in WebKitGTK (Tauri/Linux).
+//  3. dialog allowlist was missing, so the native folder picker could not open.
+
+describe("Regression: settings button wired up", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("app.js registers a click listener for settings-btn", () => {
+    assert.ok(
+      appJsSource.includes("settings-btn"),
+      "app.js must reference 'settings-btn' — the Settings button had no " +
+        "event listener and did nothing when clicked"
+    );
+  });
+
+  it("app.js calls getElementById for settings-btn", () => {
+    assert.ok(
+      appJsSource.includes("getElementById('settings-btn')") ||
+        appJsSource.includes('getElementById("settings-btn")'),
+      "app.js must attach a listener via getElementById('settings-btn')"
+    );
+  });
+
+  it("app.js defines a handleSettings method", () => {
+    assert.ok(
+      appJsSource.includes("handleSettings"),
+      "app.js must define handleSettings() to handle the Settings button click"
+    );
+  });
+});
+
+describe("Regression: add-folder button uses Tauri dialog API", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("handleAddFolder does NOT use bare alert()", () => {
+    // alert() is suppressed in WebKitGTK on Linux, making the button appear
+    // to do nothing.
+    const hasAlert = /\balert\s*\(/.test(appJsSource);
+    assert.ok(
+      !hasAlert,
+      "app.js must not use alert() — it is suppressed in WebKitGTK (Tauri on " +
+        "Linux) so the Add Folder button appeared to do nothing"
+    );
+  });
+
+  it("handleAddFolder references the Tauri dialog API", () => {
+    assert.ok(
+      appJsSource.includes("dialog") && appJsSource.includes("directory"),
+      "handleAddFolder should open a native folder picker via " +
+        "window.__TAURI__.dialog.open({ directory: true, ... })"
+    );
+  });
+});
+
+describe("Regression: tauri.conf.json dialog allowlist", () => {
+  const confPath = path.join(
+    __dirname,
+    "..",
+    "src-tauri",
+    "tauri.conf.json"
+  );
+  const conf = JSON.parse(fs.readFileSync(confPath, "utf-8"));
+
+  it("dialog.open is enabled in the allowlist", () => {
+    assert.ok(
+      conf.tauri?.allowlist?.dialog?.open === true,
+      "tauri.conf.json must enable allowlist.dialog.open so the native folder " +
+        "picker can be opened from handleAddFolder"
+    );
   });
 });

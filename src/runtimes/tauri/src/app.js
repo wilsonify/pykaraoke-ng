@@ -62,6 +62,9 @@ class PyKaraokeApp {
         document.getElementById('add-folder-btn').addEventListener('click', () => this.handleAddFolder());
         document.getElementById('scan-library-btn').addEventListener('click', () => this.handleScanLibrary());
         
+        // Settings
+        document.getElementById('settings-btn').addEventListener('click', () => this.handleSettings());
+        
         // Playlist
         document.getElementById('clear-playlist-btn').addEventListener('click', () => this.handleClearPlaylist());
     }
@@ -275,14 +278,37 @@ class PyKaraokeApp {
     }
     
     async handleAddFolder() {
-        // In a real implementation, this would open a folder picker
-        // For now, we'll just show a message
-        alert('Folder picker not implemented yet. This would open a native folder selection dialog.');
+        try {
+            const folder = await window.__TAURI__.dialog.open({
+                directory: true,
+                multiple: false,
+                title: 'Select Karaoke Folder'
+            });
+            if (folder) {
+                this.updateStatus(`Adding folder: ${folder}`);
+                await this.sendCommand('add_folder', { folder });
+                this.updateStatus(`Folder added: ${folder}`);
+            }
+        } catch (error) {
+            this.showError(`Failed to select folder: ${error}`);
+        }
     }
     
     async handleScanLibrary() {
         this.updateStatus('Scanning library...');
         await this.sendCommand('scan_library');
+    }
+    
+    async handleSettings() {
+        try {
+            const response = await this.sendCommand('get_settings');
+            if (response.status === 'ok' && response.data) {
+                const s = response.data;
+                this.updateStatus(`Settings — Fullscreen: ${s.fullscreen}, Size: ${JSON.stringify(s.player_size)}, Zoom: ${s.zoom_mode}`);
+            }
+        } catch (error) {
+            this.showError(`Settings unavailable: ${error}`);
+        }
     }
     
     async handleAddToPlaylist(song) {

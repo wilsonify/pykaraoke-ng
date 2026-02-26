@@ -28,6 +28,7 @@ const REQUIRED_IDS = [
   "search-input",
   "add-folder-btn",
   "scan-library-btn",
+  "settings-btn",
   "clear-playlist-btn",
   "current-song-title",
   "current-song-artist",
