@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "bash -c 'rm -rf backend && mkdir -p backend/pykaraoke/core backend/pykaraoke/config backend/pykaraoke/players && cp ../../../../src/pykaraoke/__init__.py backend/pykaraoke/ && cp ../../../../src/pykaraoke/core/*.py backend/pykaraoke/core/ && cp ../../../../src/pykaraoke/config/*.py backend/pykaraoke/config/ && cp ../../../../src/pykaraoke/players/*.py backend/pykaraoke/players/'",
     "devPath": "../src",
     "distDir": "../src",
     "withGlobalTauri": true
@@ -13,6 +13,10 @@
   "tauri": {
     "allowlist": {
       "all": false,
+      "dialog": {
+        "all": false,
+        "open": true
+      },
       "shell": {
         "all": false,
         "open": true
@@ -29,21 +33,7 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "../../../../src/pykaraoke/core/backend.py",
-        "../../../../src/pykaraoke/core/__init__.py",
-        "../../../../src/pykaraoke/core/database.py",
-        "../../../../src/pykaraoke/core/manager.py",
-        "../../../../src/pykaraoke/core/player.py",
-        "../../../../src/pykaraoke/config/__init__.py",
-        "../../../../src/pykaraoke/config/constants.py",
-        "../../../../src/pykaraoke/config/environment.py",
-        "../../../../src/pykaraoke/config/version.py",
-        "../../../../src/pykaraoke/__init__.py",
-        "../../../../src/pykaraoke/players/__init__.py",
-        "../../../../src/pykaraoke/players/cdg.py",
-        "../../../../src/pykaraoke/players/cdg_aux.py",
-        "../../../../src/pykaraoke/players/kar.py",
-        "../../../../src/pykaraoke/players/mpg.py"
+        "backend/**"
       ]
     },
     "security": {

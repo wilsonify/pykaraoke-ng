@@ -52,6 +52,12 @@ function createMockDOM() {
     "scan-library-btn",
     "clear-playlist-btn",
     "settings-btn",
+    "settings-modal",
+    "settings-close-btn",
+    "settings-cancel-btn",
+    "settings-save-btn",
+    "setting-fullscreen",
+    "setting-zoom",
     "current-song-title",
     "current-song-artist",
     "progress-fill",
@@ -76,6 +82,9 @@ function createMockDOM() {
       },
       event: {
         listen: async () => {},
+      },
+      dialog: {
+        open: async () => null,
       },
     },
   };
@@ -354,6 +363,8 @@ describe("HTML DOM contract", () => {
       "add-folder-btn",
       "scan-library-btn",
       "clear-playlist-btn",
+      "settings-btn",
+      "settings-modal",
       "current-song-title",
       "current-song-artist",
       "progress-fill",
@@ -437,6 +448,15 @@ describe("Regression: Tauri API import resilience", () => {
     );
   });
 
+  it("provides a fallback dialogOpen function", () => {
+    const catchIdx = appJsSource.indexOf("catch");
+    const afterCatch = appJsSource.slice(catchIdx);
+    assert.ok(
+      afterCatch.includes("dialogOpen"),
+      "app.js should assign a fallback dialogOpen in the catch block"
+    );
+  });
+
   it("UI renders even when __TAURI__ is missing", () => {
     // Simulate: no __TAURI__ at all
     const savedTauri = global.window?.__TAURI__;
@@ -444,20 +464,23 @@ describe("Regression: Tauri API import resilience", () => {
     delete global.window.__TAURI__;
 
     // Re-evaluate the guard logic
-    let testInvoke, testListen;
+    let testInvoke, testListen, testDialogOpen;
     try {
       testInvoke = global.window.__TAURI__.tauri.invoke;
       testListen = global.window.__TAURI__.event.listen;
+      testDialogOpen = global.window.__TAURI__.dialog.open;
     } catch (e) {
       testInvoke = async () => {
         throw new Error("Tauri API not available");
       };
       testListen = async () => {};
+      testDialogOpen = async () => null;
     }
 
     // invoke should be a callable async function, not undefined
     assert.equal(typeof testInvoke, "function");
     assert.equal(typeof testListen, "function");
+    assert.equal(typeof testDialogOpen, "function");
 
     // Static HTML elements should still be accessible
     assert.ok(els["play-btn"]);

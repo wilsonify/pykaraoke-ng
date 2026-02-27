@@ -29,6 +29,7 @@ const REQUIRED_IDS = [
   "add-folder-btn",
   "scan-library-btn",
   "clear-playlist-btn",
+  "settings-btn",
   "current-song-title",
   "current-song-artist",
   "progress-fill",
@@ -38,6 +39,12 @@ const REQUIRED_IDS = [
   "results-list",
   "status-message",
   "backend-status",
+  "settings-modal",
+  "settings-close-btn",
+  "settings-cancel-btn",
+  "settings-save-btn",
+  "setting-fullscreen",
+  "setting-zoom",
 ];
 
 describe("index.html structure", () => {
