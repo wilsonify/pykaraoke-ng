@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::process::{Child, Command, Stdio};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
+use std::time::Duration;
 use tauri::{Manager, State};
 use std::path::PathBuf;
 
@@ -12,6 +14,7 @@ use std::path::PathBuf;
 struct BackendState {
     process: Option<Child>,
     stdin: Option<std::process::ChildStdin>,
+    response_rx: Option<mpsc::Receiver<serde_json::Value>>,
 }
 
 /// Wrapper for thread-safe backend state
@@ -70,9 +73,22 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
             candidates[0].clone()
         });
     
+    // Compute the PYTHONPATH so Python can resolve `from pykaraoke…` imports.
+    // The backend script lives at  …/backend/pykaraoke/core/backend.py.
+    // PYTHONPATH must point to the directory that *contains* the `pykaraoke`
+    // package, i.e. the grandparent-of-grandparent of backend.py
+    // (backend.py -> core/ -> pykaraoke/ -> backend/).
+    let python_path = backend_script
+        .parent()                    // .../pykaraoke/core
+        .and_then(|p| p.parent())    // .../pykaraoke
+        .and_then(|p| p.parent())    // .../backend  (contains the pykaraoke package)
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_path_buf();
+
     // Start the Python backend process
     let mut child = Command::new("python3")
-        .arg(backend_script)
+        .arg(&backend_script)
+        .env("PYTHONPATH", &python_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -81,6 +97,10 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
     
     let stdin = child.stdin.take();
     let stdout = child.stdout.take();
+
+    // Create a channel for routing command responses from the reader thread
+    // back to send_command.
+    let (response_tx, response_rx) = mpsc::channel::<serde_json::Value>();
     
     // Spawn thread to read backend output
     if let Some(stdout) = stdout {
@@ -94,6 +114,9 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
                         if output["type"] == "event" {
                             // Emit event to frontend
                             app_handle_clone.emit_all("backend-event", output["event"].clone()).ok();
+                        } else if output["type"] == "response" {
+                            // Route command response back to send_command
+                            response_tx.send(output["response"].clone()).ok();
                         }
                     }
                 }
@@ -103,6 +126,7 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
     
     backend.process = Some(child);
     backend.stdin = stdin;
+    backend.response_rx = Some(response_rx);
     
     Ok("Backend started successfully".to_string())
 }
@@ -132,13 +156,27 @@ async fn send_command(
             .map_err(|e| format!("Failed to flush stdin: {}", e))?;
     }
     
-    // TODO: Implement response reading from stdout
-    // For now, return a placeholder response
-    Ok(CommandResponse {
-        status: "ok".to_string(),
-        message: Some("Command sent".to_string()),
-        data: None,
-    })
+    // Read the actual response from the Python backend via the channel.
+    if let Some(ref rx) = backend.response_rx {
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(value) => {
+                serde_json::from_value::<CommandResponse>(value.clone()).map_err(|_| {
+                    format!("Failed to parse backend response: {}", value)
+                })
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err("Timeout waiting for backend response".to_string())
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                backend.stdin = None;
+                backend.process = None;
+                backend.response_rx = None;
+                Err("Backend process disconnected".to_string())
+            }
+        }
+    } else {
+        Err("No response channel available".to_string())
+    }
 }
 
 /// Stop the Python backend process
@@ -149,6 +187,7 @@ fn stop_backend(state: State<SafeBackendState>) -> Result<String, String> {
     if let Some(mut child) = backend.process.take() {
         child.kill().map_err(|e| format!("Failed to kill backend: {}", e))?;
         backend.stdin = None;
+        backend.response_rx = None;
         Ok("Backend stopped".to_string())
     } else {
         Err("Backend not running".to_string())
@@ -172,6 +211,7 @@ fn main() {
         .manage(Arc::new(Mutex::new(BackendState {
             process: None,
             stdin: None,
+            response_rx: None,
         })))
         .invoke_handler(tauri::generate_handler![
             start_backend,
@@ -302,9 +342,11 @@ mod tests {
         let state = BackendState {
             process: None,
             stdin: None,
+            response_rx: None,
         };
         assert!(state.process.is_none());
         assert!(state.stdin.is_none());
+        assert!(state.response_rx.is_none());
     }
 
     #[test]
@@ -312,6 +354,7 @@ mod tests {
         let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
             process: None,
             stdin: None,
+            response_rx: None,
         }));
         let guard = state.lock().unwrap();
         assert!(guard.process.is_none());
@@ -322,6 +365,7 @@ mod tests {
         let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
             process: None,
             stdin: None,
+            response_rx: None,
         }));
         let clone = state.clone();
         assert!(Arc::ptr_eq(&state, &clone));

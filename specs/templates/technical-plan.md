@@ -56,3 +56,19 @@ _[How errors are surfaced, logged, and recovered from]_
 ## Performance Considerations
 
 _[Complexity analysis, benchmarks if needed]_
+
+## Build / Packaging Impact
+
+_Does this change affect how the application is built, bundled, or deployed?_
+
+- **CI workflow changes:** _[New steps, changed commands, new secrets needed]_
+- **Tauri config changes:** _[beforeBuildCommand, resources, bundle targets]_
+- **Cross-platform build commands:** _[Verify all commands work on Linux,
+  Windows, and macOS — no bare `bash`, `rm -rf`, `cp`, `mkdir -p`]_
+- **Path assumptions:** _[Document base directory for every relative path;
+  verify depth is correct from the CWD where the command actually runs]_
+- **Dockerfile / container changes:** _[Base image, layer ordering, permissions]_
+- **Local validation:** _[How to verify with `act`, `cargo check`, or
+  equivalent before pushing]_
+
+If this feature does NOT touch build/packaging, write "N/A — no build changes".

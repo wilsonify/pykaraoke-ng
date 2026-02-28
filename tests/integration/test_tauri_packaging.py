@@ -134,8 +134,28 @@ class TestTauriBundleResources:
             "so the Python backend is shipped inside the .deb / .dmg / .exe"
         )
 
+    def test_backend_py_is_bundled(self):
+        """backend.py must be reachable via the bundled resources glob."""
+        conf = json.loads(TAURI_CONF.read_text())
+        resources = conf["tauri"]["bundle"]["resources"]
+        # Resources now use a glob pattern like "backend/**" instead of
+        # listing individual files.  Verify either:
+        #  a) a glob that would match backend/.../backend.py, OR
+        #  b) a literal entry containing "backend.py"
+        has_backend_glob = any("backend" in r and "**" in r for r in resources)
+        has_backend_literal = any("backend.py" in r for r in resources)
+        assert has_backend_glob or has_backend_literal, (
+            "tauri.conf.json resources must include backend.py, either "
+            "via a glob pattern (e.g. 'backend/**') or an explicit path"
+        )
+
     def test_all_bundled_resources_exist_on_disk(self):
-        """Every file listed in resources must exist in the source tree."""
+        """Every resource entry must be resolvable.
+
+        Glob patterns (containing '*') are validated by checking that
+        the base directory exists and that a beforeBuildCommand is
+        configured to populate it.  Literal paths are checked directly.
+        """
         conf = json.loads(TAURI_CONF.read_text())
         resources = conf["tauri"]["bundle"]["resources"]
         tauri_conf_dir = TAURI_CONF.parent  # src-tauri/

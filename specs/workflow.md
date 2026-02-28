@@ -220,6 +220,9 @@ Check every item:
 - [x] ruff check passes
 - [x] CI pipeline passes
 - [x] SonarQube quality gate passes
+- [x] Build matrix passes on all platforms (linux, windows, macos)
+- [x] No shell-specific commands in cross-platform build config
+- [x] Integration tests validate effects, not literal command strings
 - [x] Code reviewed and approved
 ```
 

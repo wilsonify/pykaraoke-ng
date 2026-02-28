@@ -30,6 +30,7 @@ const REQUIRED_IDS = [
   "scan-library-btn",
   "settings-btn",
   "clear-playlist-btn",
+  "settings-btn",
   "current-song-title",
   "current-song-artist",
   "progress-fill",

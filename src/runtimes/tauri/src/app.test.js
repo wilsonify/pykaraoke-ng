@@ -365,6 +365,8 @@ describe("HTML DOM contract", () => {
       "settings-btn",
       "settings-modal",
       "clear-playlist-btn",
+      "settings-btn",
+      "settings-modal",
       "current-song-title",
       "current-song-artist",
       "progress-fill",
