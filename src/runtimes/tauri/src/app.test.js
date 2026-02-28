@@ -52,6 +52,12 @@ function createMockDOM() {
     "scan-library-btn",
     "clear-playlist-btn",
     "settings-btn",
+    "settings-modal",
+    "settings-close-btn",
+    "settings-cancel-btn",
+    "settings-save-btn",
+    "setting-fullscreen",
+    "setting-zoom",
     "current-song-title",
     "current-song-artist",
     "progress-fill",
@@ -76,6 +82,9 @@ function createMockDOM() {
       },
       event: {
         listen: async () => {},
+      },
+      dialog: {
+        open: async () => null,
       },
     },
   };
@@ -354,6 +363,7 @@ describe("HTML DOM contract", () => {
       "add-folder-btn",
       "scan-library-btn",
       "settings-btn",
+      "settings-modal",
       "clear-playlist-btn",
       "current-song-title",
       "current-song-artist",
@@ -438,6 +448,15 @@ describe("Regression: Tauri API import resilience", () => {
     );
   });
 
+  it("provides a fallback dialogOpen function", () => {
+    const catchIdx = appJsSource.indexOf("catch");
+    const afterCatch = appJsSource.slice(catchIdx);
+    assert.ok(
+      afterCatch.includes("dialogOpen"),
+      "app.js should assign a fallback dialogOpen in the catch block"
+    );
+  });
+
   it("UI renders even when __TAURI__ is missing", () => {
     // Simulate: no __TAURI__ at all
     const savedTauri = global.window?.__TAURI__;
@@ -445,20 +464,23 @@ describe("Regression: Tauri API import resilience", () => {
     delete global.window.__TAURI__;
 
     // Re-evaluate the guard logic
-    let testInvoke, testListen;
+    let testInvoke, testListen, testDialogOpen;
     try {
       testInvoke = global.window.__TAURI__.tauri.invoke;
       testListen = global.window.__TAURI__.event.listen;
+      testDialogOpen = global.window.__TAURI__.dialog.open;
     } catch (e) {
       testInvoke = async () => {
         throw new Error("Tauri API not available");
       };
       testListen = async () => {};
+      testDialogOpen = async () => null;
     }
 
     // invoke should be a callable async function, not undefined
     assert.equal(typeof testInvoke, "function");
     assert.equal(typeof testListen, "function");
+    assert.equal(typeof testDialogOpen, "function");
 
     // Static HTML elements should still be accessible
     assert.ok(els["play-btn"]);
@@ -501,10 +523,10 @@ describe("Regression: settings button wired up", () => {
     );
   });
 
-  it("app.js defines a handleSettings method", () => {
+  it("app.js defines a handleShowSettings method", () => {
     assert.ok(
-      appJsSource.includes("handleSettings"),
-      "app.js must define handleSettings() to handle the Settings button click"
+      appJsSource.includes("handleShowSettings"),
+      "app.js must define handleShowSettings() to handle the Settings button click"
     );
   });
 });
@@ -526,11 +548,11 @@ describe("Regression: add-folder button uses Tauri dialog API", () => {
     );
   });
 
-  it("handleAddFolder references the Tauri dialog API", () => {
+  it("handleAddFolder references the Tauri dialog API via dialogOpen variable", () => {
     assert.ok(
-      appJsSource.includes("dialog") && appJsSource.includes("directory"),
-      "handleAddFolder should open a native folder picker via " +
-        "window.__TAURI__.dialog.open({ directory: true, ... })"
+      appJsSource.includes("dialogOpen") && appJsSource.includes("directory"),
+      "handleAddFolder should open a native folder picker via the module-level " +
+        "dialogOpen variable (window.__TAURI__.dialog.open)"
     );
   });
 });

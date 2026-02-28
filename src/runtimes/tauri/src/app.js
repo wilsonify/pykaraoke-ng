@@ -1,16 +1,18 @@
 // PyKaraoke NG - Frontend Application
 // Handles UI interactions and communicates with Tauri backend
 
-let invoke, listen;
+let invoke, listen, dialogOpen;
 
 try {
     invoke = window.__TAURI__.tauri.invoke;
     listen = window.__TAURI__.event.listen;
+    dialogOpen = window.__TAURI__.dialog.open;
 } catch (e) {
     console.warn('Tauri API not available:', e);
     // Provide no-op stubs so the UI still renders
     invoke = async () => { throw new Error('Tauri API not available'); };
     listen = async () => {};
+    dialogOpen = async () => null;
 }
 
 class PyKaraokeApp {
@@ -63,7 +65,13 @@ class PyKaraokeApp {
         document.getElementById('scan-library-btn').addEventListener('click', () => this.handleScanLibrary());
         
         // Settings
-        document.getElementById('settings-btn').addEventListener('click', () => this.handleSettings());
+        document.getElementById('settings-btn').addEventListener('click', () => this.handleShowSettings());
+        const settingsCloseBtn = document.getElementById('settings-close-btn');
+        if (settingsCloseBtn) settingsCloseBtn.addEventListener('click', () => this.handleCloseSettings());
+        const settingsCancelBtn = document.getElementById('settings-cancel-btn');
+        if (settingsCancelBtn) settingsCancelBtn.addEventListener('click', () => this.handleCloseSettings());
+        const settingsSaveBtn = document.getElementById('settings-save-btn');
+        if (settingsSaveBtn) settingsSaveBtn.addEventListener('click', () => this.handleSaveSettings());
         
         // Playlist
         document.getElementById('clear-playlist-btn').addEventListener('click', () => this.handleClearPlaylist());
@@ -279,35 +287,69 @@ class PyKaraokeApp {
     
     async handleAddFolder() {
         try {
-            const folder = await window.__TAURI__.dialog.open({
+            const selected = await dialogOpen({
                 directory: true,
                 multiple: false,
-                title: 'Select Karaoke Folder'
+                title: 'Select Music Folder',
             });
-            if (folder) {
-                this.updateStatus(`Adding folder: ${folder}`);
-                await this.sendCommand('add_folder', { folder });
-                this.updateStatus(`Folder added: ${folder}`);
+            if (selected) {
+                this.updateStatus(`Adding folder: ${selected}`);
+                await this.sendCommand('add_folder', { folder: selected });
+                this.updateStatus(`Folder added: ${selected}`);
             }
         } catch (error) {
-            this.showError(`Failed to select folder: ${error}`);
+            this.showError(`Failed to add folder: ${error}`);
         }
     }
     
     async handleScanLibrary() {
         this.updateStatus('Scanning library...');
-        await this.sendCommand('scan_library');
+        try {
+            await this.sendCommand('scan_library');
+        } catch (error) {
+            this.showError(`Scan failed: ${error}`);
+        }
     }
     
-    async handleSettings() {
+    async handleShowSettings() {
+        const modal = document.getElementById('settings-modal');
+        if (!modal) return;
+        
+        // Load current settings from backend
         try {
             const response = await this.sendCommand('get_settings');
             if (response.status === 'ok' && response.data) {
-                const s = response.data;
-                this.updateStatus(`Settings — Fullscreen: ${s.fullscreen}, Size: ${JSON.stringify(s.player_size)}, Zoom: ${s.zoom_mode}`);
+                const data = response.data;
+                const fullscreenEl = document.getElementById('setting-fullscreen');
+                const zoomEl = document.getElementById('setting-zoom');
+                if (fullscreenEl) fullscreenEl.checked = data.fullscreen || false;
+                if (zoomEl) zoomEl.value = data.zoom_mode || 'soft';
             }
         } catch (error) {
-            this.showError(`Settings unavailable: ${error}`);
+            console.warn('Could not load settings:', error);
+        }
+        
+        modal.style.display = 'flex';
+    }
+    
+    handleCloseSettings() {
+        const modal = document.getElementById('settings-modal');
+        if (modal) modal.style.display = 'none';
+    }
+    
+    async handleSaveSettings() {
+        const fullscreenEl = document.getElementById('setting-fullscreen');
+        const zoomEl = document.getElementById('setting-zoom');
+        const params = {
+            fullscreen: fullscreenEl ? fullscreenEl.checked : false,
+            zoom_mode: zoomEl ? zoomEl.value : 'soft',
+        };
+        try {
+            await this.sendCommand('update_settings', params);
+            this.updateStatus('Settings saved');
+            this.handleCloseSettings();
+        } catch (error) {
+            this.showError(`Failed to save settings: ${error}`);
         }
     }
     

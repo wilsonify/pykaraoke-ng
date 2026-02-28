@@ -39,6 +39,12 @@ const REQUIRED_IDS = [
   "results-list",
   "status-message",
   "backend-status",
+  "settings-modal",
+  "settings-close-btn",
+  "settings-cancel-btn",
+  "settings-save-btn",
+  "setting-fullscreen",
+  "setting-zoom",
 ];
 
 describe("index.html structure", () => {
