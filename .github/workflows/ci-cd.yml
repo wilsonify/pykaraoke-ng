@@ -371,6 +371,18 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g --ignore-scripts @tauri-apps/cli@1.6.3
 
+      - name: Stage Python backend for bundling
+        shell: bash
+        run: |
+          rm -rf src/runtimes/tauri/backend
+          mkdir -p src/runtimes/tauri/backend/pykaraoke/core \
+                   src/runtimes/tauri/backend/pykaraoke/config \
+                   src/runtimes/tauri/backend/pykaraoke/players
+          cp src/pykaraoke/__init__.py src/runtimes/tauri/backend/pykaraoke/
+          cp src/pykaraoke/core/*.py src/runtimes/tauri/backend/pykaraoke/core/
+          cp src/pykaraoke/config/*.py src/runtimes/tauri/backend/pykaraoke/config/
+          cp src/pykaraoke/players/*.py src/runtimes/tauri/backend/pykaraoke/players/
+
       - name: Build Tauri application
         working-directory: src/runtimes/tauri
         run: tauri build --bundles ${{ matrix.bundles }}
@@ -378,6 +390,11 @@ jobs:
           # Optional: Tauri updater signing keys — set these secrets if using the updater.
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          # Override beforeBuildCommand to empty: the staging step above already
+          # copied the Python backend files with correct paths. The beforeBuildCommand
+          # in tauri.conf.json uses ../../../../ which is one level too many when
+          # tauri build is invoked from src/runtimes/tauri/ (only 3 levels needed).
+          TAURI_CONFIG: '{"build":{"beforeBuildCommand":""}}'
 
       - name: Upload platform build artifact
         uses: actions/upload-artifact@v4

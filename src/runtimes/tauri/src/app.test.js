@@ -573,4 +573,37 @@ describe("Regression: tauri.conf.json dialog allowlist", () => {
         "picker can be opened from handleAddFolder"
     );
   });
+
+  it("resources use backend/** glob, not absolute ../../../../ paths", () => {
+    // The CI pre-stages Python files into src/runtimes/tauri/backend/ then
+    // tauri build (CWD = src/runtimes/tauri/) resolves "backend/**" correctly.
+    // The old ../../../../src/pykaraoke/ paths are 4 levels up from the tauri
+    // working directory but the repo root is only 3 levels up — those paths
+    // resolved to the parent of the repo root and failed with "No such file".
+    const resources = conf.tauri?.bundle?.resources;
+    assert.ok(
+      Array.isArray(resources) && resources.includes("backend/**"),
+      "tauri.conf.json bundle.resources must include 'backend/**' so the " +
+        "CI-staged Python backend is bundled correctly"
+    );
+    const hasBadPaths = (resources || []).some((r) => r.startsWith("../../../../"));
+    assert.ok(
+      !hasBadPaths,
+      "tauri.conf.json must not use ../../../../ resource paths — they resolve " +
+        "to the parent of the repo root when tauri build runs from src/runtimes/tauri/"
+    );
+  });
+
+  it("beforeBuildCommand is empty (CI stages files via a separate step)", () => {
+    // The beforeBuildCommand in main uses ../../../../ paths which are one level
+    // too deep when tauri is invoked from src/runtimes/tauri/. The CI workflow
+    // instead stages files in a separate step and overrides beforeBuildCommand
+    // to empty via TAURI_CONFIG.
+    assert.equal(
+      conf.build?.beforeBuildCommand ?? "",
+      "",
+      "tauri.conf.json beforeBuildCommand must be empty; Python staging is " +
+        "handled by the CI 'Stage Python backend for bundling' step"
+    );
+  });
 });
