@@ -1,6 +1,6 @@
 # Code Quality Improvements
 
-[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+[← Home](../index.md) · [Developer Guide](../developers.md)
 
 ---
 

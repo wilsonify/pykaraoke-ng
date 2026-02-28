@@ -1,8 +1,8 @@
-# 💻 Developer Guide
+# Developer Guide
 
-Set up your development environment and contribute to PyKaraoke-NG.
+Set up the development environment, run tests, and contribute.
 
-[← Back to Home](index.md)
+[← Home](index.md)
 
 ---
 
@@ -11,8 +11,8 @@ Set up your development environment and contribute to PyKaraoke-NG.
 - Python 3.10+
 - Git
 - [uv](https://github.com/astral-sh/uv) (recommended) or pip
-- Docker (optional)
-- Rust toolchain (optional, for Tauri development)
+- Docker (optional — for integration tests)
+- Rust toolchain (optional — for Tauri development)
 
 ## Setup
 
@@ -20,10 +20,10 @@ Set up your development environment and contribute to PyKaraoke-NG.
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
 
-# Quick setup with uv
+# With uv (recommended)
 uv sync
 
-# Or with pip
+# With pip
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -35,64 +35,74 @@ pip install -e ".[dev]"
 ```
 src/pykaraoke/              # Core Python package
 ├── players/                # CDG, KAR, MPG players
-├── core/                   # Backend, database, manager, player
-├── config/                 # Constants, environment, version
-└── native/                 # C extensions
+├── core/                   # Backend, database, manager
+└── config/                 # Constants, environment, version
 
 src/runtimes/tauri/         # Tauri desktop app
-├── src/                    # Web frontend (HTML/CSS/JS)
+├── src/                    # Frontend (HTML / CSS / JS)
 └── src-tauri/              # Rust backend
 
 tests/                      # Test suite
 ├── pykaraoke/              # Unit tests (mirrors src/)
 ├── integration/            # End-to-end tests
 └── fixtures/               # Test data
+
+specs/                      # Specifications and governance
+├── constitution.md         # Engineering invariants
+├── ux-design.md            # Slim sidebar UX spec
+├── workflow.md             # Spec-driven development lifecycle
+└── features/               # Per-feature spec directories
 ```
 
-See [Repository Structure](architecture/structure.md) for the full breakdown.
+See [Repository Structure](architecture/structure.md) for the full tree.
 
 ---
 
-## Running Tests
+## Tests
 
 ```bash
 # All tests
 ./scripts/run-tests.sh
 
-# Directly with pytest
+# pytest directly
 uv run pytest tests/ -v
 
-# Specific test file
+# Single file
 uv run pytest tests/pykaraoke/core/test_filename_parser.py -v
 
 # With coverage
 uv run pytest tests/ --cov=. --cov-report=html
 ```
 
-### Tauri Tests
+### Tauri tests
 
 ```bash
-# Rust unit tests
+# Rust
 cd src/runtimes/tauri/src-tauri && cargo test
 
-# JavaScript tests
+# JavaScript
 cd src/runtimes/tauri && node --test src/app.test.js src/index.test.js
 ```
+
+### Integration tests (Docker)
+
+```bash
+./scripts/run-tests.sh --integration-only
+```
+
+See [Integration Testing](development/integration-testing.md) for full details.
 
 ---
 
 ## Code Quality
 
 ```bash
-# Lint
-uv run ruff check .
-
-# Auto-fix
-uv run ruff check . --fix
-
-# Format
-uv run ruff format .
+uv run ruff check .          # lint
+uv run ruff check . --fix    # auto-fix
+uv run ruff format .         # format
 ```
+
+SonarCloud runs on every PR. See [SonarQube Setup](development/sonarqube-setup.md).
 
 ---
 
@@ -104,61 +114,61 @@ uv run ruff format .
 | `core/database.py` | Song database, library scanning, settings |
 | `core/filename_parser.py` | Artist–title extraction from filenames |
 | `core/manager.py` | Playback coordination and queues |
-| `players/cdg.py` | CD+G format playback |
+| `players/cdg.py` | CD+G playback |
 | `players/kar.py` | MIDI / KAR playback with lyrics |
 | `players/mpg.py` | MPEG / AVI video playback |
+
+---
+
+## Tauri Development
+
+### Linux prerequisites
+
+```bash
+sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget \
+    libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+cargo install tauri-cli --version "^1"
+```
+
+### Run
+
+```bash
+cd src/runtimes/tauri/src-tauri
+cargo tauri dev     # hot-reload
+cargo tauri build   # production
+```
 
 ---
 
 ## Docker Development
 
 ```bash
-# Build and run
 docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
-
-# Development container
 docker compose -f deploy/docker/docker-compose.yml --profile dev up
-
-# Run tests in container
-docker compose -f deploy/docker/docker-compose.yml --profile test up
-```
-
----
-
-## Tauri Development
-
-### Prerequisites (Linux)
-
-```bash
-# Debian/Ubuntu
-sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget \
-    libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-# Install Tauri CLI v1
-cargo install tauri-cli --version "^1"
-```
-
-### Development
-
-```bash
-cd src/runtimes/tauri/src-tauri
-cargo tauri dev     # hot-reload development
-cargo tauri build   # production build
 ```
 
 ---
 
 ## Contributing
 
+### Governance
+
+All contributions follow Spec-Driven Development. Read these first:
+
+- [Project Constitution](../specs/constitution.md) — engineering invariants
+- [Developer Workflow](../specs/workflow.md) — specify → clarify → plan → implement
+- [UX Design Spec](../specs/ux-design.md) — slim sidebar design constraints
+
 ### Workflow
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Make changes and run tests: `./scripts/run-tests.sh`
+1. Create a feature branch: `NNN-short-description` (see [workflow](../specs/workflow.md)).
+2. Write spec artifacts in `specs/features/NNN-*/`.
+3. Implement via TDD: failing test → pass → refactor.
 4. Lint: `uv run ruff check .`
-5. Commit with clear messages and open a PR
+5. Open a PR referencing the spec.
 
-### Commit Messages
+### Commit messages
 
 ```
 feat: add support for OGG audio files
@@ -168,18 +178,9 @@ test: add tests for MIDI parsing
 refactor: simplify player state management
 ```
 
-### Code Style
+### Code style
 
-- Follow PEP 8
-- Use type hints where practical
-- Write docstrings for public functions
-- Add tests for new features
-
----
-
-## Additional Resources
-
-- [Architecture Overview](architecture/overview.md) — system design
-- [Backend Modes](backend-modes.md) — stdio and HTTP API reference
-- [Quality Improvements](development/quality-improvements.md) — code quality history
-- [SonarQube Setup](development/sonarqube-setup.md) — CI quality scanning
+- PEP 8.
+- Type hints on public interfaces.
+- Docstrings on public functions.
+- Tests for every new behaviour.

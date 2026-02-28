@@ -1,30 +1,28 @@
-# 👤 User Guide
+# User Guide
 
-Everything you need to host your own karaoke night.
+Install PyKaraoke-NG, set up a song library, and run karaoke at a live event.
 
-[← Back to Home](index.md)
+[← Home](index.md)
 
 ---
 
-## Installation
+## Install
 
-### Prerequisites
+### Requirements
 
-- Python 3.10 or higher
+- Python 3.10+
 - A sound card and speakers
-- Karaoke files (CDG, KAR, or MPEG format)
+- Karaoke files (CDG, KAR, or MPEG)
 
-### Install with pip
+### pip
 
 ```bash
-# Standard installation
 pip install pykaraoke-ng
-
-# Or using uv (faster)
+# or
 uv pip install pykaraoke-ng
 ```
 
-### Install from Source
+### From source
 
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
@@ -32,70 +30,26 @@ cd pykaraoke-ng
 pip install -e .
 ```
 
-### System Dependencies
+### System dependencies
 
-PyKaraoke-NG requires pygame and SDL. On most systems, these install automatically. If you have issues:
+pygame and SDL usually install automatically. If they don't:
 
 ```bash
-# Debian/Ubuntu
+# Debian / Ubuntu
 sudo apt install python3-pygame libsdl2-mixer-2.0-0
 
 # Fedora
 sudo dnf install python3-pygame SDL2_mixer
 
-# macOS (with Homebrew)
+# macOS
 brew install sdl2 sdl2_mixer
 ```
 
 ---
 
-## Getting Started
+## Set Up a Song Library
 
-### Launch the GUI
-
-```bash
-pykaraoke
-```
-
-This opens the song browser where you can:
-- Browse and search your song library
-- Create playlists and queues
-- Configure audio/video settings
-
-### Play Files Directly
-
-```bash
-# Play a CDG file (requires matching .mp3)
-pycdg /path/to/song.cdg
-
-# Play a MIDI/KAR file
-pykar /path/to/song.kar
-
-# Play a video karaoke file
-pympg /path/to/song.mpg
-```
-
-### Mini Player
-
-For resource-limited systems:
-
-```bash
-pykaraoke_mini
-```
-
-### Desktop App
-
-PyKaraoke-NG provides a standalone desktop application via Tauri:
-
-- **Tauri App**: Lightweight native desktop application (see [Admin Guide](administrators.md#tauri-desktop-deployment))
-
----
-
-## Setting Up Your Song Library
-
-### Organize Your Files
-
-For best results, organize songs like this:
+Organize files so CDG tracks have a matching `.mp3` in the same folder:
 
 ```
 ~/Karaoke/
@@ -107,70 +61,70 @@ For best results, organize songs like this:
     └── Great Song.mpg
 ```
 
-> **Tip:** CDG files require a matching audio file (MP3 or OGG) with the same base name in the same folder.
+Then scan:
 
-### Scan Your Library
-
-1. Open PyKaraoke
-2. Go to **File → Add Songs Folder**
-3. Select your karaoke folder
-4. Wait for the scan to complete
-
-Songs are indexed in a local database for fast searching.
+1. Open PyKaraoke.
+2. Click **Add Folder** and select the karaoke directory.
+3. Click **Scan Library**. Songs are indexed in a local database.
 
 ---
 
-## Playing Karaoke
+## Play Songs
 
-### Keyboard Controls
+### Command-line players
+
+```bash
+pycdg /path/to/song.cdg     # CD+G (needs matching .mp3)
+pykar /path/to/song.kar      # MIDI / KAR
+pympg /path/to/song.mpg      # video
+```
+
+### Desktop app
+
+Launch the Tauri desktop app (see [Admin Guide](administrators.md#tauri-desktop-builds)
+for install instructions). The app is a slim sidebar designed to sit beside
+your DJ software.
+
+### Keyboard controls
 
 | Key | Action |
 |-----|--------|
+| `/` or `Ctrl+K` | Focus search bar |
+| `↑` / `↓` | Navigate results or queue |
+| `Enter` | Add selected song to queue |
+| `Esc` | Clear search |
 | `Space` | Play / Pause |
-| `Escape` | Stop / Exit fullscreen |
-| `F` | Toggle fullscreen |
-| `+` / `-` | Volume up / down |
-| `Left` / `Right` | Seek backward / forward |
-| `N` | Next song in queue |
+| `Ctrl+→` | Skip to next song |
+| `Delete` | Remove selected from queue |
+| `Ctrl+↑` / `Ctrl+↓` | Reorder queue item |
 
-### Using the Queue
+### Queue workflow
 
-1. Search for a song
-2. Right-click and select **Add to Queue**
-3. Repeat for more songs
-4. Click **Play Queue** to start
+1. Type a few letters in the search bar — results filter instantly.
+2. Press `↓` to highlight a result, then `Enter` to queue it.
+3. The queue auto-advances when a song ends.
 
----
-
-## Where to Get Karaoke Files
-
-> **Note:** Respect copyright laws in your jurisdiction. Many karaoke files are copyrighted.
-
-### Legal Sources
-
-- **Create your own** - Use CDG creator software with royalty-free music
-- **Public domain** - Classical music and traditional songs
-- **Licensed services** - Some services sell downloadable CDG files
-- **MIDI files** - Many .kar files are available for free online
+The goal is to go from hearing a request to having it queued in under
+3 seconds — no confirmation dialogs, no page changes.
 
 ---
 
 ## Troubleshooting
 
-### No Sound
+| Problem | Fix |
+|---------|-----|
+| No sound | Check system volume; verify the `.mp3` sits next to the `.cdg` file |
+| Video stuttering | Close other apps; try a smaller window |
+| Songs not found after scan | Re-scan (**Scan Library**); check file extensions (`.cdg`, `.kar`, `.mpg`) |
+| `ModuleNotFoundError` | Run `pip install -e .` or `uv sync` |
 
-- Check your system volume and speaker connections
-- Verify the audio file exists alongside the CDG file
-- Try a different audio output in Settings
+---
 
-### Video Stuttering
+## Where to Get Karaoke Files
 
-- Close other applications
-- Try a smaller window size
-- Use `pykaraoke_mini` for better performance
+Respect copyright laws in your jurisdiction.
 
-### Songs Not Found
-
-- Rescan your library: **File → Rescan Songs**
-- Check file permissions
-- Ensure files have correct extensions (.cdg, .kar, .mpg)
+- **Create your own** — CDG creator software + royalty-free music.
+- **Public domain** — Classical and traditional songs.
+- **Licensed services** — Some vendors sell downloadable CDG packs.
+- **MIDI** — Many `.kar` files are freely available online.

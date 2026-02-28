@@ -1,35 +1,35 @@
 # Architecture Overview
 
-[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+[← Home](../index.md) · [Developer Guide](../developers.md)
 
 ---
 
 ## Design
 
-PyKaraoke-NG uses a **decoupled frontend/backend architecture**. The Python backend owns all business logic; lightweight desktop shells (Tauri, Electron) provide the UI.
+PyKaraoke-NG uses a decoupled frontend/backend architecture. The Python
+backend owns all business logic; the Tauri desktop shell provides a slim
+sidebar UI.
 
 ```
-┌───────────────────────────────────────────────┐
-│            Desktop Application                │
-│                                               │
-│  ┌─────────────┐      ┌──────────────────┐   │
-│  │ Web Frontend │◄────►│ Tauri Shell      │   │
-│  │ (HTML/CSS/JS)│ IPC  │ (Rust)           │   │
-│  └─────────────┘      └──────────────────┘   │
-│                               │               │
-│                        stdin / stdout         │
-│                         (JSON lines)          │
-│                               ▼               │
-│                 ┌──────────────────────┐      │
-│                 │  Python Backend      │      │
-│                 │  (backend.py)        │      │
-│                 │                      │      │
-│                 │  • Playback engine   │      │
-│                 │  • Song database     │      │
-│                 │  • Playlist manager  │      │
-│                 │  • Event emitter     │      │
-│                 └──────────────────────┘      │
-└───────────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│          Tauri Desktop App               │
+│                                          │
+│  ┌────────────┐    ┌─────────────────┐   │
+│  │ Web UI     │◄──►│ Tauri Shell     │   │
+│  │ (HTML/JS)  │IPC │ (Rust)          │   │
+│  └────────────┘    └─────────────────┘   │
+│                          │               │
+│                   stdin / stdout         │
+│                    (JSON lines)          │
+│                          ▼               │
+│              ┌─────────────────────┐     │
+│              │  Python Backend     │     │
+│              │  • Playback engine  │     │
+│              │  • Song database    │     │
+│              │  • Queue manager    │     │
+│              │  • Event emitter    │     │
+│              └─────────────────────┘     │
+└──────────────────────────────────────────┘
 ```
 
 ## Components
@@ -55,11 +55,11 @@ Rust-based native desktop wrapper:
 ### Web Frontend (`src/runtimes/tauri/src/`)
 
 Vanilla HTML/CSS/JS interface:
-- Player controls (play, pause, stop, seek, volume)
-- Library browser with search
-- Playlist manager
+- Search bar and song results
+- Queue manager
+- Playback controls (play, pause, stop, seek, volume)
 
-Technology-agnostic — can be replaced with React, Vue, or Svelte.
+Designed as a slim sidebar (300–450 px). See [UX Design Spec](../../specs/ux-design.md).
 
 ## Communication Protocol
 
@@ -135,8 +135,9 @@ The frontend polls `get_state` to stay in sync.
 
 | Decision | Rationale |
 |----------|-----------|
-| **Tauri over Electron** | ~10 MB bundle vs ~150 MB; lower memory; native webview |
-| **stdio over WebSocket** | No exposed ports; no network config; easy to secure |
-| **JSON over Protobuf** | Human-readable; easy to debug; sufficient performance |
-| **Vanilla JS** | No build step; can upgrade to any framework later |
-| **Python backend** | Reuses existing mature player code (pygame, CDG parser) |
+| **Tauri** | ~10 MB bundle; native webview; low memory |
+| **stdio IPC** | No exposed ports; no network config; easy to secure |
+| **JSON lines** | Human-readable; easy to debug; sufficient performance |
+| **Vanilla JS** | No build step; zero frontend dependencies |
+| **Python backend** | Reuses mature player code (pygame, CDG parser) |
+| **Slim sidebar UI** | DJs need screen space for primary software (see [constitution §2](../../specs/constitution.md)) |

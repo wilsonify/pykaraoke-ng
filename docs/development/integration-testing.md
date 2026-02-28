@@ -1,203 +1,89 @@
-# Integration Testing with Docker Compose
+# Integration Testing
 
-This guide explains how to run integration tests using Docker Compose to automate the PyKaraoke backend server setup.
+Run integration tests against a live backend using Docker Compose.
 
-## Overview
+[← Home](../index.md) · [Developer Guide](../developers.md)
 
-Previously, integration tests were skipped because they required a running backend server. Now, Docker Compose orchestrates:
-- The PyKaraoke backend HTTP API server
-- The integration test runner that connects to the server
+---
 
-## Test Categories
+## Quick Reference
 
-### Unit Tests
-Tests that run locally without external dependencies:
 ```bash
-docker compose --profile test run test
+./scripts/run-tests.sh                    # unit + integration (auto-detects Docker)
+./scripts/run-tests.sh --unit-only        # unit only, no Docker
+./scripts/run-tests.sh --integration-only # integration only, requires Docker
 ```
 
-### Integration Tests
-Tests that require a running backend server:
-```bash
-docker compose --profile integration run test-integration
+## How It Works
+
+Docker Compose starts a backend HTTP server, waits for its `/health`
+endpoint, then runs pytest against it.
+
 ```
-
-### All Tests
-Both unit and integration tests:
-```bash
-docker compose --profile test run test-all
-```
-
-### With Coverage Reports
-```bash
-docker compose --profile test run test-coverage
-docker compose --profile integration run test-all-coverage
-```
-
-## Available Commands
-
-### Run Unit Tests Only
-```bash
-cd deploy/docker
-docker compose --profile test run test
-```
-
-### Run Integration Tests Only
-The backend server will start automatically and tests will run once it's healthy:
-```bash
-cd deploy/docker
-docker compose --profile integration run test-integration
-```
-
-### Run All Tests
-```bash
-cd deploy/docker
-docker compose --profile test run test-all
-```
-
-### Generate Coverage Report
-```bash
-cd deploy/docker
-docker compose --profile test run test-all-coverage
-```
-Coverage results will be in `htmlcov/` directory.
-
-### Run Specific Test File
-```bash
-cd deploy/docker
-docker compose --profile integration run test-integration pytest tests/pykaraoke/core/test_backend_http.py -v
-```
-
-### Run Tests Matching a Pattern
-```bash
-cd deploy/docker
-docker compose --profile test run test-all -k "test_health"
+docker compose start backend-test   → PyKaraoke HTTP server on :8080
+         ↓ healthcheck passes
+docker compose run test-integration → pytest -m integration
 ```
 
 ## Docker Compose Services
 
-### `backend-test`
-- **Profile**: `integration`
-- **Purpose**: Runs the PyKaraoke backend HTTP API server
-- **Port**: `8080`
-- **Healthcheck**: Uses `/health` endpoint to verify readiness
-- **Dependencies**: None (starts automatically)
+| Service | Profile | Purpose |
+|---------|---------|---------|
+| `backend-test` | `integration` | HTTP API server with healthcheck |
+| `test-integration` | `integration` | Runs `@pytest.mark.integration` tests only |
+| `test` | `test` | Unit tests (excludes integration) |
+| `test-all` | `test` | Unit + integration together |
+| `test-all-coverage` | `test` | All tests with coverage report |
 
-### `test-integration`
-- **Profile**: `integration`
-- **Purpose**: Runs integration tests marked with `@pytest.mark.integration`
-- **Dependencies**: Waits for `backend-test` to be healthy
+## Running Directly with Docker Compose
 
-### `test`
-- **Profile**: `test`
-- **Purpose**: Runs unit tests only (excludes integration tests)
+```bash
+cd deploy/docker
 
-### `test-coverage`
-- **Profile**: `test`
-- **Purpose**: Runs unit tests with coverage report generation
+# Integration tests only
+docker compose --profile integration run test-integration
 
-### `test-all`
-- **Profile**: `test`
-- **Purpose**: Runs all tests (unit + integration)
-- **Dependencies**: Waits for `backend-test` to be healthy
+# All tests
+docker compose --profile test run test-all
 
-### `test-all-coverage`
-- **Profile**: `test`
-- **Purpose**: Runs all tests with coverage report
-- **Dependencies**: Waits for `backend-test` to be healthy
+# Coverage
+docker compose --profile test run test-all-coverage
+```
 
 ## Environment Variables
 
-### `PYKARAOKE_API_URL`
-Set in integration test containers to communicate with the backend:
-- Default (when not in Docker): `http://localhost:8080`
-- Docker Compose: `http://backend-test:8080`
-
-### `SONGS_DIR`
-Directory containing test songs (optional):
-```bash
-SONGS_DIR=/path/to/songs docker compose --profile integration run test-integration
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PYKARAOKE_API_URL` | `http://localhost:8080` | Backend URL (set automatically in Docker) |
+| `SONGS_DIR` | — | Optional test songs directory |
 
 ## Writing Integration Tests
 
-### Marking Tests
-Add the `@pytest.mark.integration` decorator to integration test methods:
+Mark tests with `@pytest.mark.integration`:
 
 ```python
 import pytest
 
-class TestHTTPEndpoints:
-    @pytest.mark.integration
-    def test_health_endpoint(self):
-        """Test /health endpoint"""
-        import urllib.request
-        api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+@pytest.mark.integration
+def test_health_endpoint():
+    import urllib.request, os
+    api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
+    try:
         response = urllib.request.urlopen(f"{api_url}/health", timeout=5)
         assert response.status == 200
-```
-
-### Module-Level Marking
-To mark all tests in a file as integration tests:
-
-```python
-import pytest
-
-pytestmark = pytest.mark.integration
-
-class TestIntegration:
-    def test_something(self):
-        pass
-```
-
-### Graceful Degradation
-Always wrap server calls with proper exception handling:
-
-```python
-@pytest.mark.integration
-def test_endpoint(self):
-    try:
-        response = urllib.request.urlopen(url, timeout=5)
-        assert response.status == 200
     except urllib.error.URLError:
-        pytest.skip("Backend API server not running")
+        pytest.skip("Backend not running")
 ```
+
+Always include a `pytest.skip` fallback so tests pass locally without Docker.
 
 ## Troubleshooting
 
-### Backend Server Won't Start
-Check logs:
-```bash
-docker compose logs backend-test
-```
-
-### Tests Timing Out
-Increase the healthcheck timeout in `docker-compose.yml` or wait longer:
-```bash
-docker compose --profile integration run --timeout 60 test-integration
-```
-
-### Port Already in Use
-The container's port 8080 is dynamically assigned. If you need a specific port:
-```bash
-docker compose --profile integration run -p 8080:8080 backend-test
-```
-
-### Permission Issues
-Ensure the songs directory is readable:
-```bash
-chmod -R a+r /path/to/songs
-```
-
-## CI/CD Integration
-
-For continuous integration, run all tests including integration tests:
-```bash
-cd deploy/docker
-docker compose --profile test run test-all
-```
-
-The exit code reflects test success (0) or failure (non-zero).
+| Problem | Fix |
+|---------|-----|
+| Backend won't start | `docker compose logs backend-test` |
+| Tests timing out | Increase healthcheck timeout in `docker-compose.yml` |
+| Port in use | Docker assigns ports dynamically; check `docker compose ps` |
 
 ## Performance Notes
 

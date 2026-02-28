@@ -1,6 +1,11 @@
-# Legacy PyKaraoke Issues
+# Legacy Issues
 
-This directory contains documentation of issues from the original PyKaraoke project (https://github.com/kelvinlawson/pykaraoke).
+[← Home](../index.md) · [Developer Guide](../developers.md)
+
+---
+
+Documentation of issues inherited from the original
+[PyKaraoke project](https://github.com/kelvinlawson/pykaraoke).
 
 ## Files
 

@@ -1,10 +1,10 @@
-# Repository Reorganization (Completed)
+# Repository Reorganization (Historical)
 
-[← Back to Home](../index.md) | [Developer Guide](../developers.md)
+[← Home](../index.md) · [Developer Guide](../developers.md)
 
 ---
 
-> **Note:** This is a historical record. The reorganization described below was completed on 2026-01-31.
+> Completed 2026-01-31. Preserved for historical reference.
 
 ## Summary
 

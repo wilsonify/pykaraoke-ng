@@ -1,6 +1,7 @@
-# 🎤 PyKaraoke-NG
+# PyKaraoke-NG
 
-A free, open-source karaoke player for Linux, Windows, and macOS.
+A slim, keyboard-driven karaoke queue manager for working DJs.
+Linux, Windows, macOS.
 
 ---
 
@@ -8,61 +9,61 @@ A free, open-source karaoke player for Linux, Windows, and macOS.
 
 ---
 
-## Features
+## What It Is
 
-| 🎵 Multiple Formats | 📚 Song Database | 🖥️ Cross-Platform | 🚀 Desktop App |
-|---------------------|------------------|-------------------|----------------|
-| CDG+MP3, MIDI/KAR, MPEG video | Automatically catalog and search | Linux, Windows, macOS | Tauri (Rust + web UI) |
+PyKaraoke-NG is a desktop karaoke application designed to sit beside your
+primary DJ software. It occupies a narrow strip of screen (300–450 px),
+searches and queues songs via keyboard, and stays out of the way during
+a live set.
+
+It is a professional utility panel — not a full-screen media player.
 
 ## Quick Start
 
 ```bash
-# Install
-uv pip install pykaraoke-ng   # or: pip install pykaraoke-ng
+pip install pykaraoke-ng    # or: uv pip install pykaraoke-ng
 
-# Play files directly
-pycdg song.cdg
-pykar song.kar
-pympg song.mpg
+pycdg song.cdg              # CD+G
+pykar song.kar              # MIDI / KAR
+pympg song.mpg              # video
 ```
 
 For development setup, see the **[Quick Start Guide](quickstart.md)**.
 
 ## Supported Formats
 
-| Format | Extensions | Player | Description |
-|--------|-----------|--------|-------------|
-| CD+G | `.cdg` + `.mp3` | pycdg | Standard karaoke with graphics |
-| MIDI Karaoke | `.kar`, `.mid` | pykar | MIDI with embedded lyrics |
-| MPEG Video | `.mpg`, `.mpeg`, `.avi`, `.divx`, `.xvid` | pympg | Video karaoke |
+| Format | Extensions | Description |
+|--------|-----------|-------------|
+| CD+G | `.cdg` + `.mp3` | Graphics + audio karaoke |
+| MIDI Karaoke | `.kar`, `.mid` | MIDI with embedded lyrics |
+| MPEG Video | `.mpg`, `.mpeg`, `.avi` | Video karaoke |
 
 ## Documentation
 
-### Guides
+### By Audience
 
-- **[User Guide](users.md)** — Install and use PyKaraoke-NG
-- **[Developer Guide](developers.md)** — Set up development and contribute
-- **[Admin Guide](administrators.md)** — Deploy with Docker, Kubernetes, or Tauri
-- **[Quick Start](quickstart.md)** — Fast setup after cloning
+- **[User Guide](users.md)** — Install, set up a song library, run karaoke
+- **[Developer Guide](developers.md)** — Clone, test, contribute
+- **[Admin Guide](administrators.md)** — Deploy via Docker, Kubernetes, or Tauri
 
 ### Architecture
 
-- **[Overview](architecture/overview.md)** — System design and communication protocol
-- **[Repository Structure](architecture/structure.md)** — Project layout and key modules
-- **[Next Steps](architecture/next-steps.md)** — Open work and future features
-- **[Reorganization](architecture/reorganization.md)** — Historical record of the repo restructuring
+- **[Overview](architecture/overview.md)** — System design and IPC protocol
+- **[Repository Structure](architecture/structure.md)** — Project layout
+- **[Backend Modes](backend-modes.md)** — stdio and HTTP API reference
+
+### Development
+
+- **[Integration Testing](development/integration-testing.md)** — Docker-based test orchestration
+- **[SonarQube Setup](development/sonarqube-setup.md)** — CI quality scanning
+- **[Code Quality History](development/quality-improvements.md)** — Python 3 migration log
 
 ### Reference
 
-- **[Backend Modes](backend-modes.md)** — stdio and HTTP API documentation
-- **[SonarQube Setup](development/sonarqube-setup.md)** — Code quality scanning
-- **[Quality Improvements](development/quality-improvements.md)** — Python 3 migration and security fixes
-- **[Legacy Issues](issues/README.md)** — Issues from the original PyKaraoke project
-
-### Historical
-
-- **[Changelog](changelog.txt)** — Version history (pre-NG)
-- **[Legacy README](readme-legacy.txt)** — Original project documentation
+- **[UX Design Spec](../specs/ux-design.md)** — Slim sidebar design rationale
+- **[Project Constitution](../specs/constitution.md)** — Engineering invariants
+- **[Open Work](architecture/next-steps.md)** — Backlog and future features
+- **[Legacy Issues](issues/README.md)** — Issues from the original PyKaraoke
 
 ## License
 
