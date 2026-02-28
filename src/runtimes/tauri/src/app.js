@@ -225,7 +225,7 @@ class PyKaraokeApp {
                     <div class="song-item-title">${song.title || song.filename}</div>
                     <div class="song-item-artist">${song.artist || ''}</div>
                 </div>
-                <button class="song-item-remove" data-remove-index="${index}" title="Remove">✕</button>
+                <button class="song-item-remove" data-remove-index="${index}" title="Remove" aria-label="Remove from queue">✕</button>
             </div>
         `).join('');
         
@@ -268,6 +268,7 @@ class PyKaraokeApp {
         // Add click handlers (click or Enter to queue)
         resultsEl.querySelectorAll('.song-item').forEach(item => {
             item.setAttribute('tabindex', '0');
+            item.setAttribute('role', 'option');
             item.addEventListener('click', () => {
                 const index = parseInt(item.dataset.index);
                 this.handleAddToPlaylist(results[index]);
