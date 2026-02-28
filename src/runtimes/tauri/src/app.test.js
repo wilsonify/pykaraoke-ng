@@ -610,3 +610,113 @@ describe("Regression: tauri.conf.json dialog allowlist", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Slim sidebar layout: keyboard UX, incremental search, inline queue mgmt
+// ---------------------------------------------------------------------------
+
+describe("Slim sidebar: keyboard-first UX", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("app.js registers Escape key to clear search", () => {
+    assert.ok(
+      appJsSource.includes("Escape"),
+      "app.js should handle Escape key to clear the search input"
+    );
+  });
+
+  it("app.js registers / key to focus search bar", () => {
+    assert.ok(
+      appJsSource.includes("'/'") || appJsSource.includes('"/"'),
+      "app.js should handle '/' key to focus the search bar"
+    );
+  });
+
+  it("app.js implements incremental search via input event", () => {
+    assert.ok(
+      appJsSource.includes("'input'") || appJsSource.includes('"input"'),
+      "app.js should listen for 'input' events on the search field for incremental search"
+    );
+  });
+
+  it("app.js debounces incremental search", () => {
+    assert.ok(
+      appJsSource.includes("_searchDebounce") && appJsSource.includes("setTimeout"),
+      "app.js should debounce incremental search to avoid excessive backend calls"
+    );
+  });
+});
+
+describe("Slim sidebar: inline queue management", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("playlist items include inline remove button", () => {
+    assert.ok(
+      appJsSource.includes("song-item-remove"),
+      "app.js should render inline remove buttons (song-item-remove) in playlist items"
+    );
+  });
+
+  it("does not use confirm() for clear playlist", () => {
+    // confirm() is a modal dialog that interrupts DJ workflow
+    const hasConfirm = /\bconfirm\s*\(/.test(appJsSource);
+    assert.ok(
+      !hasConfirm,
+      "app.js must not use confirm() — modal dialogs interrupt live DJ workflow"
+    );
+  });
+
+  it("search results are keyboard-navigable with tabindex", () => {
+    assert.ok(
+      appJsSource.includes("tabindex"),
+      "app.js should set tabindex on search result items for keyboard navigation"
+    );
+  });
+
+  it("Enter key on search results adds to queue", () => {
+    assert.ok(
+      appJsSource.includes("'Enter'") || appJsSource.includes('"Enter"'),
+      "app.js should handle Enter key on search result items to add to queue"
+    );
+  });
+});
+
+describe("Slim sidebar: Tauri window dimensions", () => {
+  const confPath = path.join(
+    __dirname,
+    "..",
+    "src-tauri",
+    "tauri.conf.json"
+  );
+  const conf = JSON.parse(fs.readFileSync(confPath, "utf-8"));
+
+  it("default window width is slim sidebar size (≤450px)", () => {
+    const width = conf.tauri?.windows?.[0]?.width;
+    assert.ok(
+      typeof width === "number" && width <= 450,
+      `Default window width should be ≤450px for sidebar mode, got ${width}`
+    );
+  });
+
+  it("window is not fullscreen by default", () => {
+    assert.equal(
+      conf.tauri?.windows?.[0]?.fullscreen,
+      false,
+      "Window must not be fullscreen by default"
+    );
+  });
+
+  it("window is resizable", () => {
+    assert.equal(
+      conf.tauri?.windows?.[0]?.resizable,
+      true,
+      "Window should be resizable so DJs can adjust if needed"
+    );
+  });
+});

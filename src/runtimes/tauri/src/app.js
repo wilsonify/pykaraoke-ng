@@ -54,10 +54,33 @@ class PyKaraokeApp {
             document.getElementById('volume-value').textContent = `${e.target.value}%`;
         });
         
-        // Search
+        // Search — incremental filtering on every keystroke
         document.getElementById('search-btn').addEventListener('click', () => this.handleSearch());
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
+        const searchInput = document.getElementById('search-input');
+        searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.handleSearch();
+        });
+        searchInput.addEventListener('input', () => {
+            if (this._searchDebounce) clearTimeout(this._searchDebounce);
+            this._searchDebounce = setTimeout(() => this.handleSearch(), 200);
+        });
+        
+        // Keyboard-first UX: Esc clears search, global shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Esc clears and focuses search
+            if (e.key === 'Escape') {
+                const input = document.getElementById('search-input');
+                input.value = '';
+                input.focus();
+                e.preventDefault();
+            }
+            // "/" focuses search bar (when not already typing)
+            if (e.key === '/' && document.activeElement.tagName !== 'INPUT'
+                && document.activeElement.tagName !== 'TEXTAREA'
+                && document.activeElement.tagName !== 'SELECT') {
+                document.getElementById('search-input').focus();
+                e.preventDefault();
+            }
         });
         
         // Library management
@@ -198,21 +221,28 @@ class PyKaraokeApp {
         playlistEl.innerHTML = playlist.map((song, index) => `
             <div class="song-item ${this.currentState?.playlist_index === index ? 'active' : ''}" 
                  data-index="${index}">
-                <div class="song-item-title">${song.title || song.filename}</div>
-                <div class="song-item-artist">${song.artist || ''}</div>
+                <div class="song-item-info">
+                    <div class="song-item-title">${song.title || song.filename}</div>
+                    <div class="song-item-artist">${song.artist || ''}</div>
+                </div>
+                <button class="song-item-remove" data-remove-index="${index}" title="Remove">✕</button>
             </div>
         `).join('');
         
-        // Add click handlers
+        // Add click handlers for play
         playlistEl.querySelectorAll('.song-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                if (e.target.classList.contains('song-item-remove')) return;
                 const index = parseInt(item.dataset.index);
                 this.handlePlayFromPlaylist(index);
             });
-            
-            item.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                const index = parseInt(item.dataset.index);
+        });
+        
+        // Inline remove buttons
+        playlistEl.querySelectorAll('.song-item-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const index = parseInt(btn.dataset.removeIndex);
                 this.handleRemoveFromPlaylist(index);
             });
         });
@@ -228,16 +258,25 @@ class PyKaraokeApp {
         
         resultsEl.innerHTML = results.map((song, index) => `
             <div class="song-item" data-index="${index}">
-                <div class="song-item-title">${song.title || song.filename}</div>
-                <div class="song-item-artist">${song.artist || ''}</div>
+                <div class="song-item-info">
+                    <div class="song-item-title">${song.title || song.filename}</div>
+                    <div class="song-item-artist">${song.artist || ''}</div>
+                </div>
             </div>
         `).join('');
         
-        // Add click handlers
+        // Add click handlers (click or Enter to queue)
         resultsEl.querySelectorAll('.song-item').forEach(item => {
+            item.setAttribute('tabindex', '0');
             item.addEventListener('click', () => {
                 const index = parseInt(item.dataset.index);
                 this.handleAddToPlaylist(results[index]);
+            });
+            item.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const index = parseInt(item.dataset.index);
+                    this.handleAddToPlaylist(results[index]);
+                }
             });
         });
     }
@@ -363,9 +402,7 @@ class PyKaraokeApp {
     }
     
     async handleClearPlaylist() {
-        if (confirm('Clear entire playlist?')) {
-            await this.sendCommand('clear_playlist');
-        }
+        await this.sendCommand('clear_playlist');
     }
     
     async handlePlayFromPlaylist(index) {

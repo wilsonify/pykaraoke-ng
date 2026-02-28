@@ -47,8 +47,8 @@
         "fullscreen": false,
         "resizable": true,
         "title": "PyKaraoke NG",
-        "width": 1024,
-        "height": 768
+        "width": 400,
+        "height": 800
       }
     ]
   }
