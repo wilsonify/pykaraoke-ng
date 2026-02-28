@@ -594,16 +594,17 @@ describe("Regression: tauri.conf.json dialog allowlist", () => {
     );
   });
 
-  it("beforeBuildCommand is empty (CI stages files via a separate step)", () => {
-    // The beforeBuildCommand in main uses ../../../../ paths which are one level
-    // too deep when tauri is invoked from src/runtimes/tauri/. The CI workflow
-    // instead stages files in a separate step and overrides beforeBuildCommand
-    // to empty via TAURI_CONFIG.
+  it("beforeBuildCommand uses the cross-platform node staging script", () => {
+    // The beforeBuildCommand must invoke scripts/stage-backend.js (a cross-platform
+    // Node.js script that stages Python files into src-tauri/backend/).
+    // Shell one-liners using bash -c '...' with ../../../../ paths are forbidden:
+    // they resolve to the parent of the repo root and fail on CI (file not found),
+    // and they also fail outright on Windows where bash is not guaranteed.
     assert.equal(
-      conf.build?.beforeBuildCommand ?? "",
-      "",
-      "tauri.conf.json beforeBuildCommand must be empty; Python staging is " +
-        "handled by the CI 'Stage Python backend for bundling' step"
+      conf.build?.beforeBuildCommand,
+      "node scripts/stage-backend.js",
+      "tauri.conf.json beforeBuildCommand must use 'node scripts/stage-backend.js' " +
+        "(cross-platform; bash ../../../../ one-liners fail on Windows and CI)"
     );
   });
 });

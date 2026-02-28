@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "node scripts/stage-backend.js",
     "devPath": "../src",
     "distDir": "../src",
     "withGlobalTauri": true
