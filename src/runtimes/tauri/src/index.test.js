@@ -91,6 +91,39 @@ describe("index.html structure", () => {
   });
 });
 
+describe("Slim sidebar layout structure", () => {
+  it("does NOT use left-panel/right-panel horizontal layout", () => {
+    assert.ok(
+      !html.includes('class="left-panel"') && !html.includes('class="right-panel"'),
+      "index.html must not use left-panel/right-panel — layout should be a single vertical column"
+    );
+  });
+
+  it("uses vertical flow order: search → results → player → queue", () => {
+    const searchIdx = html.indexOf('search-section');
+    const resultsIdx = html.indexOf('search-results');
+    const playerIdx = html.indexOf('player-section');
+    const queueIdx = html.indexOf('playlist-section');
+    assert.ok(searchIdx < resultsIdx, "search-section should appear before search-results");
+    assert.ok(resultsIdx < playerIdx, "search-results should appear before player-section");
+    assert.ok(playerIdx < queueIdx, "player-section should appear before playlist-section");
+  });
+
+  it("search filters are collapsible via <details>", () => {
+    assert.ok(
+      html.includes('<details') && html.includes('search-filters'),
+      "Library controls should be inside a collapsible <details> element"
+    );
+  });
+
+  it("does not have oversized h1 header", () => {
+    assert.ok(
+      !html.includes('<h1>'),
+      "index.html should use compact header, not oversized h1"
+    );
+  });
+});
+
 describe("CSS classes used by app.js exist in HTML", () => {
   const requiredClasses = [
     "song-item",
