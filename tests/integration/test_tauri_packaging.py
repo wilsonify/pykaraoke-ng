@@ -182,24 +182,52 @@ class TestTauriBundleResources:
         """beforeBuildCommand must copy the Python backend into the staging dir."""
         conf = json.loads(TAURI_CONF.read_text())
         before_build = conf.get("build", {}).get("beforeBuildCommand", "")
-        assert "backend" in before_build and "pykaraoke" in before_build, (
-            "tauri.conf.json beforeBuildCommand must stage the Python "
-            "backend tree into the backend/ directory so the resource "
-            "glob can bundle it"
-        )
+        assert before_build, "tauri.conf.json must have a beforeBuildCommand"
+
+        # The command may be an inline shell command or a script invocation.
+        # If it references a script file, read that script and verify it
+        # stages the backend/pykaraoke tree.
+        if before_build.startswith("node "):
+            script_rel = before_build.split("node ", 1)[1].strip()
+            script_path = TAURI_CONF.parent.parent / script_rel
+            assert script_path.exists(), (
+                f"beforeBuildCommand references '{script_rel}' but "
+                f"{script_path} does not exist"
+            )
+            script_src = script_path.read_text()
+            assert "backend" in script_src and "pykaraoke" in script_src, (
+                "Stage-backend script must reference 'backend' and "
+                "'pykaraoke' to stage the Python backend tree"
+            )
+        else:
+            assert "backend" in before_build and "pykaraoke" in before_build, (
+                "tauri.conf.json beforeBuildCommand must stage the Python "
+                "backend tree into the backend/ directory so the resource "
+                "glob can bundle it"
+            )
 
     def test_core_python_modules_are_bundled(self):
         """Critical Python modules should be staged by the beforeBuildCommand.
 
         Since resources now uses a glob, we verify the beforeBuildCommand
-        copies the required module directories (core, config, players).
+        (or the script it invokes) copies the required module directories
+        (core, config, players).
         """
         conf = json.loads(TAURI_CONF.read_text())
         before_build = conf.get("build", {}).get("beforeBuildCommand", "")
+
+        # Resolve the text that should list the module directories.
+        if before_build.startswith("node "):
+            script_rel = before_build.split("node ", 1)[1].strip()
+            staging_text = (TAURI_CONF.parent.parent / script_rel).read_text()
+        else:
+            staging_text = before_build
+
         for module_dir in ["core", "config", "players"]:
-            assert module_dir in before_build, (
-                f"beforeBuildCommand should copy the pykaraoke/{module_dir}/ "
-                f"directory into the backend staging tree"
+            assert module_dir in staging_text, (
+                f"beforeBuildCommand (or its staging script) should copy "
+                f"the pykaraoke/{module_dir}/ directory into the backend "
+                f"staging tree"
             )
 
 
