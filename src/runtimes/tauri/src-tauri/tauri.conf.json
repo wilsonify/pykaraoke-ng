@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "bash -c 'cd src-tauri && rm -rf backend && mkdir -p backend/pykaraoke/core backend/pykaraoke/config backend/pykaraoke/players && cp ../../../../src/pykaraoke/__init__.py backend/pykaraoke/ && cp ../../../../src/pykaraoke/core/*.py backend/pykaraoke/core/ && cp ../../../../src/pykaraoke/config/*.py backend/pykaraoke/config/ && cp ../../../../src/pykaraoke/players/*.py backend/pykaraoke/players/'",
+    "beforeBuildCommand": "node scripts/stage-backend.js",
     "devPath": "../src",
     "distDir": "../src",
     "withGlobalTauri": true
