@@ -26,6 +26,14 @@ _[Link to `spec.md` or feature name]_
 
 - _[Public API changes, config format changes, migration needs]_
 
+## CI/CD and Build-System Impact
+
+- _[Does this change any CI workflow, build script, or packaging config?]_
+- _[Will the change work on all three CI platforms (Linux, Windows, macOS)?]_
+- _[Are there new relative-path assumptions?  What directory is the CWD?]_
+- _[Do existing integration tests validate behaviour or literal strings?]_
+- _[How will you test this locally before pushing? (act, cargo check, etc.)]_
+
 ## Dependency Impact
 
 - _[New dependencies needed? License compatibility?]_

@@ -64,6 +64,11 @@ No implementation may begin before specification artefacts exist.
 - Hardcoded platform assumptions (path separators, line endings, locale
   defaults, filename length limits) are prohibited.
 - Identical input must produce byte-identical output on every platform.
+- **Build tooling and CI commands are subject to the same constraint.**
+  Shell-specific syntax (`bash -c`, `rm -rf`, `cp`, `mkdir -p`) must
+  not appear in build configuration files that execute on all platforms.
+  Use cross-platform scripting (Node.js, Python, or Rust build scripts)
+  instead.
 
 ### 3.3 Strongly Typed Interfaces
 
@@ -104,6 +109,23 @@ Rules:
 - Log entries must carry contextual metadata sufficient to diagnose the
   triggering condition.
 - Failure states must be observable without requiring a debugger.
+
+### 3.7 Build-System Determinism
+
+- Build configuration changes (CI workflows, Tauri config, Dockerfiles,
+  Cargo build scripts) are treated as production code.  They require the
+  same specification, review, and test discipline as application code.
+- Every build command must succeed on **all three CI platforms** (Linux,
+  Windows, macOS).  Platform-specific steps require explicit conditional
+  guards (e.g. `if: matrix.platform == 'linux'`).
+- Relative paths in build configuration must be documented with their
+  base directory.  Path depth changes require updating all references.
+- Integration tests that validate build configuration must verify the
+  **effect** of a command (files staged, artifacts produced), not the
+  **literal text** of the command string.  Brittle string-matching
+  assertions against build commands are prohibited.
+- Build-system changes must be validated locally (`act`, `cargo check`,
+  or equivalent) before being pushed.
 
 ---
 

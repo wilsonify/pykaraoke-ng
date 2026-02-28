@@ -37,13 +37,21 @@ _[Link to `plan.md` or feature name]_
 - [ ] **T10** — Write integration tests verifying end-to-end behavior
 - [ ] **T11** — Verify cross-platform compatibility (path handling, etc.)
 
+### Phase 4b: Build / Packaging _(if applicable)_
+
+- [ ] **T12** — Verify build commands are cross-platform (no bare `bash`/`cp`/`rm`)
+- [ ] **T13** — Validate relative paths resolve correctly from the actual CWD
+- [ ] **T14** — Run `act -j build --matrix platform:linux` locally and confirm success
+- [ ] **T15** — Confirm integration tests validate **effects**, not command strings
+- [ ] **T16** — If CI workflow changed, dry-run with `act -n` on all modified jobs
+
 ### Phase 5: Documentation & Validation
 
-- [ ] **T12** — Update module/function docstrings
-- [ ] **T13** — Update user-facing documentation if needed
-- [ ] **T14** — Run full CI pipeline and confirm all stages pass
-- [ ] **T15** — Verify SonarQube quality gate passes (0 new issues)
-- [ ] **T16** — Complete `/speckit.checklist` — all items green
+- [ ] **T17** — Update module/function docstrings
+- [ ] **T18** — Update user-facing documentation if needed
+- [ ] **T19** — Run full CI pipeline and confirm all stages pass
+- [ ] **T20** — Verify SonarQube quality gate passes (0 new issues)
+- [ ] **T21** — Complete `/speckit.checklist` — all items green
 
 ## Estimated Effort
 
