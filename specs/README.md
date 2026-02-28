@@ -8,17 +8,26 @@ This directory contains all Spec-Driven Development artifacts managed by
 ```
 specs/
 ├── constitution.md          # Project constitution (governance + invariants)
+├── ux-design.md             # UX design spec (DJ utility panel, slim sidebar)
+├── build-system-invariants.md # Build-system rules and postmortem log
+├── workflow.md              # Developer workflow guide (Spec Kit lifecycle)
 ├── templates/
 │   ├── feature-spec.md      # Template for /speckit.specify
 │   ├── clarification.md     # Template for /speckit.clarify
 │   ├── technical-plan.md    # Template for /speckit.plan
 │   └── task-breakdown.md    # Template for /speckit.tasks
 ├── features/
-│   └── NNN-feature-name/    # One directory per feature branch
-│       ├── spec.md          # Feature specification
-│       ├── clarify.md       # Clarification notes
-│       ├── plan.md          # Technical plan
-│       ├── tasks.md         # Task breakdown
+│   ├── 001-filename-parser-edge-cases/
+│   │   ├── spec.md
+│   │   ├── clarify.md
+│   │   ├── plan.md
+│   │   ├── tasks.md
+│   │   └── checklist.md
+│   └── 002-slim-sidebar-layout/
+│       ├── spec.md          # Slim sidebar feature specification
+│       ├── clarify.md       # Clarification (risks, cross-platform, compat)
+│       ├── plan.md          # Technical plan (DOM, CSS, Tauri config)
+│       ├── tasks.md         # Phased task breakdown
 │       └── checklist.md     # Completion checklist
 ├── archive/                 # Completed and merged specs
 └── README.md                # This file

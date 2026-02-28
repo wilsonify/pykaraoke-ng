@@ -1,7 +1,7 @@
 # Build-System Invariants
 
 > **Audience:** All contributors
-> **Governance:** [constitution.md](constitution.md) §3.2, §3.7
+> **Governance:** [constitution.md](constitution.md) §4.2, §4.7
 > **Last updated:** 2026-02-28
 
 This document captures hard-won lessons about the build system.

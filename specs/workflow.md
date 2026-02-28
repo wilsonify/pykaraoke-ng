@@ -116,6 +116,8 @@ Surface cross-cutting concerns:
 - **Performance** — Latency budgets, bulk operations
 - **Cross-platform** — Filesystem differences, path handling
 - **Backward compatibility** — API changes, migration needs
+- **UX compliance** — Does the change respect the slim sidebar posture?
+  (constitution §2.3, ux-design.md)
 - **Dependencies** — New libraries needed?
 - **Ambiguities** — Anything unclear in the spec?
 - **Risks** — What could go wrong?
@@ -223,6 +225,7 @@ Check every item:
 - [x] Build matrix passes on all platforms (linux, windows, macos)
 - [x] No shell-specific commands in cross-platform build config
 - [x] Integration tests validate effects, not literal command strings
+- [x] UX invariants verified (constitution §2.3, ux-design.md)
 - [x] Code reviewed and approved
 ```
 
