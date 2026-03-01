@@ -856,7 +856,7 @@ class SettingsStruct:
         self.folder_list = []
         self.cdg_extensions = [".cdg"]
         self.kar_extensions = [".kar", ".mid"]
-        self.mpg_extensions = [".mpg", ".mpeg", ".avi", ".divx", ".xvid"]
+        self.mpg_extensions = [".mpg", ".mpeg", ".avi", ".divx", ".xvid", ".mp3", ".ogg"]
         self.ignored_extensions = []
         self.look_inside_zips = True
         self.read_titles_txt = True
@@ -1605,6 +1605,7 @@ class SongDB:
             lower_title = song.title.lower()
             lower_artist = song.artist.lower()
             lower_path = song.display_filename.lower()
+            lower_filepath = song.filepath.lower()
             # If it's a zip file, also include the zip filename
             if song.zip_stored_name:
                 lower_zip_name = os.path.basename(song.filepath).lower()
@@ -1618,6 +1619,7 @@ class SongDB:
                         and (term not in lower_artist)
                         and (term not in lower_zip_name)
                         and (term not in lower_path)
+                        and (term not in lower_filepath)
                     ):
                         misses = misses + 1
                 except UnicodeDecodeError:
