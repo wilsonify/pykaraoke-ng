@@ -14,6 +14,7 @@
 #   docker compose --profile tauri-build up # Build Tauri binaries
 #   docker compose --profile test up        # Run tests
 #   docker compose --profile e2e up --abort-on-container-exit test-e2e  # Selenium E2E tests
+#   docker compose --profile e2e-bdd up --abort-on-container-exit test-e2e-bdd  # BDD E2E tests
 
 name: pykaraoke-ng
 
@@ -406,7 +407,7 @@ services:
       - pykaraoke-net
 
   # ==========================================================================
-  # E2E Test Runner (Selenium against the live UI)
+  # E2E Test Runner (Selenium against the live UI) — Legacy Python
   # ==========================================================================
   test-e2e:
     build:
@@ -431,6 +432,33 @@ services:
       - tests/integration/test_ui_buttons.py
       - -v
       - --tb=short
+    depends_on:
+      selenium:
+        condition: service_started
+      ui:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # BDD E2E Test Runner (Cucumber.js + WebdriverIO against the live UI)
+  # ==========================================================================
+  test-e2e-bdd:
+    image: node:20-slim
+    container_name: pykaraoke-test-e2e-bdd
+    profiles:
+      - e2e-bdd
+    working_dir: /app/e2e
+    environment:
+      - E2E_APP_URL=http://ui:3000
+      - SELENIUM_URL=http://selenium:4444/wd/hub
+    volumes:
+      - ../../src/runtimes/tauri/e2e:/app/e2e:ro
+      - ../../src/runtimes/tauri/src:/app/src:ro
+      - ../../src/runtimes/tauri/src-tauri:/app/src-tauri:ro
+    command: ["sh", "-c", "npm ci && npm run test:e2e:ci"]
     depends_on:
       selenium:
         condition: service_started
