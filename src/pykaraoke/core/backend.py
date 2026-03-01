@@ -30,6 +30,10 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+# Suppress the pygame "Hello from the pygame community" banner that would
+# otherwise be printed to stdout and corrupt the JSON IPC protocol.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+
 # Core pykaraoke imports (business logic only)
 try:
     from pykaraoke.config.constants import (  # noqa: F401 - Used for future expansion
@@ -402,7 +406,7 @@ class PyKaraokeBackend:
         """Search the song library"""
         query = params.get("query", "")
         try:
-            results = self.song_db.search_database(query)
+            results = self.song_db.search_database(query, database.AppYielder())
             return {
                 "status": "ok",
                 "data": {"results": [self._song_to_dict(song) for song in results]},
@@ -420,25 +424,32 @@ class PyKaraokeBackend:
 
     def _handle_scan_library(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Scan library folders"""
-        # This is a long-running operation that should be async
         logger.info("Starting library scan")
         try:
-            self.song_db.build_search_database()
+            self.song_db.build_search_database(
+                database.AppYielder(), database.BusyCancelDialog()
+            )
+            self.song_db.save_database()
             self._emit_event("library_scan_complete", {})
-            return {"status": "ok", "message": "Scan started"}
+            return {"status": "ok", "message": "Library scan complete"}
         except (OSError, RuntimeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_add_folder(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Add a folder to the library"""
+        """Add a folder to the library and scan it for songs."""
         folder = params.get("folder")
         if not folder:
             return {"status": "error", "message": "folder required"}
 
         try:
             self.song_db.folder_add(folder)
-            return {"status": "ok"}
-        except (OSError, ValueError, AttributeError) as e:
+            self.song_db.save_settings()
+            # Scan the newly added folder so its songs are available immediately
+            self.song_db.add_file(folder)
+            self.song_db.save_database()
+            self._emit_event("library_scan_complete", {})
+            return {"status": "ok", "message": f"Folder added and scanned: {folder}"}
+        except (OSError, RuntimeError, ValueError, AttributeError) as e:
             return {"status": "error", "message": str(e)}
 
     # Settings handlers
@@ -479,16 +490,40 @@ class PyKaraokeBackend:
         manager.quit()
 
 
-def create_stdio_server(backend: PyKaraokeBackend):
+def create_stdio_server(backend: PyKaraokeBackend, *, json_out=None):
     """
     Create a stdio-based command server.
     Reads JSON commands from stdin and writes responses to stdout.
+
+    IMPORTANT: stray ``print()`` calls buried inside the legacy database
+    code (ZIP scan errors, titles-file warnings, etc.) would corrupt the
+    JSON IPC stream that the Tauri/Rust host reads.  To prevent this we
+    redirect ``sys.stdout`` → ``sys.stderr`` so *all* ordinary prints end
+    up on stderr, and we keep a private reference to the real stdout for
+    the JSON protocol only.
+
+    Parameters
+    ----------
+    json_out : file-like, optional
+        The file object connected to the real stdout (the JSON protocol
+        channel).  If *None*, ``sys.stdout`` is used (and then swapped
+        to stderr).
     """
 
+    # ── guard the JSON channel ──────────────────────────────────────
+    if json_out is None:
+        json_out = sys.stdout          # private handle for protocol output
+        sys.stdout = sys.stderr        # stray print() → stderr, not the pipe
+
+    def _write_json(obj: dict[str, Any]):
+        """Write a single JSON object to the protocol channel."""
+        json_out.write(json.dumps(obj))
+        json_out.write("\n")
+        json_out.flush()
+
     def event_callback(event: dict[str, Any]):
-        """Send events to frontend via stdout"""
-        output = {"type": "event", "event": event}
-        print(json.dumps(output), flush=True)
+        """Send events to frontend via the protocol channel."""
+        _write_json({"type": "event", "event": event})
 
     backend.set_event_callback(event_callback)
 
@@ -503,20 +538,17 @@ def create_stdio_server(backend: PyKaraokeBackend):
             try:
                 command = json.loads(line)
                 response = backend.handle_command(command)
-                output = {"type": "response", "response": response}
-                print(json.dumps(output), flush=True)
+                _write_json({"type": "response", "response": response})
             except json.JSONDecodeError as e:
-                error_response = {
+                _write_json({
                     "type": "response",
                     "response": {"status": "error", "message": f"Invalid JSON: {e}"},
-                }
-                print(json.dumps(error_response), flush=True)
+                })
             except (ValueError, TypeError) as e:
-                error_response = {
+                _write_json({
                     "type": "response",
                     "response": {"status": "error", "message": str(e)},
-                }
-                print(json.dumps(error_response), flush=True)
+                })
 
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
@@ -782,6 +814,15 @@ Examples:
 
     logger.info("PyKaraoke Backend starting in %s mode", mode)
 
+    # In stdio mode the real stdout is the JSON IPC channel to the Rust
+    # host.  Redirect sys.stdout → stderr *before* creating the backend
+    # so that stray print() calls during initialisation (settings parser,
+    # database loader, …) never corrupt the protocol stream.
+    json_out = None
+    if mode == "stdio":
+        json_out = sys.stdout            # keep a private handle
+        sys.stdout = sys.stderr           # stray print() → stderr
+
     # Create backend instance
     backend = PyKaraokeBackend()
 
@@ -789,7 +830,7 @@ Examples:
     if mode == "http":
         create_http_server(backend, host=args.host, port=args.port)
     else:
-        create_stdio_server(backend)
+        create_stdio_server(backend, json_out=json_out)
 
 
 if __name__ == "__main__":

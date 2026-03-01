@@ -23,11 +23,14 @@
                     <input type="text" id="search-input" placeholder="Search songs… (Esc to clear)">
                     <button id="search-btn" class="btn btn-primary">Go</button>
                 </div>
-                <details class="search-filters">
+                <details class="search-filters" open>
                     <summary>Library</summary>
+                    <div class="folder-input-row">
+                        <input type="text" id="folder-input" placeholder="/path/to/songs" value="/app/songs">
+                        <button id="add-folder-btn" class="btn btn-primary btn-sm">Add</button>
+                    </div>
                     <div class="library-controls">
-                        <button id="add-folder-btn" class="btn btn-secondary btn-sm">Add Folder</button>
-                        <button id="scan-library-btn" class="btn btn-secondary btn-sm">Scan</button>
+                        <button id="scan-library-btn" class="btn btn-secondary btn-sm">Scan Library</button>
                     </div>
                 </details>
             </div>
