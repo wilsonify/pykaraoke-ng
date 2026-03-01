@@ -145,7 +145,15 @@ class PyKaraokeApp {
 
     async handleScanLibrary() {
         this.updateStatus('Scanning library…');
-        try { await this.sendCommand('scan_library'); }
+        try {
+            var r = await this.sendCommand('scan_library');
+            if (r.status === 'ok') {
+                var count = (r.data && r.data.song_count) || 0;
+                this.updateStatus('Scan complete – ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
+            } else {
+                this.updateStatus('Scan finished: ' + (r.message || 'no songs found'));
+            }
+        }
         catch (e) { this.updateStatus('Scan failed: ' + e.message); }
     }
 

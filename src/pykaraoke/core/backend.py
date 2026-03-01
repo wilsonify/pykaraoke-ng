@@ -138,10 +138,24 @@ class PyKaraokeBackend:
         try:
             self.song_db = database.globalSongDB
             self.song_db.load_settings(None)
+            self._auto_configure_folders()
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:
             logger.error("Failed to initialize database: %s", e)
             self.error_message = str(e)
+
+    def _auto_configure_folders(self):
+        """Auto-add default song folders when none are configured."""
+        if self.song_db.settings.folder_list:
+            return  # user already configured folders
+        import os
+        default_dirs = ["/app/songs", "/app/fixtures"]
+        for d in default_dirs:
+            if os.path.isdir(d):
+                self.song_db.folder_add(d)
+                logger.info("Auto-added song folder: %s", d)
+        if self.song_db.settings.folder_list:
+            self.song_db.save_settings()
 
     def set_event_callback(self, callback: Callable[[dict[str, Any]], None]):
         """Set callback for sending events to frontend"""
@@ -429,9 +443,13 @@ class PyKaraokeBackend:
             self.song_db.build_search_database(
                 database.AppYielder(), database.BusyCancelDialog()
             )
+            # Populate song_list so get_library / search work immediately
+            self.song_db.select_sort("filename")
             self.song_db.save_database()
-            self._emit_event("library_scan_complete", {})
-            return {"status": "ok", "message": "Library scan complete"}
+            count = len(self.song_db.full_song_list)
+            logger.info("Library scan complete: %d songs found", count)
+            self._emit_event("library_scan_complete", {"song_count": count})
+            return {"status": "ok", "message": "Library scan complete", "data": {"song_count": count}}
         except (OSError, RuntimeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
@@ -446,6 +464,7 @@ class PyKaraokeBackend:
             self.song_db.save_settings()
             # Scan the newly added folder so its songs are available immediately
             self.song_db.add_file(folder)
+            self.song_db.select_sort("filename")
             self.song_db.save_database()
             self._emit_event("library_scan_complete", {})
             return {"status": "ok", "message": f"Folder added and scanned: {folder}"}
