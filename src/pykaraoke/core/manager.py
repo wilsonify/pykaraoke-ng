@@ -508,9 +508,9 @@ class PykManager:
             metavar="MODE",
             dest="zoom_mode",
             type="choice",
-            choices=settings.Zoom,
+            choices=settings.zoom,
             help="specify the way in which graphics are scaled to fit the window.  The choices are %s."
-            % (", ".join('"%s"' % z for z in settings.Zoom)),
+            % (", ".join('"%s"' % z for z in settings.zoom)),
             default=settings.cdg_zoom,
         )
 
