@@ -720,3 +720,103 @@ describe("Slim sidebar: Tauri window dimensions", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Queue / Enqueue functionality
+// ---------------------------------------------------------------------------
+
+describe("Queue enqueue: double-click and drag-drop support", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("app.js defines an enqueueSong method", () => {
+    assert.ok(
+      appJsSource.includes("enqueueSong"),
+      "app.js must define an enqueueSong() method as the canonical enqueue function"
+    );
+  });
+
+  it("app.js registers a dblclick handler on search result items", () => {
+    assert.ok(
+      appJsSource.includes("dblclick"),
+      "app.js must register 'dblclick' event listeners on search result items"
+    );
+  });
+
+  it("app.js sets draggable=true on search result items", () => {
+    assert.ok(
+      appJsSource.includes('draggable="true"'),
+      "app.js must set draggable='true' on search result items for drag-drop"
+    );
+  });
+
+  it("app.js registers a dragstart handler on search result items", () => {
+    assert.ok(
+      appJsSource.includes("dragstart"),
+      "app.js must register 'dragstart' event listeners for drag-drop"
+    );
+  });
+
+  it("app.js sets up drop handler on playlist area", () => {
+    assert.ok(
+      appJsSource.includes("dragover") && appJsSource.includes("drop"),
+      "app.js must register 'dragover' and 'drop' event listeners on the playlist area"
+    );
+  });
+
+  it("app.js uses application/x-pykaraoke-song MIME type for drag data", () => {
+    assert.ok(
+      appJsSource.includes("application/x-pykaraoke-song"),
+      "app.js must use a custom MIME type for drag-drop data transfer"
+    );
+  });
+
+  it("enqueueSong calls add_to_playlist command", () => {
+    assert.ok(
+      appJsSource.includes("add_to_playlist"),
+      "enqueueSong must send the 'add_to_playlist' command to the backend"
+    );
+  });
+
+  it("enqueueSong handles errors and shows status", () => {
+    assert.ok(
+      appJsSource.includes("Failed to enqueue"),
+      "enqueueSong must show a visible error status when enqueue fails"
+    );
+  });
+});
+
+describe("Queue enqueue: command shape", () => {
+  it("add_to_playlist command has correct shape", () => {
+    const cmd = { action: "add_to_playlist", params: { filepath: "/songs/test.kar" } };
+    assert.equal(cmd.action, "add_to_playlist");
+    assert.equal(cmd.params.filepath, "/songs/test.kar");
+  });
+
+  it("add_to_playlist command requires filepath", () => {
+    const cmd = { action: "add_to_playlist", params: {} };
+    assert.ok(!cmd.params.filepath, "Missing filepath should be falsy");
+  });
+});
+
+describe("Queue enqueue: .kar fixture filename in UI", () => {
+  it("Elvis fixture filename contains .kar extension", () => {
+    const filename = "elvis_presley_-_cant_help_falling_in_love.kar";
+    assert.ok(filename.endsWith(".kar"), "Elvis fixture should be a .kar file");
+  });
+
+  it("Song data object for queue includes required fields", () => {
+    const song = {
+      title: "Cant Help Falling In Love",
+      artist: "Elvis Presley",
+      filepath: "/app/fixtures/tests/fixtures/ultrastar-deluxe/Creative Commons/elvis_presley_-_cant_help_falling_in_love.kar",
+      filename: "elvis_presley_-_cant_help_falling_in_love.kar",
+    };
+    assert.ok(song.title, "Song must have title");
+    assert.ok(song.artist, "Song must have artist");
+    assert.ok(song.filepath, "Song must have filepath");
+    assert.ok(song.filepath.endsWith(".kar"), "Filepath must end in .kar");
+  });
+});

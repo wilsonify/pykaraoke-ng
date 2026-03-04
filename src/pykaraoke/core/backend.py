@@ -367,29 +367,39 @@ class PyKaraokeBackend:
         """Load a song for playback"""
         filepath = params.get("filepath")
         if not filepath:
+            logger.warning("load_song called without filepath")
             return {"status": "error", "message": "filepath required"}
 
         try:
-            self.current_song = self.song_db.makeSongStruct(filepath)
+            logger.info("Loading song: %s", filepath)
+            self.current_song = self.song_db.make_song_struct(filepath)
             self._emit_state_change()
             return {"status": "ok"}
-        except (RuntimeError, ValueError) as e:
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.error("Failed to load song %s: %s", filepath, e)
             return {"status": "error", "message": str(e)}
 
     def _handle_add_to_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
         """Add song to playlist"""
         filepath = params.get("filepath")
         if not filepath:
+            logger.warning("add_to_playlist called without filepath")
             return {"status": "error", "message": "filepath required"}
 
         try:
-            song = self.song_db.makeSongStruct(filepath)
+            logger.info("Enqueueing song: %s", filepath)
+            song = self.song_db.make_song_struct(filepath)
             self.playlist.append(song)
+            logger.info(
+                "Song enqueued: title=%s artist=%s (queue length=%d)",
+                song.title, song.artist, len(self.playlist),
+            )
             self._emit_event(
                 "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
             )
             return {"status": "ok"}
-        except (ValueError, IndexError, AttributeError) as e:
+        except (ValueError, IndexError, AttributeError, OSError, RuntimeError) as e:
+            logger.error("Failed to enqueue %s: %s", filepath, e, exc_info=True)
             return {"status": "error", "message": str(e)}
 
     def _handle_remove_from_playlist(self, params: dict[str, Any]) -> dict[str, Any]:

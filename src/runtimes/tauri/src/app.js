@@ -107,6 +107,35 @@ class PyKaraokeApp {
         if ($('settings-save-btn'))   $('settings-save-btn').addEventListener('click', function() { self.handleSaveSettings(); });
 
         $('clear-playlist-btn').addEventListener('click', function() { self.sendCommand('clear_playlist'); });
+
+        // ── Queue drop-target: accept songs dragged from search results ──
+        var playlist = $('playlist');
+        playlist.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            playlist.classList.add('drag-over');
+        });
+        playlist.addEventListener('dragleave', function() {
+            playlist.classList.remove('drag-over');
+        });
+        playlist.addEventListener('drop', function(e) {
+            e.preventDefault();
+            playlist.classList.remove('drag-over');
+            var raw = e.dataTransfer.getData('application/x-pykaraoke-song');
+            if (!raw) {
+                console.error('[PyKaraoke] drop: no song data in transfer');
+                self.updateStatus('Drop failed: no song data');
+                return;
+            }
+            try {
+                var song = JSON.parse(raw);
+                console.debug('[PyKaraoke] drop: received', song.filepath);
+                self.enqueueSong(song);
+            } catch (err) {
+                console.error('[PyKaraoke] drop: invalid song data', err);
+                self.updateStatus('Drop failed: invalid data');
+            }
+        });
     }
 
     // ── Command handlers ─────────────────────────────────────────────────
@@ -262,7 +291,7 @@ class PyKaraokeApp {
         var html = '';
         for (var i = 0; i < this.searchResults.length; i++) {
             var s = this.searchResults[i];
-            html += '<div class="song-item" data-index="' + i + '" tabindex="0" role="option">'
+            html += '<div class="song-item" data-index="' + i + '" tabindex="0" role="option" draggable="true">'
                   + '<div class="song-item-info">'
                   + '<div class="song-item-title">' + (s.title || s.filename) + '</div>'
                   + '<div class="song-item-artist">' + (s.artist || '') + '</div>'
@@ -271,14 +300,60 @@ class PyKaraokeApp {
         el.innerHTML = html;
 
         el.querySelectorAll('.song-item').forEach(function(item) {
-            var handler = function() {
+            var enqueue = function() {
                 var song = self.searchResults[parseInt(item.dataset.index)];
-                self.sendCommand('add_to_playlist', { filepath: song.filepath });
-                self.updateStatus('Added "' + (song.title || song.filename) + '" to playlist');
+                if (!song || !song.filepath) {
+                    console.error('[PyKaraoke] enqueue failed: no filepath for index', item.dataset.index);
+                    self.updateStatus('Error: song has no file path');
+                    return;
+                }
+                console.debug('[PyKaraoke] enqueue: click/enter on', song.filepath);
+                self.enqueueSong(song);
             };
-            item.addEventListener('click', handler);
-            item.addEventListener('keydown', function(e) { if (e.key === 'Enter') handler(); });
+            // Single-click adds to queue
+            item.addEventListener('click', enqueue);
+            // Double-click also adds (alias for discoverability)
+            item.addEventListener('dblclick', function(e) {
+                e.preventDefault();
+                console.debug('[PyKaraoke] enqueue: double-click on index', item.dataset.index);
+                enqueue();
+            });
+            item.addEventListener('keydown', function(e) { if (e.key === 'Enter') enqueue(); });
+            // Drag-start: attach song data for drop into queue
+            item.addEventListener('dragstart', function(e) {
+                var song = self.searchResults[parseInt(item.dataset.index)];
+                console.debug('[PyKaraoke] drag-start:', song && song.filepath);
+                e.dataTransfer.setData('application/x-pykaraoke-song', JSON.stringify(song));
+                e.dataTransfer.effectAllowed = 'copy';
+            });
         });
+    }
+
+    /**
+     * Central enqueue function used by click, double-click, drag-drop,
+     * and keyboard handlers.  All paths converge here so logging and
+     * error handling are consistent.
+     */
+    async enqueueSong(song) {
+        if (!song || !song.filepath) {
+            console.error('[PyKaraoke] enqueueSong: missing song or filepath');
+            this.updateStatus('Error: cannot enqueue – no file path');
+            return;
+        }
+        console.debug('[PyKaraoke] enqueueSong:', song.filepath);
+        try {
+            var r = await this.sendCommand('add_to_playlist', { filepath: song.filepath });
+            if (r && r.status === 'ok') {
+                this.updateStatus('Added "' + (song.title || song.filename) + '" to queue');
+            } else {
+                var msg = (r && r.message) || 'Unknown error';
+                console.error('[PyKaraoke] enqueue error:', msg);
+                this.updateStatus('Failed to enqueue: ' + msg);
+            }
+        } catch (e) {
+            console.error('[PyKaraoke] enqueue exception:', e);
+            this.updateStatus('Failed to enqueue: ' + e.message);
+        }
     }
 
     updateStatus(msg) {

@@ -236,6 +236,12 @@ body {
     overflow-y: auto;
     flex: 1;
     max-height: 200px;
+    transition: border-color 0.15s;
+}
+
+.song-list.drag-over {
+    border-color: var(--primary-color);
+    background-color: rgba(99, 102, 241, 0.08);
 }
 
 .song-item {
