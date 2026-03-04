@@ -89,7 +89,7 @@ class PykPlayer:
 
         if isinstance(song, str):
             # We were given a filename.  Convert it to a SongStruct.
-            song = self.song_db.makeSongStruct(song)
+            song = self.song_db.make_song_struct(song)
 
         # Store the parameters
         self.song = song

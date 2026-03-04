@@ -53,7 +53,7 @@ def _make_player(song_filepath="test_song.cdg", error_cb=None, done_cb=None, win
     mock_song.filepath = song_filepath
     mock_song.display_filename = song_filepath
     mock_song.get_song_datas.return_value = []
-    mock_db.makeSongStruct.return_value = mock_song
+    mock_db.make_song_struct.return_value = mock_song
 
     from pykaraoke.core.player import PykPlayer
     return PykPlayer(
