@@ -56,6 +56,8 @@ services:
       - PYTHONUNBUFFERED=1
       - PYKARAOKE_API_HOST=0.0.0.0
       - PYKARAOKE_API_PORT=8080
+      - SDL_AUDIODRIVER=dummy
+      - SDL_VIDEODRIVER=dummy
     volumes:
       # Mount songs directory (customize path as needed)
       - ${SONGS_DIR:-../../songs}:/app/songs:ro
