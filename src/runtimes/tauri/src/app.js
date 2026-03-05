@@ -54,7 +54,7 @@ class PyKaraokeApp {
                 var r = await this.sendCommand('get_state');
                 if (r.status === 'ok' && r.data) this.updateUIFromState(r.data);
             } catch (_) { /* backend may be momentarily busy */ }
-        }, 500);
+        }, 1000);
     }
 
     // ── Event listeners ──────────────────────────────────────────────────
