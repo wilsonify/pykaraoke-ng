@@ -371,7 +371,7 @@ class CdgPlayer(PykPlayer):
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
-        if self.sound_file_data and manager.audioProps:
+        if self.sound_file_data and manager.audio_props:
             pygame.mixer.music.stop()
 
         # Make sure our surfaces are deallocated before we call up to

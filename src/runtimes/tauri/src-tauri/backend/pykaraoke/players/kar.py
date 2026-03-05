@@ -152,6 +152,7 @@ import pygame
 
 from pykaraoke.config.constants import (
     ENV_GP2X,
+    ENV_WINDOWS,
     STATE_CLOSED,
     STATE_CLOSING,
     STATE_INIT,
@@ -589,7 +590,7 @@ def midi_parse_data(midi_data, error_notify_callback, encoding):
     # Check it's a MThd chunk
     packet = filehdl.read(8)
     chunk_type, length = struct.unpack(">4sL", packet)
-    if chunk_type != "MThd":
+    if chunk_type != b"MThd":
         error_notify_callback("No MIDI Header chunk at start")
         return None
 
@@ -631,10 +632,10 @@ def _parse_midi_tracks(filehdl, midifile):
     track_num = 0
     while True:
         packet = filehdl.read(8)
-        if packet == "" or len(packet) < 8:
+        if packet == b"" or len(packet) < 8:
             break
         chunk_type, length = struct.unpack(">4sL", packet)
-        if chunk_type != "MTrk" and debug:
+        if chunk_type != b"MTrk" and debug:
             print("Didn't find expected MIDI Track")
 
         track_desc = midi_parse_track(filehdl, midifile, track_num, length)
@@ -648,7 +649,7 @@ def _parse_midi_tracks(filehdl, midifile):
 
 def _select_best_lyrics(midifile):
     """Select the best lyrics track: prefer 'lyrics' tracks, then most syllables."""
-    best_sort_key = None
+    best_sort_key = (False, -1)
     best_lyrics = None
 
     for track_desc in midifile.track_list:
@@ -759,7 +760,7 @@ def _meta_sequence_number(filehdl, track_desc, midifile):
     bytes_read = 0
     packet = filehdl.read(2)
     bytes_read += 2
-    _, type_val = map(ord, packet)
+    _, type_val = packet[0], packet[1]
     if type_val == 0x02:
         filehdl.read(2)
     elif type_val != 0x00 and debug:
@@ -775,8 +776,8 @@ def _meta_text_event(filehdl, track_desc, midifile):
     text = filehdl.read(length)
     bytes_read += length
     if length <= 1000:
-        if midifile.text_encoding != "":
-            text = text.decode(midifile.text_encoding, "replace")
+        encoding = midifile.text_encoding if midifile.text_encoding != "" else "latin-1"
+        text = text.decode(encoding, "replace")
         if _is_lyric_text(text):
             track_desc.text_events.record_text(track_desc.total_clicks_from_start, text)
         if debug:
@@ -798,6 +799,8 @@ def _meta_track_title(filehdl, track_desc, midifile):
     bytes_read += var_bytes
     title = filehdl.read(length)
     bytes_read += length
+    if isinstance(title, bytes):
+        title = title.decode("latin-1", "replace")
     if debug:
         print("Track Title: " + repr(title))
     if title == "Words":
@@ -816,8 +819,8 @@ def _meta_lyric_event(filehdl, track_desc, midifile):
     length, var_bytes = var_length(filehdl)
     bytes_read += var_bytes
     lyric = filehdl.read(length)
-    if midifile.text_encoding != "":
-        lyric = lyric.decode(midifile.text_encoding, "replace")
+    encoding = midifile.text_encoding if midifile.text_encoding != "" else "latin-1"
+    lyric = lyric.decode(encoding, "replace")
     bytes_read += length
     if _is_lyric_text(lyric):
         track_desc.lyric_events.record_lyric(track_desc.total_clicks_from_start, lyric)
@@ -849,7 +852,7 @@ def _meta_end_of_track(filehdl, track_desc, midifile):
 def _meta_set_tempo(filehdl, track_desc, midifile):
     """Meta-event 0x51: Set Tempo."""
     packet = filehdl.read(4)
-    valid, tempo_a, tempo_b, tempo_c = map(ord, packet)
+    valid, tempo_a, tempo_b, tempo_c = packet[0], packet[1], packet[2], packet[3]
     if valid != 0x03:
         print("Error: Invalid tempo")
     tempo = (tempo_a << 16) | (tempo_b << 8) | tempo_c
@@ -869,7 +872,7 @@ def _meta_smpte(filehdl, track_desc, midifile):
 def _meta_time_signature(filehdl, track_desc, midifile):
     """Meta-event 0x58: Time Signature."""
     packet = filehdl.read(5)
-    valid, num, denom, clocks, notes = map(ord, packet)
+    valid, num, denom, clocks, notes = packet[0], packet[1], packet[2], packet[3], packet[4]
     if valid != 0x04:
         print(
             "Error: Invalid time signature (valid=%d, num=%d, denom=%d)"
@@ -885,7 +888,7 @@ def _meta_time_signature(filehdl, track_desc, midifile):
 def _meta_key_signature(filehdl, track_desc, midifile):
     """Meta-event 0x59: Key signature (discard)."""
     packet = filehdl.read(3)
-    valid, sf, mi = map(ord, packet)
+    valid, sf, mi = packet[0], packet[1], packet[2]
     if valid != 0x02:
         print("Error: Invalid key signature (valid=%d, sf=%d, mi=%d)" % (valid, sf, mi))
     return 3
@@ -1312,7 +1315,7 @@ class MidPlayer(PykPlayer):
     def shutdown(self):
         # This will be called by the pykManager to shut down the thing
         # immediately.
-        if not manager.options.nomusic and manager.audioProps:
+        if not manager.options.nomusic and manager.audio_props:
             pygame.mixer.music.stop()
         PykPlayer.shutdown(self)
 

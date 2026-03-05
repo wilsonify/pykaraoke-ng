@@ -131,7 +131,53 @@ class PyKaraokeBackend:
         # Initialize the song database
         self._init_database()
 
+        # Pre-initialise manager.options so that PykPlayer.__init__ does
+        # not attempt to call optparse.parse_args() on the process argv
+        # (which, in a uvicorn/Docker context, would contain uvicorn's
+        # arguments and call sys.exit(2)).
+        self._init_manager_options()
+
         logger.info("PyKaraoke backend initialized")
+
+    # ------------------------------------------------------------------
+    # manager.options bootstrap
+    # ------------------------------------------------------------------
+
+    def _init_manager_options(self):
+        """Set ``manager.options`` to sensible defaults derived from
+        the song-database settings so that player constructors never
+        fall through to ``parse_args()``."""
+        from optparse import Values
+
+        settings = self.song_db.settings if self.song_db else None
+
+        defaults = {
+            # Display / window
+            "zoom_mode": getattr(settings, "cdg_zoom", "soft") if settings else "soft",
+            "fullscreen": getattr(settings, "full_screen", False) if settings else False,
+            "size_x": (settings.player_size[0] if settings and hasattr(settings, "player_size") else 640),
+            "size_y": (settings.player_size[1] if settings and hasattr(settings, "player_size") else 480),
+            "pos_x": None,
+            "pos_y": None,
+            "title": None,
+            "hide_mouse": False,
+            "fps": 30,
+            "font_scale": 1.0,
+            # Audio
+            "num_channels": getattr(settings, "num_channels", 2) if settings else 2,
+            "sample_rate": getattr(settings, "sample_rate", 44100) if settings else 44100,
+            "buffer": getattr(settings, "buffer_ms", 50) if settings else 50,
+            "nomusic": False,
+            # Dump / debug
+            "dump": "",
+            "dump_fps": 29.97,
+            "validate": False,
+        }
+
+        manager.options = Values(defaults)
+        if self.song_db:
+            manager.apply_options(self.song_db)
+        logger.info("manager.options pre-initialised for headless backend")
 
     def _init_database(self):
         """Initialize the song database"""
@@ -325,6 +371,10 @@ class PyKaraokeBackend:
             if not self.current_player:
                 raise RuntimeError("Failed to create player")
 
+            # Check if the player successfully parsed the song file
+            if hasattr(self.current_player, "is_valid") and not self.current_player.is_valid:
+                raise RuntimeError("Song file could not be parsed (corrupt or unsupported format)")
+
             # Start playback
             self.current_player.play()
             self.state = BackendState.PLAYING
@@ -333,7 +383,7 @@ class PyKaraokeBackend:
             self._emit_state_change()
             return {"status": "ok"}
 
-        except (RuntimeError, OSError, ValueError) as e:
+        except (RuntimeError, OSError, ValueError, SystemExit, Exception) as e:
             logger.error("Playback error: %s", e)
             self.state = BackendState.ERROR
             self.error_message = str(e)
