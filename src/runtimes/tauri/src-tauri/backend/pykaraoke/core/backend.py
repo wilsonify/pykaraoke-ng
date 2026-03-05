@@ -787,6 +787,14 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    # Suppress noisy /health access-log lines
+    class _HealthFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return "/health" not in msg
+
+    logging.getLogger("uvicorn.access").addFilter(_HealthFilter())
+
     # Configure uvicorn
     config = uvicorn.Config(
         app,
