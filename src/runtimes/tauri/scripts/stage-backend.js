@@ -14,8 +14,23 @@ const PROJECT_ROOT = __dirname.replace(/[\\/]scripts$/, "");
 const BACKEND_DIR = path.join(PROJECT_ROOT, "src-tauri", "backend");
 const SRC_PKG = path.resolve(PROJECT_ROOT, "..", "..", "..", "src", "pykaraoke");
 
-/** Directories inside pykaraoke/ whose *.py files should be staged. */
-const SUB_PACKAGES = ["core", "config", "players"];
+/** Directories inside pykaraoke/ whose *.py files should be staged.
+ *  Includes both the original locations and the new layered architecture
+ *  so that imports via either path resolve correctly at runtime. */
+const SUB_PACKAGES = [
+  "core",
+  "config",
+  "players",
+  // New layered architecture directories
+  "domain",
+  "domain/parsing",
+  "application",
+  "infrastructure",
+  "infrastructure/database",
+  "infrastructure/players",
+  "infrastructure/native",
+  "interfaces",
+];
 
 // ── helpers ──────────────────────────────────────────────────────────
 
