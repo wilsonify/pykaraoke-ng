@@ -52,14 +52,22 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
     let candidates: Vec<PathBuf> = vec![
-        // 1. Bundled resource inside installed app (tauri.conf.json "resources")
+        // 1. Bundled resource — new layered architecture path
+        resource_dir.join("backend").join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // 2. Bundled resource — legacy path
         resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
-        // 2. Flat bundled resource
+        // 3. Flat bundled resource
         resource_dir.join("backend.py"),
-        // 3. Development: project root -> src/pykaraoke/core/backend.py
+        // 4. Development: project root -> new layered path
+        resource_dir.join("..").join("..").join("..").join("src")
+            .join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // 5. Development: project root -> legacy path
         resource_dir.join("..").join("..").join("..").join("src")
             .join("pykaraoke").join("core").join("backend.py"),
-        // 4. Development: CWD-based fallback
+        // 6. Development: CWD-based fallback (new path)
+        std::env::current_dir().unwrap_or_default()
+            .join("src").join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // 7. Development: CWD-based fallback (legacy path)
         std::env::current_dir().unwrap_or_default()
             .join("src").join("pykaraoke").join("core").join("backend.py"),
     ];
