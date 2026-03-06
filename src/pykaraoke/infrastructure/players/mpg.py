@@ -5,9 +5,17 @@ currently lives in :mod:`pykaraoke.players.mpg` and is re-exported
 here for the new layered architecture.
 """
 
-from pykaraoke.players.mpg import *  # noqa: F401,F403
+from pykaraoke.players.mpg import (  # noqa: F401
+    ExternalPlayer,
+    MpgPlayer,
+    main,
+)
+
+__all__ = [
+    "ExternalPlayer",
+    "MpgPlayer",
+    "main",
+]
 
 if __name__ == "__main__":
-    from pykaraoke.players.mpg import main
-
     main()
