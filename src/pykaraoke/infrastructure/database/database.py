@@ -8,11 +8,16 @@ layered import path::
     from pykaraoke.infrastructure.database.database import SongDB
 """
 
-from pykaraoke.core.database import *  # noqa: F401,F403
+from pykaraoke.core.database import (  # noqa: F401
+    SettingsStruct,
+    SongDB,
+    SongStruct,
+    globalSongDB,
+)
 
 __all__ = [
+    "SettingsStruct",
     "SongDB",
     "SongStruct",
-    "SettingsStruct",
     "globalSongDB",
 ]

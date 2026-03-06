@@ -6,7 +6,8 @@ here for the new layered architecture.
 """
 
 from pykaraoke.players.mpg import *  # noqa: F401,F403
-from pykaraoke.players.mpg import main  # noqa: F401
 
 if __name__ == "__main__":
+    from pykaraoke.players.mpg import main
+
     main()

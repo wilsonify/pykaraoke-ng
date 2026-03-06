@@ -7,8 +7,13 @@ so that callers can start migrating to the new layered import path::
     from pykaraoke.interfaces.backend_api import PyKaraokeBackend
 """
 
-from pykaraoke.core.backend import *  # noqa: F401,F403
-from pykaraoke.core.backend import main  # noqa: F401
+from pykaraoke.core.backend import (  # noqa: F401
+    BackendState,
+    PyKaraokeBackend,
+    create_http_server,
+    create_stdio_server,
+    main,
+)
 
 __all__ = [
     "BackendState",

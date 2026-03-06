@@ -8,8 +8,10 @@ layered import path::
     from pykaraoke.domain.performer import PerformerPrompt
 """
 
-from pykaraoke.core.performer_prompt import *  # noqa: F401,F403
+try:
+    from pykaraoke.core.performer_prompt import PerformerPrompt  # noqa: F401
 
-__all__ = [
-    "PerformerPrompt",
-]
+    __all__ = ["PerformerPrompt"]
+except ImportError:
+    # wx may not be installed; the module is still importable
+    __all__ = []

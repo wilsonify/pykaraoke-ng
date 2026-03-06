@@ -8,7 +8,7 @@ layered import path::
     from pykaraoke.application.karaoke_manager import manager
 """
 
-from pykaraoke.core.manager import *  # noqa: F401,F403
+from pykaraoke.core.manager import PykManager, manager  # noqa: F401
 
 __all__ = [
     "PykManager",
