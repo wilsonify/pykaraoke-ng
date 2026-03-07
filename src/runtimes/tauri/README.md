@@ -6,20 +6,20 @@ This directory contains the Tauri-based desktop application for PyKaraoke NG. Th
 
 ## Architecture
 
-```
+```txt
 ┌─────────────────────────────────────────────────────────────┐
-│                    Tauri Desktop Shell                       │
-│  ┌────────────────────┐         ┌──────────────────────┐   │
-│  │   Web Frontend     │         │   Rust Backend       │   │
-│  │  (HTML/CSS/JS)     │◄───────►│   (Tauri Core)       │   │
-│  │                    │  IPC    │                      │   │
-│  │  • Player UI       │         │  • Process Mgmt      │   │
-│  │  • Library Browser │         │  • IPC Bridge        │   │
-│  │  • Playlist        │         │  • Event Routing     │   │
-│  └────────────────────┘         └──────────────────────┘   │
-│                                           │                  │
-│                                           │ stdio/JSON       │
-│                                           ▼                  │
+│                    Tauri Desktop Shell                      │
+│  ┌────────────────────┐         ┌──────────────────────┐    │
+│  │   Web Frontend     │         │   Rust Backend       │    │
+│  │  (HTML/CSS/JS)     │◄───────►│   (Tauri Core)       │    │
+│  │                    │  IPC    │                      │    │
+│  │  • Player UI       │         │  • Process Mgmt      │    │
+│  │  • Library Browser │         │  • IPC Bridge        │    │
+│  │  • Playlist        │         │  • Event Routing     │    │
+│  └────────────────────┘         └──────────────────────┘    │
+│                                           │                 │
+│                                           │ stdio/JSON      │
+│                                           ▼                 │
 │                          ┌──────────────────────────┐       │
 │                          │   Python Backend         │       │
 │                          │   (pykbackend.py)        │       │
@@ -37,6 +37,7 @@ This directory contains the Tauri-based desktop application for PyKaraoke NG. Th
 ### 1. Python Backend (`pykbackend.py`)
 
 Headless service that provides:
+
 - **Playback Control**: Play, pause, stop, seek, volume
 - **Library Management**: Search, scan folders, database management
 - **Playlist Management**: Add, remove, reorder songs
@@ -48,12 +49,14 @@ Headless service that provides:
 ### 2. Tauri Rust Backend (`src-tauri/src/main.rs`)
 
 Manages:
+
 - Python subprocess lifecycle
 - IPC message routing between frontend and Python backend
 - Event forwarding to frontend
 - Native OS integration
 
 **Commands**:
+
 - `start_backend()`: Launch Python backend
 - `send_command(action, params)`: Send command to Python
 - `stop_backend()`: Shutdown Python backend
@@ -61,6 +64,7 @@ Manages:
 ### 3. Web Frontend (`src/`)
 
 Modern web UI with:
+
 - **Library Browser**: Search and browse song database
 - **Player Controls**: Play, pause, stop, volume, progress
 - **Playlist Manager**: Queue songs, reorder, remove
@@ -82,6 +86,7 @@ Modern web UI with:
 ```
 
 **Available Actions**:
+
 - `play`, `pause`, `stop`, `next`, `previous`
 - `seek`, `set_volume`
 - `load_song`, `add_to_playlist`, `remove_from_playlist`, `clear_playlist`
@@ -107,6 +112,7 @@ Modern web UI with:
 ```
 
 **Event Types**:
+
 - `state_changed`: Playback state update
 - `song_finished`: Track completed
 - `playback_error`: Error occurred
@@ -126,11 +132,13 @@ Modern web UI with:
 ### Setup
 
 1. **Install Tauri CLI**:
+
    ```bash
    cargo install tauri-cli
    ```
 
 2. **Build the app**:
+
    ```bash
    cd tauri-app
    cargo tauri dev  # Development mode
@@ -138,6 +146,7 @@ Modern web UI with:
    ```
 
 3. **Run Python backend standalone** (for testing):
+
    ```bash
    python3 pykbackend.py
    # Then send JSON commands via stdin
@@ -151,7 +160,7 @@ Modern web UI with:
 
 ## Project Structure
 
-```
+```txt
 tauri-app/
 ├── src/                      # Frontend web app
 │   ├── index.html           # Main UI
@@ -209,7 +218,7 @@ EOF
 The following wxPython components have been migrated:
 
 | wxPython Component | New Component | Notes |
-|-------------------|---------------|-------|
+| ------------------ | ------------- | ----- |
 | `PyKaraokeWindow` | `index.html` | Main UI layout |
 | `SearchResultsPanel` | Library browser | Search + results list |
 | `Playlist` | Playlist section | Queue management |
@@ -227,6 +236,7 @@ cargo tauri build
 ```
 
 This creates platform-specific installers:
+
 - **Windows**: `.exe`, `.msi`
 - **macOS**: `.app`, `.dmg`
 - **Linux**: `.AppImage`, `.deb`, `.rpm`
@@ -234,6 +244,7 @@ This creates platform-specific installers:
 ### Bundle Contents
 
 The bundle includes:
+
 - Tauri executable
 - Python backend script (`pykbackend.py`)
 - Python dependencies (bundled with PyInstaller/similar)
