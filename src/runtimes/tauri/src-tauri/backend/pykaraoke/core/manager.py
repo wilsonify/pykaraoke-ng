@@ -67,10 +67,13 @@ class PykManager:
 
         # Find the correct font path. If fully installed on Linux this
         # will be sys.prefix/share/pykaraoke/fonts. Otherwise look for
-        # it in the current directory.
+        # it in the current directory or assets directory.
         if os.path.isfile("fonts/DejaVuSans.ttf"):
             self.font_path = "fonts"
             self.icon_path = "icons"
+        elif os.path.isfile("assets/fonts/DejaVuSans.ttf"):
+            self.font_path = "assets/fonts"
+            self.icon_path = "assets/icons"
         else:
             self.font_path = os.path.join(sys.prefix, "share/pykaraoke/fonts")
             self.icon_path = os.path.join(sys.prefix, "share/pykaraoke/icons")
@@ -86,6 +89,33 @@ class PykManager:
         # This factor may be changed by the user to make text bigger
         # or smaller on those players that support it.
         self.font_scale = None
+
+    # Backward-compatible camelCase aliases for attributes that have
+    # been renamed to snake_case.  This avoids touching dozens of
+    # references in legacy player code.
+    @property
+    def displaySize(self):          # noqa: N802 – legacy name
+        return self.display_size
+
+    @displaySize.setter
+    def displaySize(self, value):   # noqa: N802
+        self.display_size = value
+
+    @property
+    def audioProps(self):            # noqa: N802 – legacy name
+        return self.audio_props
+
+    @audioProps.setter
+    def audioProps(self, value):     # noqa: N802
+        self.audio_props = value
+
+    @property
+    def FontPath(self):              # noqa: N802 – legacy name
+        return self.font_path
+
+    @FontPath.setter
+    def FontPath(self, value):       # noqa: N802
+        self.font_path = value
 
     def set_cpu_speed(self, activity_name):
         """Sets the CPU speed appropriately according to what the
@@ -508,9 +538,9 @@ class PykManager:
             metavar="MODE",
             dest="zoom_mode",
             type="choice",
-            choices=settings.Zoom,
+            choices=settings.zoom,
             help="specify the way in which graphics are scaled to fit the window.  The choices are %s."
-            % (", ".join('"%s"' % z for z in settings.Zoom)),
+            % (", ".join('"%s"' % z for z in settings.zoom)),
             default=settings.cdg_zoom,
         )
 

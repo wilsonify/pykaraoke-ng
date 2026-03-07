@@ -51,6 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-image-2.0-0 \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
+    timidity \
+    freepats \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash pykaraoke
 
@@ -222,7 +224,8 @@ RUN uv pip install --no-cache-dir \
     pytest-xdist \
     ruff \
     fastapi \
-    uvicorn
+    uvicorn \
+    selenium
 
 USER pykaraoke
 
@@ -237,3 +240,21 @@ USER pykaraoke
 
 # Run tests as default command
 CMD ["pytest", "tests/", "-v", "--tb=short"]
+
+# =============================================================================
+# Stage 7: Browser UI (nginx serving frontend with HTTP bridge)
+# =============================================================================
+FROM nginx:alpine AS ui
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy custom nginx config
+COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy frontend static files
+COPY src/runtimes/tauri/src/ /usr/share/nginx/html/
+
+EXPOSE 3000
+
+CMD ["nginx", "-g", "daemon off;"]

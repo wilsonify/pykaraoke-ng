@@ -85,13 +85,17 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         .unwrap_or_else(|| std::path::Path::new("."))
         .to_path_buf();
 
-    // Start the Python backend process
+    // Start the Python backend process.
+    // stderr is inherited (not piped) so that Python logging output goes
+    // straight to the parent's stderr.  If we piped stderr but never read
+    // it, the 64 KiB pipe buffer would eventually fill up, blocking the
+    // Python process and causing a broken-pipe cascade on stdin.
     let mut child = Command::new("python3")
         .arg(&backend_script)
         .env("PYTHONPATH", &python_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("Failed to start backend: {}", e))?;
     
@@ -148,12 +152,23 @@ async fn send_command(
     let command_json = serde_json::to_string(&command)
         .map_err(|e| format!("Failed to serialize command: {}", e))?;
     
-    // Send command to backend
+    // Send command to backend.  If the write fails the Python process has
+    // most likely exited; tear down the backend state immediately so that
+    // every subsequent call returns "Backend not running" rather than
+    // retrying a dead pipe.
     if let Some(ref mut stdin) = backend.stdin {
-        writeln!(stdin, "{}", command_json)
-            .map_err(|e| format!("Failed to send command: {}", e))?;
-        stdin.flush()
-            .map_err(|e| format!("Failed to flush stdin: {}", e))?;
+        if let Err(e) = writeln!(stdin, "{}", command_json) {
+            backend.stdin = None;
+            backend.process = None;
+            backend.response_rx = None;
+            return Err(format!("Backend process died (send): {}", e));
+        }
+        if let Err(e) = stdin.flush() {
+            backend.stdin = None;
+            backend.process = None;
+            backend.response_rx = None;
+            return Err(format!("Backend process died (flush): {}", e));
+        }
     }
     
     // Read the actual response from the Python backend via the channel.
@@ -204,6 +219,11 @@ fn main() {
     {
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        // Suppress "Couldn't connect to accessibility bus" warnings from
+        // WebKitGTK / at-spi2 when the D-Bus a11y socket is unavailable.
+        if std::env::var("NO_AT_BRIDGE").is_err() {
+            std::env::set_var("NO_AT_BRIDGE", "1");
         }
     }
 

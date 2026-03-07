@@ -1,8 +1,9 @@
 # PyKaraoke-NG Docker Compose Configuration
 # 
 # Usage:
-#   docker compose up                       # Start Python backend API
+#   docker compose up                       # Start backend API + browser debug UI
 #   docker compose up -d                    # Start in background
+#   Open http://localhost:3000              # Debug UI in your browser
 #   docker compose --profile tauri-dev up   # Tauri development mode
 #   docker compose --profile test up        # Run tests
 #   docker compose down                     # Stop and remove
@@ -12,10 +13,34 @@
 #   docker compose --profile tauri-dev up   # Tauri frontend development
 #   docker compose --profile tauri-build up # Build Tauri binaries
 #   docker compose --profile test up        # Run tests
+#   docker compose --profile e2e up --abort-on-container-exit test-e2e  # Selenium E2E tests
+#   docker compose --profile e2e-bdd up --abort-on-container-exit test-e2e-bdd  # BDD E2E tests
 
 name: pykaraoke-ng
 
 services:
+  # ==========================================================================
+  # Browser Debug UI (nginx serving frontend with HTTP bridge)
+  # ==========================================================================
+  ui:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: ui
+    image: pykaraoke-ng:ui
+    container_name: pykaraoke-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount frontend source for live editing during debug
+      - ../../src/runtimes/tauri/src:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+
   # ==========================================================================
   # Python Backend API Service (for Tauri)
   # ==========================================================================
@@ -31,19 +56,23 @@ services:
       - PYTHONUNBUFFERED=1
       - PYKARAOKE_API_HOST=0.0.0.0
       - PYKARAOKE_API_PORT=8080
+      - SDL_AUDIODRIVER=dummy
+      - SDL_VIDEODRIVER=dummy
     volumes:
       # Mount songs directory (customize path as needed)
       - ${SONGS_DIR:-../../songs}:/app/songs:ro
+      # Mount test fixture songs so the library scanner can find them
+      - ../../tests/fixtures:/app/fixtures:ro
     ports:
       - "8080:8080"
     networks:
       - pykaraoke-net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
-      interval: 30s
+      interval: 5m
       timeout: 10s
       retries: 3
-      start_period: 5s
+      start_period: 10s
 
   # ==========================================================================
   # Tauri Desktop App (Runtime with GUI)
@@ -252,10 +281,10 @@ services:
       - pykaraoke-net
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
-      interval: 2s
+      interval: 5m
       timeout: 5s
-      retries: 30
-      start_period: 2s
+      retries: 3
+      start_period: 10s
 
   # ==========================================================================
   # Integration Test Runner
@@ -361,6 +390,84 @@ services:
     volumes:
       - ../..:/app:ro
     command: ["python", "-m", "ruff", "check", "."]
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # Selenium (headless Firefox for E2E tests)
+  # ==========================================================================
+  selenium:
+    image: selenium/standalone-firefox:latest
+    container_name: pykaraoke-selenium
+    profiles:
+      - e2e
+    shm_size: 2g
+    ports:
+      - "4444:4444"
+      - "7900:7900"
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # E2E Test Runner (Selenium against the live UI) — Legacy Python
+  # ==========================================================================
+  test-e2e:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: test
+    image: pykaraoke-ng:test
+    container_name: pykaraoke-test-e2e
+    profiles:
+      - e2e
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTEST_ADDOPTS=--color=yes
+      - SELENIUM_URL=http://selenium:4444/wd/hub
+      - UI_URL=http://ui:3000
+    volumes:
+      - ../../tests:/app/tests:ro
+      - ../../src:/app/src:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+    command:
+      - pytest
+      - tests/integration/test_ui_buttons.py
+      - -v
+      - --tb=short
+    depends_on:
+      selenium:
+        condition: service_started
+      ui:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    networks:
+      - pykaraoke-net
+
+  # ==========================================================================
+  # BDD E2E Test Runner (Cucumber.js + WebdriverIO against the live UI)
+  # ==========================================================================
+  test-e2e-bdd:
+    image: node:20-slim
+    container_name: pykaraoke-test-e2e-bdd
+    profiles:
+      - e2e-bdd
+    working_dir: /app/e2e
+    environment:
+      - E2E_APP_URL=http://ui:3000
+      - SELENIUM_URL=http://selenium:4444/wd/hub
+    volumes:
+      - ../../src/runtimes/tauri/e2e:/app/e2e:ro
+      - ../../src/runtimes/tauri/src:/app/src:ro
+      - ../../src/runtimes/tauri/src-tauri:/app/src-tauri:ro
+    command: ["sh", "-c", "npm ci && npm run test:e2e:ci"]
+    depends_on:
+      selenium:
+        condition: service_started
+      ui:
+        condition: service_started
+      backend:
+        condition: service_healthy
     networks:
       - pykaraoke-net
 

@@ -374,10 +374,6 @@ jobs:
       - name: Build Tauri application
         working-directory: src/runtimes/tauri
         run: tauri build --bundles ${{ matrix.bundles }}
-        env:
-          # Optional: Tauri updater signing keys — set these secrets if using the updater.
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
       - name: Upload platform build artifact
         uses: actions/upload-artifact@v4
@@ -479,6 +475,74 @@ jobs:
           retention-days: 7
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # STAGE 5b: BDD End-to-End Tests — Cucumber.js acceptance suite.
+  #           Runs after build stage succeeds. Uses docker-compose to
+  #           start backend + UI + Selenium, then runs BDD feature files.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  bdd-e2e-tests:
+    name: BDD E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Start application services (backend + UI + Selenium)
+        run: |
+          docker compose -f deploy/docker/docker-compose.yml \
+            --profile e2e up -d --build --wait
+        env:
+          SONGS_DIR: ./songs
+
+      - name: Wait for backend to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              echo "Backend is healthy"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/30)"
+            sleep 2
+          done
+          echo "Backend did not become healthy in time"
+          exit 1
+
+      - name: Install BDD test dependencies
+        working-directory: src/runtimes/tauri/e2e
+        run: npm ci
+
+      - name: Run BDD E2E tests (fail-fast)
+        working-directory: src/runtimes/tauri/e2e
+        run: npm run test:e2e:ci
+        env:
+          E2E_APP_URL: http://localhost:3000
+          SELENIUM_URL: http://localhost:4444/wd/hub
+
+      - name: Upload BDD test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bdd-e2e-reports
+          path: src/runtimes/tauri/e2e/reports/
+          retention-days: 7
+
+      - name: Stop application services
+        if: always()
+        run: |
+          docker compose -f deploy/docker/docker-compose.yml \
+            --profile e2e down
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 6: Release — semver tag + GitHub Release with all platform artifacts.
   #          Runs ONLY on main branch pushes after all E2E tests pass.
   #          Pull requests never trigger this stage.
@@ -487,8 +551,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [e2e-tests]
-    if: ${{ !cancelled() && needs.e2e-tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: [e2e-tests, bdd-e2e-tests]
+    if: ${{ !cancelled() && needs.e2e-tests.result == 'success' && needs.bdd-e2e-tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write  # required to create tags and GitHub Releases
     steps:

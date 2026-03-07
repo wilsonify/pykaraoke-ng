@@ -30,6 +30,10 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any
 
+# Suppress the pygame "Hello from the pygame community" banner that would
+# otherwise be printed to stdout and corrupt the JSON IPC protocol.
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+
 # Core pykaraoke imports (business logic only)
 try:
     from pykaraoke.config.constants import (  # noqa: F401 - Used for future expansion
@@ -127,17 +131,77 @@ class PyKaraokeBackend:
         # Initialize the song database
         self._init_database()
 
+        # Pre-initialise manager.options so that PykPlayer.__init__ does
+        # not attempt to call optparse.parse_args() on the process argv
+        # (which, in a uvicorn/Docker context, would contain uvicorn's
+        # arguments and call sys.exit(2)).
+        self._init_manager_options()
+
         logger.info("PyKaraoke backend initialized")
+
+    # ------------------------------------------------------------------
+    # manager.options bootstrap
+    # ------------------------------------------------------------------
+
+    def _init_manager_options(self):
+        """Set ``manager.options`` to sensible defaults derived from
+        the song-database settings so that player constructors never
+        fall through to ``parse_args()``."""
+        from optparse import Values
+
+        settings = self.song_db.settings if self.song_db else None
+
+        defaults = {
+            # Display / window
+            "zoom_mode": getattr(settings, "cdg_zoom", "soft") if settings else "soft",
+            "fullscreen": getattr(settings, "full_screen", False) if settings else False,
+            "size_x": (settings.player_size[0] if settings and hasattr(settings, "player_size") else 640),
+            "size_y": (settings.player_size[1] if settings and hasattr(settings, "player_size") else 480),
+            "pos_x": None,
+            "pos_y": None,
+            "title": None,
+            "hide_mouse": False,
+            "fps": 30,
+            "font_scale": 1.0,
+            # Audio
+            "num_channels": getattr(settings, "num_channels", 2) if settings else 2,
+            "sample_rate": getattr(settings, "sample_rate", 44100) if settings else 44100,
+            "buffer": getattr(settings, "buffer_ms", 50) if settings else 50,
+            "nomusic": False,
+            # Dump / debug
+            "dump": "",
+            "dump_fps": 29.97,
+            "validate": False,
+        }
+
+        manager.options = Values(defaults)
+        if self.song_db:
+            manager.apply_options(self.song_db)
+        logger.info("manager.options pre-initialised for headless backend")
 
     def _init_database(self):
         """Initialize the song database"""
         try:
             self.song_db = database.globalSongDB
             self.song_db.load_settings(None)
+            self._auto_configure_folders()
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:
             logger.error("Failed to initialize database: %s", e)
             self.error_message = str(e)
+
+    def _auto_configure_folders(self):
+        """Auto-add default song folders when none are configured."""
+        if self.song_db.settings.folder_list:
+            return  # user already configured folders
+        import os
+        default_dirs = ["/app/songs", "/app/fixtures"]
+        for d in default_dirs:
+            if os.path.isdir(d):
+                self.song_db.folder_add(d)
+                logger.info("Auto-added song folder: %s", d)
+        if self.song_db.settings.folder_list:
+            self.song_db.save_settings()
 
     def set_event_callback(self, callback: Callable[[dict[str, Any]], None]):
         """Set callback for sending events to frontend"""
@@ -307,6 +371,10 @@ class PyKaraokeBackend:
             if not self.current_player:
                 raise RuntimeError("Failed to create player")
 
+            # Check if the player successfully parsed the song file
+            if hasattr(self.current_player, "is_valid") and not self.current_player.is_valid:
+                raise RuntimeError("Song file could not be parsed (corrupt or unsupported format)")
+
             # Start playback
             self.current_player.play()
             self.state = BackendState.PLAYING
@@ -315,7 +383,7 @@ class PyKaraokeBackend:
             self._emit_state_change()
             return {"status": "ok"}
 
-        except (RuntimeError, OSError, ValueError) as e:
+        except (RuntimeError, OSError, ValueError, SystemExit, Exception) as e:
             logger.error("Playback error: %s", e)
             self.state = BackendState.ERROR
             self.error_message = str(e)
@@ -349,29 +417,39 @@ class PyKaraokeBackend:
         """Load a song for playback"""
         filepath = params.get("filepath")
         if not filepath:
+            logger.warning("load_song called without filepath")
             return {"status": "error", "message": "filepath required"}
 
         try:
-            self.current_song = self.song_db.makeSongStruct(filepath)
+            logger.info("Loading song: %s", filepath)
+            self.current_song = self.song_db.make_song_struct(filepath)
             self._emit_state_change()
             return {"status": "ok"}
-        except (RuntimeError, ValueError) as e:
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.error("Failed to load song %s: %s", filepath, e)
             return {"status": "error", "message": str(e)}
 
     def _handle_add_to_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
         """Add song to playlist"""
         filepath = params.get("filepath")
         if not filepath:
+            logger.warning("add_to_playlist called without filepath")
             return {"status": "error", "message": "filepath required"}
 
         try:
-            song = self.song_db.makeSongStruct(filepath)
+            logger.info("Enqueueing song: %s", filepath)
+            song = self.song_db.make_song_struct(filepath)
             self.playlist.append(song)
+            logger.info(
+                "Song enqueued: title=%s artist=%s (queue length=%d)",
+                song.title, song.artist, len(self.playlist),
+            )
             self._emit_event(
                 "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
             )
             return {"status": "ok"}
-        except (ValueError, IndexError, AttributeError) as e:
+        except (ValueError, IndexError, AttributeError, OSError, RuntimeError) as e:
+            logger.error("Failed to enqueue %s: %s", filepath, e, exc_info=True)
             return {"status": "error", "message": str(e)}
 
     def _handle_remove_from_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -402,7 +480,7 @@ class PyKaraokeBackend:
         """Search the song library"""
         query = params.get("query", "")
         try:
-            results = self.song_db.search_database(query)
+            results = self.song_db.search_database(query, database.AppYielder())
             return {
                 "status": "ok",
                 "data": {"results": [self._song_to_dict(song) for song in results]},
@@ -420,25 +498,37 @@ class PyKaraokeBackend:
 
     def _handle_scan_library(self, _params: dict[str, Any]) -> dict[str, Any]:
         """Scan library folders"""
-        # This is a long-running operation that should be async
         logger.info("Starting library scan")
         try:
-            self.song_db.build_search_database()
-            self._emit_event("library_scan_complete", {})
-            return {"status": "ok", "message": "Scan started"}
+            self.song_db.build_search_database(
+                database.AppYielder(), database.BusyCancelDialog()
+            )
+            # Populate song_list so get_library / search work immediately
+            self.song_db.select_sort("filename")
+            self.song_db.save_database()
+            count = len(self.song_db.full_song_list)
+            logger.info("Library scan complete: %d songs found", count)
+            self._emit_event("library_scan_complete", {"song_count": count})
+            return {"status": "ok", "message": "Library scan complete", "data": {"song_count": count}}
         except (OSError, RuntimeError, ValueError) as e:
             return {"status": "error", "message": str(e)}
 
     def _handle_add_folder(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Add a folder to the library"""
+        """Add a folder to the library and scan it for songs."""
         folder = params.get("folder")
         if not folder:
             return {"status": "error", "message": "folder required"}
 
         try:
             self.song_db.folder_add(folder)
-            return {"status": "ok"}
-        except (OSError, ValueError, AttributeError) as e:
+            self.song_db.save_settings()
+            # Scan the newly added folder so its songs are available immediately
+            self.song_db.add_file(folder)
+            self.song_db.select_sort("filename")
+            self.song_db.save_database()
+            self._emit_event("library_scan_complete", {})
+            return {"status": "ok", "message": f"Folder added and scanned: {folder}"}
+        except (OSError, RuntimeError, ValueError, AttributeError) as e:
             return {"status": "error", "message": str(e)}
 
     # Settings handlers
@@ -479,16 +569,40 @@ class PyKaraokeBackend:
         manager.quit()
 
 
-def create_stdio_server(backend: PyKaraokeBackend):
+def create_stdio_server(backend: PyKaraokeBackend, *, json_out=None):
     """
     Create a stdio-based command server.
     Reads JSON commands from stdin and writes responses to stdout.
+
+    IMPORTANT: stray ``print()`` calls buried inside the legacy database
+    code (ZIP scan errors, titles-file warnings, etc.) would corrupt the
+    JSON IPC stream that the Tauri/Rust host reads.  To prevent this we
+    redirect ``sys.stdout`` → ``sys.stderr`` so *all* ordinary prints end
+    up on stderr, and we keep a private reference to the real stdout for
+    the JSON protocol only.
+
+    Parameters
+    ----------
+    json_out : file-like, optional
+        The file object connected to the real stdout (the JSON protocol
+        channel).  If *None*, ``sys.stdout`` is used (and then swapped
+        to stderr).
     """
 
+    # ── guard the JSON channel ──────────────────────────────────────
+    if json_out is None:
+        json_out = sys.stdout          # private handle for protocol output
+        sys.stdout = sys.stderr        # stray print() → stderr, not the pipe
+
+    def _write_json(obj: dict[str, Any]):
+        """Write a single JSON object to the protocol channel."""
+        json_out.write(json.dumps(obj))
+        json_out.write("\n")
+        json_out.flush()
+
     def event_callback(event: dict[str, Any]):
-        """Send events to frontend via stdout"""
-        output = {"type": "event", "event": event}
-        print(json.dumps(output), flush=True)
+        """Send events to frontend via the protocol channel."""
+        _write_json({"type": "event", "event": event})
 
     backend.set_event_callback(event_callback)
 
@@ -503,20 +617,17 @@ def create_stdio_server(backend: PyKaraokeBackend):
             try:
                 command = json.loads(line)
                 response = backend.handle_command(command)
-                output = {"type": "response", "response": response}
-                print(json.dumps(output), flush=True)
+                _write_json({"type": "response", "response": response})
             except json.JSONDecodeError as e:
-                error_response = {
+                _write_json({
                     "type": "response",
                     "response": {"status": "error", "message": f"Invalid JSON: {e}"},
-                }
-                print(json.dumps(error_response), flush=True)
+                })
             except (ValueError, TypeError) as e:
-                error_response = {
+                _write_json({
                     "type": "response",
                     "response": {"status": "error", "message": str(e)},
-                }
-                print(json.dumps(error_response), flush=True)
+                })
 
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
@@ -676,6 +787,14 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: i
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    # Suppress noisy /health access-log lines
+    class _HealthFilter(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            msg = record.getMessage()
+            return "/health" not in msg
+
+    logging.getLogger("uvicorn.access").addFilter(_HealthFilter())
+
     # Configure uvicorn
     config = uvicorn.Config(
         app,
@@ -782,6 +901,15 @@ Examples:
 
     logger.info("PyKaraoke Backend starting in %s mode", mode)
 
+    # In stdio mode the real stdout is the JSON IPC channel to the Rust
+    # host.  Redirect sys.stdout → stderr *before* creating the backend
+    # so that stray print() calls during initialisation (settings parser,
+    # database loader, …) never corrupt the protocol stream.
+    json_out = None
+    if mode == "stdio":
+        json_out = sys.stdout            # keep a private handle
+        sys.stdout = sys.stderr           # stray print() → stderr
+
     # Create backend instance
     backend = PyKaraokeBackend()
 
@@ -789,7 +917,7 @@ Examples:
     if mode == "http":
         create_http_server(backend, host=args.host, port=args.port)
     else:
-        create_stdio_server(backend)
+        create_stdio_server(backend, json_out=json_out)
 
 
 if __name__ == "__main__":

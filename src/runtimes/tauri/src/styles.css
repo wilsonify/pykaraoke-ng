@@ -136,6 +136,27 @@ body {
     color: var(--text-primary);
 }
 
+.folder-input-row {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-sm);
+}
+
+.folder-input-row input {
+    flex: 1;
+    padding: 4px 8px;
+    background-color: var(--bg-lighter);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.folder-input-row input:focus {
+    outline: 1px solid var(--primary-color);
+    border-color: var(--primary-color);
+}
+
 .library-controls {
     display: flex;
     gap: var(--spacing-xs);
@@ -215,6 +236,12 @@ body {
     overflow-y: auto;
     flex: 1;
     max-height: 200px;
+    transition: border-color 0.15s;
+}
+
+.song-list.drag-over {
+    border-color: var(--primary-color);
+    background-color: rgba(99, 102, 241, 0.08);
 }
 
 .song-item {
