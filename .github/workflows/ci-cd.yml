@@ -374,10 +374,6 @@ jobs:
       - name: Build Tauri application
         working-directory: src/runtimes/tauri
         run: tauri build --bundles ${{ matrix.bundles }}
-        env:
-          # Optional: Tauri updater signing keys — set these secrets if using the updater.
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
       - name: Upload platform build artifact
         uses: actions/upload-artifact@v4

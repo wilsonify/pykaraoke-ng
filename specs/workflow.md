@@ -12,19 +12,19 @@ PyKaraoke-NG uses **Spec-Driven Development** via Spec Kit. Every feature,
 bug fix, or significant refactor follows a structured workflow that ensures
 clarity, traceability, and quality before code is written.
 
-```
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│  /speckit.   │   │  /speckit.   │   │  /speckit.   │   │  /speckit.   │
-│   specify    │──▶│   clarify    │──▶│    plan      │──▶│   tasks      │
-│  (WHAT/WHY)  │   │  (RISKS)     │   │  (HOW)       │   │  (STEPS)     │
-└─────────────┘   └─────────────┘   └─────────────┘   └──────┬──────┘
-                                                              │
-                                                              ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   RELEASE    │   │  /speckit.   │   │     CI       │   │    TDD       │
-│  (merge to   │◀──│  checklist   │◀──│  (all gates  │◀──│ Red → Green  │
-│   main)      │   │  (VERIFY)    │   │   pass)      │   │  → Refactor  │
-└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
+```txt
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  /speckit.  │    │  /speckit.  │    │  /speckit   │    │  /speckit.  │
+│   specify   │──▶│   clarify   │──▶│    plan     │──▶│   tasks     │
+│  (WHAT/WHY) │    │  (RISKS)    │    │  (HOW)      │    │  (STEPS)    │
+└─────────────┘    └─────────────┘    └─────────────┘    └──────┬──────┘
+                                                                │
+                                                                ▼
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   RELEASE   │    │  /speckit.  │    │     CI      │    │    TDD      │
+│  (merge to  │◀──│  checklist  │◀──│  (all gates │◀──│ Red → Green │
+│   main)     │    │  (VERIFY)   │    │   pass)     │    │  → Refactor │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
 ---
@@ -65,7 +65,7 @@ echo 3 > specs/features/.next-id
 
 ### Branch naming convention
 
-```
+```txt
 NNN-short-kebab-case-description
  │
  └── Zero-padded 3-digit sequential number
@@ -90,6 +90,7 @@ Focus exclusively on **WHAT** and **WHY**:
 - What are the acceptance criteria?
 
 **Rules:**
+
 - ❌ Do NOT mention technology, libraries, or implementation.
 - ❌ Do NOT describe HOW to solve the problem.
 - ✅ Write from the user's perspective.
@@ -97,9 +98,8 @@ Focus exclusively on **WHAT** and **WHY**:
 
 ### Example command
 
-```
-/speckit.specify Improve filename parsing for artist/title extraction
-                 with full edge-case handling
+```txt
+/speckit.specify Improve filename parsing for artist/title extraction with full edge-case handling
 ```
 
 → See [001-filename-parser-edge-cases/spec.md](features/001-filename-parser-edge-cases/spec.md) for a complete example.
@@ -122,9 +122,9 @@ Surface cross-cutting concerns:
 - **Ambiguities** — Anything unclear in the spec?
 - **Risks** — What could go wrong?
 
-### Example command
+### Example clarify command
 
-```
+```txt
 /speckit.clarify 001-filename-parser-edge-cases
   --focus security,performance,cross-platform,backward-compatibility
 ```
@@ -147,9 +147,9 @@ NOW specify the technical approach:
 - Testing strategy and coverage target
 - Error handling approach
 
-### Example command
+### Example plan command
 
-```
+```txt
 /speckit.plan 001-filename-parser-edge-cases
   --language python
   --typing strict
@@ -175,9 +175,9 @@ Break the plan into atomic, ordered tasks:
 4. **Phase 4: Integration** — Cross-module and cross-platform verification
 5. **Phase 5: Documentation & Validation** — Docs, CI, Sonar, checklist
 
-### Example command
+### Example task command
 
-```
+```txt
 /speckit.tasks 001-filename-parser-edge-cases
 ```
 
@@ -232,9 +232,9 @@ Check every item:
 **CI enforces this.** The `spec-validation` job parses the checklist and
 blocks merge if any item is unchecked.
 
-### Example command
+### Example checklist command
 
-```
+```txt
 /speckit.checklist 001-filename-parser-edge-cases
 ```
 
@@ -265,7 +265,7 @@ All items in specs/features/001-filename-parser-edge-cases/checklist.md are ✅
 
 ### CI Pipeline on PR
 
-```
+```txt
 spec-validation ──┐
 unit-tests-python ─┼─► sonarqube ─► integration-tests ─► build ─► e2e-tests
 unit-tests-rust   ─┤
@@ -273,6 +273,7 @@ unit-tests-frontend┘
 ```
 
 ALL jobs must pass. The `spec-validation` job:
+
 1. Checks branch name matches `NNN-feature-name`
 2. Verifies all 5 spec artifacts exist
 3. Parses `checklist.md` — all items must be `[x]`
@@ -330,7 +331,7 @@ fi
 ## Quick Reference
 
 | Action | Command | Output |
-|--------|---------|--------|
+| ------ | ------- | ------ |
 | New feature | `./specs/ci/new-feature.sh "description"` | Branch + scaffold |
 | Specify | `/speckit.specify` | `spec.md` |
 | Clarify | `/speckit.clarify` | `clarify.md` |
