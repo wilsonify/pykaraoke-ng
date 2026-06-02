@@ -28,9 +28,11 @@ cd pykaraoke-ng
 
 ```bash
 cd src/runtimes/tauri
-npm install
-npm run tauri dev
+tauri dev -c src-tauri/tauri.conf.json
 ```
+
+On Windows, install Visual Studio Build Tools (C++ workload + Windows SDK) and
+run from a Developer Command Prompt (or call `vcvars64.bat`) before `tauri dev`.
 
 ### Command-Line Players
 

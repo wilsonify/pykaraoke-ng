@@ -35,6 +35,53 @@ struct CommandResponse {
     data: Option<serde_json::Value>,
 }
 
+fn command_works(program: &str, args: &[&str]) -> bool {
+    Command::new(program)
+        .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn resolve_python_launcher() -> Result<(String, Vec<String>), String> {
+    if let Ok(py) = std::env::var("PYKARAOKE_PYTHON") {
+        if !py.trim().is_empty() {
+            return Ok((py, vec![]));
+        }
+    }
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let path_candidates = vec![
+        cwd.join(".venv").join("Scripts").join("python.exe"),
+        cwd.join("..").join(".venv").join("Scripts").join("python.exe"),
+        cwd.join("..").join("..").join(".venv").join("Scripts").join("python.exe"),
+        cwd.join("..").join("..").join("..").join(".venv").join("Scripts").join("python.exe"),
+        cwd.join(".venv").join("bin").join("python"),
+    ];
+
+    for p in path_candidates {
+        if p.exists() {
+            return Ok((p.to_string_lossy().to_string(), vec![]));
+        }
+    }
+
+    if command_works("python3", &["--version"]) {
+        return Ok(("python3".to_string(), vec![]));
+    }
+    if command_works("python", &["--version"]) {
+        return Ok(("python".to_string(), vec![]));
+    }
+    if command_works("py", &["-3", "--version"]) {
+        return Ok(("py".to_string(), vec!["-3".to_string()]));
+    }
+
+    Err(
+        "No working Python interpreter found. Set PYKARAOKE_PYTHON or install Python/venv (e.g. .venv\\Scripts\\python.exe).".to_string(),
+    )
+}
+
 /// Start the Python backend process
 #[tauri::command]
 fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -> Result<String, String> {
@@ -93,19 +140,26 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         .unwrap_or_else(|| std::path::Path::new("."))
         .to_path_buf();
 
+    let (python_exe, python_prefix_args) = resolve_python_launcher()?;
+
     // Start the Python backend process.
     // stderr is inherited (not piped) so that Python logging output goes
     // straight to the parent's stderr.  If we piped stderr but never read
     // it, the 64 KiB pipe buffer would eventually fill up, blocking the
     // Python process and causing a broken-pipe cascade on stdin.
-    let mut child = Command::new("python3")
+    let mut cmd = Command::new(&python_exe);
+    for arg in &python_prefix_args {
+        cmd.arg(arg);
+    }
+
+    let mut child = cmd
         .arg(&backend_script)
         .env("PYTHONPATH", &python_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("Failed to start backend: {}", e))?;
+        .map_err(|e| format!("Failed to start backend using '{}': {}", python_exe, e))?;
     
     let stdin = child.stdin.take();
     let stdout = child.stdout.take();

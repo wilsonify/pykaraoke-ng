@@ -1,6 +1,5 @@
-// PyKaraoke NG – Browser Frontend
-// Talks directly to the backend REST API via fetch().
-// No Tauri dependency — works in any browser.
+// PyKaraoke NG – Tauri Frontend
+// Talks to Rust commands via Tauri invoke().
 
 // Keep a defensive fallback for environments where Tauri globals are absent.
 var invoke = async function(command, payload) {
@@ -8,6 +7,9 @@ var invoke = async function(command, payload) {
 };
 var listen = async function() {
     return function() {};
+};
+var dialogOpen = async function() {
+    return null;
 };
 
 try {
@@ -17,8 +19,12 @@ try {
     if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
         listen = window.__TAURI__.event.listen;
     }
+    if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.dialog.open) {
+        dialogOpen = window.__TAURI__.dialog.open;
+    }
 } catch (_) {
     // Browser mode: keep fallback functions.
+    dialogOpen = async function() { return null; };
 }
 
 class PyKaraokeApp {
@@ -26,53 +32,86 @@ class PyKaraokeApp {
         this.backendRunning = false;
         this.currentState = null;
         this.searchResults = [];
+        this.lastBackendCheckAt = 0;
         this.init();
     }
 
     async init() {
         this.setupEventListeners();
-        await this.checkBackend();
+        await this.ensureBackendStarted();
         this.startStatePolling();
     }
 
     // ── Backend communication ────────────────────────────────────────────
 
-    async api(method, path, body) {
-        const opts = { method, headers: {} };
-        if (body !== undefined) {
-            opts.headers['Content-Type'] = 'application/json';
-            opts.body = JSON.stringify(body);
+    errorMessage(err) {
+        if (!err) return 'Unknown error';
+        if (typeof err === 'string') return err;
+        if (typeof err.message === 'string' && err.message.length > 0) return err.message;
+        try {
+            return JSON.stringify(err);
+        } catch (_) {
+            return String(err);
         }
-        const res = await fetch(path, opts);
-        if (!res.ok) throw new Error(method + ' ' + path + ' -> ' + res.status);
-        return res.json();
     }
 
     async sendCommand(action, params) {
-        return this.api('POST', '/api/command', { action, params: params || {} });
+        if (!window.__TAURI__ || !window.__TAURI__.tauri || !window.__TAURI__.tauri.invoke) {
+            throw new Error('Tauri bridge unavailable');
+        }
+
+        return invoke('send_command', {
+            action: action,
+            params: params || {},
+        });
     }
 
-    async checkBackend() {
+    async ensureBackendStarted() {
         try {
-            this.updateStatus('Connecting to backend…');
-            await this.api('GET', '/health');
+            this.updateStatus('Starting backend...');
+            await invoke('start_backend');
+
+            // Validate round-trip so we know command pipe is alive.
+            const r = await this.sendCommand('get_state');
+            if (!r || r.status !== 'ok') {
+                const msg = (r && r.message) ? r.message : 'Unknown backend error';
+                throw new Error(msg);
+            }
+
             this.backendRunning = true;
             this.updateBackendStatus(true);
             this.updateStatus('Backend connected');
         } catch (e) {
-            console.error('Backend unreachable:', e);
-            this.updateStatus('Backend unreachable');
+            console.error('Backend startup failed:', e);
+            this.updateStatus('Backend startup failed: ' + this.errorMessage(e));
+            this.backendRunning = false;
             this.updateBackendStatus(false);
         }
     }
 
     startStatePolling() {
         setInterval(async () => {
-            if (!this.backendRunning) return;
+            if (!this.backendRunning) {
+                const now = Date.now();
+                if (now - this.lastBackendCheckAt > 3000) {
+                    this.lastBackendCheckAt = now;
+                    await this.ensureBackendStarted();
+                }
+                return;
+            }
+
             try {
                 var r = await this.sendCommand('get_state');
-                if (r.status === 'ok' && r.data) this.updateUIFromState(r.data);
-            } catch (_) { /* backend may be momentarily busy */ }
+                if (r.status === 'ok' && r.data) {
+                    this.updateUIFromState(r.data);
+                } else if (r.status !== 'ok') {
+                    this.backendRunning = false;
+                    this.updateBackendStatus(false);
+                }
+            } catch (_) {
+                this.backendRunning = false;
+                this.updateBackendStatus(false);
+            }
         }, 1000);
     }
 
@@ -99,8 +138,8 @@ class PyKaraokeApp {
             if (e.key === 'Enter') self.handleSearch();
         });
         $('search-input').addEventListener('input', function() {
-            clearTimeout(self._debounce);
-            self._debounce = setTimeout(function() { self.handleSearch(); }, 200);
+            clearTimeout(self._searchDebounce);
+            self._searchDebounce = setTimeout(function() { self.handleSearch(); }, 200);
         });
 
         document.addEventListener('keydown', function(e) {
@@ -120,7 +159,8 @@ class PyKaraokeApp {
         $('scan-library-btn').addEventListener('click', function() { self.handleScanLibrary(); });
 
         var closeSettings = function() { self.handleCloseSettings(); };
-        $('settings-btn').addEventListener('click', function() { self.handleShowSettings(); });
+        var settingsBtn = document.getElementById('settings-btn');
+        settingsBtn.addEventListener('click', function() { self.handleShowSettings(); });
         if ($('settings-close-btn'))  $('settings-close-btn').addEventListener('click', closeSettings);
         if ($('settings-cancel-btn')) $('settings-cancel-btn').addEventListener('click', closeSettings);
         if ($('settings-save-btn'))   $('settings-save-btn').addEventListener('click', function() { self.handleSaveSettings(); });
@@ -177,9 +217,26 @@ class PyKaraokeApp {
 
     async handleAddFolder() {
         var input = document.getElementById('folder-input');
-        var folder = input ? input.value.trim() : '';
+        var folder = '';
+
+        try {
+            var selected = await dialogOpen({
+                directory: true,
+                multiple: false,
+                title: 'Select Karaoke Folder'
+            });
+            if (typeof selected === 'string') {
+                folder = selected;
+            }
+        } catch (_) {
+            // Ignore picker failures and fall back to manual input.
+        }
+
+        if (!folder && input) {
+            folder = input.value.trim();
+        }
         if (!folder) {
-            this.updateStatus('Enter a folder path first');
+            this.updateStatus('No folder selected');
             return;
         }
         this.updateStatus('Adding folder: ' + folder);
@@ -187,7 +244,7 @@ class PyKaraokeApp {
             await this.sendCommand('add_folder', { folder: folder });
             this.updateStatus('Folder added: ' + folder);
         } catch (e) {
-            this.updateStatus('Error: ' + e.message);
+            this.updateStatus('Error: ' + this.errorMessage(e));
         }
     }
 
@@ -202,7 +259,7 @@ class PyKaraokeApp {
                 this.updateStatus('Scan finished: ' + (r.message || 'no songs found'));
             }
         }
-        catch (e) { this.updateStatus('Scan failed: ' + e.message); }
+        catch (e) { this.updateStatus('Scan failed: ' + this.errorMessage(e)); }
     }
 
     async handleShowSettings() {
@@ -234,7 +291,7 @@ class PyKaraokeApp {
             await this.sendCommand('update_settings', params);
             this.updateStatus('Settings saved');
             this.handleCloseSettings();
-        } catch (e) { this.updateStatus('Error: ' + e.message); }
+        } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
     }
 
     // ── UI updates ───────────────────────────────────────────────────────
@@ -371,7 +428,7 @@ class PyKaraokeApp {
             }
         } catch (e) {
             console.error('[PyKaraoke] enqueue exception:', e);
-            this.updateStatus('Failed to enqueue: ' + e.message);
+            this.updateStatus('Failed to enqueue: ' + this.errorMessage(e));
         }
     }
 

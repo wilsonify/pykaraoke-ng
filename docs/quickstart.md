@@ -37,9 +37,20 @@ uv run python -m pykaraoke.players.mpg song.mpg
 
 ## 5. Build the Tauri app
 
+Windows (recommended):
+
 ```bash
+cd src/runtimes/tauri
+tauri dev -c src-tauri/tauri.conf.json
+```
+
+Linux/macOS:
+
+```bash
+cd src/runtimes/tauri
+tauri dev -c src-tauri/tauri.conf.json
+
 cd src/runtimes/tauri/src-tauri
-cargo tauri dev      # development
 cargo tauri build    # production
 ```
 
@@ -49,6 +60,7 @@ cargo tauri build    # production
 |---------|-----|
 | `ModuleNotFoundError: pykaraoke` | Run `uv sync` or `pip install -e .` |
 | Tests fail with import errors | Use `uv run pytest` or set `PYTHONPATH=src` |
+| Tauri linker errors (`kernel32.lib` not found, `link.exe` operand errors) on Windows | Install Build Tools C++ workload + Windows SDK, run `vcvars64.bat`, then launch `tauri dev -c src-tauri/tauri.conf.json` |
 
 ## Next
 

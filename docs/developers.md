@@ -122,6 +122,26 @@ SonarCloud runs on every PR. See [SonarQube Setup](development/sonarqube-setup.m
 
 ## Tauri Development
 
+### Windows prerequisites
+
+Install required tooling:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e \
+    --accept-source-agreements --accept-package-agreements \
+    --override "--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.Windows10SDK.19041"
+
+npm install -g @tauri-apps/cli@1
+```
+
+Run from a Developer Command Prompt or initialize MSVC env first:
+
+```bat
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+cd src\runtimes\tauri
+tauri dev -c src-tauri\tauri.conf.json
+```
+
 ### Linux prerequisites
 
 ```bash
@@ -134,10 +154,17 @@ cargo install tauri-cli --version "^1"
 ### Run
 
 ```bash
+cd src/runtimes/tauri
+tauri dev -c src-tauri/tauri.conf.json
+
 cd src/runtimes/tauri/src-tauri
-cargo tauri dev     # hot-reload
 cargo tauri build   # production
 ```
+
+### Troubleshooting
+
+- If you see linker errors like `kernel32.lib` not found or `link.exe` operand errors, use Windows Developer Command Prompt and run `vcvars64.bat` before launching Tauri.
+- If `cargo tauri` fails while installing the CLI on Windows, install CLI via npm: `npm install -g @tauri-apps/cli@1`.
 
 ---
 
