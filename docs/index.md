@@ -65,6 +65,18 @@ For development setup, see the **[Quick Start Guide](quickstart.md)**.
 - **[Open Work](architecture/next-steps.md)** — Backlog and future features
 - **[Legacy Issues](issues/README.md)** — Issues from the original PyKaraoke
 
+### Reports
+
+- **[Build Audit](reports/BUILD_AUDIT.md)** — Repository build/discovery audit
+- **[Test Report](reports/TEST_REPORT.md)** — Full test execution outcomes
+- **[Deployment Report](reports/DEPLOYMENT_REPORT.md)** — Deployment artifact validation
+- **[CI/CD Report](reports/CICD_REPORT.md)** — Workflow and automation review
+- **[Security Report](reports/SECURITY_REPORT.md)** — Security findings and remediation guidance
+- **[Reliability Report](reports/RELIABILITY_REPORT.md)** — Resilience fixes and remaining risks
+- **[Documentation Report](reports/DOCUMENTATION_REPORT.md)** — Docs accuracy and gaps
+- **[E2E Report](reports/E2E_REPORT.md)** — End-to-end validation status
+- **[Release Readiness](reports/RELEASE_READINESS.md)** — Release risk assessment
+
 ## License
 
 [LGPL-2.1-or-later](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html)
