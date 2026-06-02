@@ -10,6 +10,7 @@ coverage.xml
 pytest-junit.xml
 
 # Tauri build artifacts
+dist/
 target/
 tauri-app/src-tauri/Cargo.lock
 
