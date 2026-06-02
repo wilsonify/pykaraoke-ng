@@ -45,6 +45,12 @@ run_python() {
         # shellcheck disable=SC1090
         source "$VENV_DIR/bin/activate"
         python "$@"
+  elif [[ -f "$VENV_DIR/Scripts/activate" ]]; then
+    # shellcheck disable=SC1090
+    source "$VENV_DIR/Scripts/activate"
+    python "$@"
+  elif [[ -x "$VENV_DIR/Scripts/python.exe" ]]; then
+    "$VENV_DIR/Scripts/python.exe" "$@"
     else
         echo -e "${RED}Error: No Python environment found.${NC}" >&2
         echo -e "${YELLOW}Run: bash scripts/setup-dev-env.sh${NC}" >&2
@@ -54,7 +60,7 @@ run_python() {
 
 # Check if Docker is available
 has_docker() {
-    command -v docker >/dev/null 2>&1 && command -v docker-compose >/dev/null 2>&1
+  command -v docker >/dev/null 2>&1 && (docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1)
 }
 
 # Run tests with Docker Compose

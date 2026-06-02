@@ -40,6 +40,7 @@ http = [
     "uvicorn>=0.24.0",
 ]
 dev = [
+    "build>=1.2.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",
@@ -108,6 +109,7 @@ exclude = [
 
 [dependency-groups]
 dev = [
+    "build>=1.2.0",
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
     "pytest-xdist>=3.5.0",

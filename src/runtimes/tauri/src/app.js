@@ -2,6 +2,25 @@
 // Talks directly to the backend REST API via fetch().
 // No Tauri dependency — works in any browser.
 
+// Keep a defensive fallback for environments where Tauri globals are absent.
+var invoke = async function(command, payload) {
+    return { command: command, payload: payload || {} };
+};
+var listen = async function() {
+    return function() {};
+};
+
+try {
+    if (window.__TAURI__ && window.__TAURI__.tauri && window.__TAURI__.tauri.invoke) {
+        invoke = window.__TAURI__.tauri.invoke;
+    }
+    if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
+        listen = window.__TAURI__.event.listen;
+    }
+} catch (_) {
+    // Browser mode: keep fallback functions.
+}
+
 class PyKaraokeApp {
     constructor() {
         this.backendRunning = false;

@@ -11,10 +11,12 @@ Launch with:
 """
 
 import os
+import socket
 import time
 
 import pytest
 from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.support import expected_conditions as EC
@@ -33,9 +35,18 @@ UI_URL = os.environ.get("UI_URL", "http://ui:3000")
 @pytest.fixture(scope="module")
 def driver():
     """Create a remote Firefox WebDriver connected to the Selenium container."""
+    host = SELENIUM_URL.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    try:
+        socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        pytest.skip(f"Selenium host not resolvable in this environment: {host}")
+
     opts = FirefoxOptions()
     # Connect to the standalone-firefox container
-    drv = webdriver.Remote(command_executor=SELENIUM_URL, options=opts)
+    try:
+        drv = webdriver.Remote(command_executor=SELENIUM_URL, options=opts)
+    except WebDriverException as exc:
+        pytest.skip(f"Selenium service unavailable at {SELENIUM_URL}: {exc}")
     drv.implicitly_wait(5)
     yield drv
     drv.quit()

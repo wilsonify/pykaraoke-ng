@@ -7,6 +7,7 @@ Tests that the mode selection and server startup logic works correctly.
 import subprocess
 import sys
 import time
+import os
 from pathlib import Path
 
 
@@ -18,12 +19,14 @@ SRC_DIR = REPO_ROOT / "src"
 
 def test_stdio_help():
     """Test that stdio mode shows help correctly"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(SRC_DIR)
     result = subprocess.run(
         [sys.executable, "-m", "pykaraoke.core.backend", "--help"],
         capture_output=True,
         text=True,
         timeout=5,
-        env={"PYTHONPATH": str(SRC_DIR)},
+        env=env,
     )
     assert "--stdio" in result.stdout
     assert "--http" in result.stdout
@@ -33,12 +36,14 @@ def test_stdio_help():
 
 def test_http_mode_startup():
     """Test that HTTP mode can start (will fail due to missing deps but mode selection works)"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(SRC_DIR)
     proc = subprocess.Popen(
         [sys.executable, "-m", "pykaraoke.core.backend", "--http", "--port", "18080"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={"PYTHONPATH": str(SRC_DIR)},
+        env=env,
     )
     
     # Wait a moment and check output
@@ -54,12 +59,14 @@ def test_http_mode_startup():
 
 def test_stdio_mode_startup():
     """Test that stdio mode can start (will fail due to missing deps but mode selection works)"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(SRC_DIR)
     proc = subprocess.Popen(
         [sys.executable, "-m", "pykaraoke.core.backend", "--stdio"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        env={"PYTHONPATH": str(SRC_DIR)},
+        env=env,
     )
     
     # Wait a moment and check output
