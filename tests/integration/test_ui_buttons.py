@@ -272,3 +272,112 @@ class TestAddFolder:
 
         status = status_text(driver)
         assert "Enter a folder path" in status
+
+
+class TestUserReportedDefects:
+    """Capture user-reported desktop defects as executable E2E regressions."""
+
+    def _scan_fixtures(self, driver):
+        folder_input = driver.find_element(By.ID, "folder-input")
+        folder_input.clear()
+        folder_input.send_keys("/app/fixtures")
+        driver.find_element(By.ID, "add-folder-btn").click()
+        time.sleep(0.8)
+
+        driver.find_element(By.ID, "scan-library-btn").click()
+        WebDriverWait(driver, 20).until(
+            lambda d: "Scan" in status_text(d) or "song" in status_text(d)
+        )
+        return status_text(driver)
+
+    def _search(self, driver, query):
+        search_input = driver.find_element(By.ID, "search-input")
+        search_input.clear()
+        search_input.send_keys(query)
+        driver.find_element(By.ID, "search-btn").click()
+        time.sleep(1)
+
+    def _time_to_seconds(self, text):
+        mins, secs = text.strip().split(":")
+        return int(mins) * 60 + int(secs)
+
+    def test_scan_fixtures_reports_18_songs(self, driver):
+        status = self._scan_fixtures(driver)
+        assert "18 song" in status, f"Expected fixture scan count in status, got: {status}"
+
+    def test_search_input_should_be_below_scan_controls(self, driver):
+        search_input = driver.find_element(By.ID, "search-input")
+        scan_btn = driver.find_element(By.ID, "scan-library-btn")
+        assert search_input.location["y"] > scan_btn.location["y"], (
+            "Expected search input to appear below scan controls"
+        )
+
+    def test_search_elvis_should_not_return_duplicate_titles(self, driver):
+        self._scan_fixtures(driver)
+        self._search(driver, "elvis")
+
+        WebDriverWait(driver, 10).until(
+            lambda d: len(d.find_elements(By.CSS_SELECTOR, "#results-list .song-item-title")) > 0
+        )
+        title_elements = driver.find_elements(By.CSS_SELECTOR, "#results-list .song-item-title")
+        titles = [el.text.strip() for el in title_elements if el.text.strip()]
+        assert len(titles) == len(set(titles)), (
+            f"Duplicate titles found for Elvis search: {titles}"
+        )
+
+    def test_play_should_start_visible_playback_and_not_stall_progress(self, driver):
+        self._scan_fixtures(driver)
+        self._search(driver, "elvis")
+
+        WebDriverWait(driver, 10).until(
+            lambda d: len(d.find_elements(By.CSS_SELECTOR, "#results-list .song-item")) > 0
+        )
+        # First click enqueues from search results in this UI.
+        driver.find_elements(By.CSS_SELECTOR, "#results-list .song-item")[0].click()
+        time.sleep(0.4)
+
+        time_before = driver.find_element(By.ID, "time-current").text
+        driver.find_element(By.ID, "play-btn").click()
+        time.sleep(2)
+
+        title = driver.find_element(By.ID, "current-song-title").text.strip()
+        time_after = driver.find_element(By.ID, "time-current").text
+        progress_style = driver.find_element(By.ID, "progress-fill").get_attribute("style") or ""
+
+        assert title and title != "No song loaded", "Play did not load a visible song"
+        assert self._time_to_seconds(time_after) > self._time_to_seconds(time_before), (
+            f"Playback time did not advance: before={time_before}, after={time_after}"
+        )
+        assert "75%" not in progress_style, "Progress bar appears stuck at 75%"
+
+    def test_progress_bar_should_be_positioned_below_song_queue(self, driver):
+        queue = driver.find_element(By.CSS_SELECTOR, ".playlist-section")
+        progress = driver.find_element(By.CSS_SELECTOR, ".progress-bar")
+        assert progress.location["y"] > (queue.location["y"] + queue.size["height"]), (
+            "Expected progress bar below song queue"
+        )
+
+    def test_clicking_progress_bar_should_seek_position(self, driver):
+        self._scan_fixtures(driver)
+        self._search(driver, "elvis")
+
+        WebDriverWait(driver, 10).until(
+            lambda d: len(d.find_elements(By.CSS_SELECTOR, "#results-list .song-item")) > 0
+        )
+        driver.find_elements(By.CSS_SELECTOR, "#results-list .song-item")[0].click()
+        time.sleep(0.4)
+        driver.find_element(By.ID, "play-btn").click()
+        time.sleep(1.5)
+
+        before = driver.find_element(By.ID, "time-current").text
+        progress = driver.find_element(By.CSS_SELECTOR, ".progress-bar")
+        driver.execute_script(
+            "arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true, clientX: arguments[0].getBoundingClientRect().left + arguments[0].offsetWidth * 0.8}));",
+            progress,
+        )
+        time.sleep(1)
+        after = driver.find_element(By.ID, "time-current").text
+
+        assert self._time_to_seconds(after) > self._time_to_seconds(before), (
+            f"Clicking progress bar did not seek playback: before={before}, after={after}"
+        )
