@@ -291,3 +291,19 @@ class TestMainPortParsing:
                 with patch.object(backend_module, "create_stdio_server") as mock_stdio:
                     backend_module.main()
                     mock_stdio.assert_called_once()
+
+
+class TestMainHostDefault:
+    """Covers default HTTP host hardening behavior in main()."""
+
+    def test_http_mode_default_host_localhost(self):
+        from pykaraoke.core import backend as backend_module
+
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PYKARAOKE_API_HOST", None)
+            with patch("sys.argv", ["backend", "--http"]):
+                with patch.object(backend_module, "create_http_server") as mock_http:
+                    backend_module.main()
+                    mock_http.assert_called_once()
+                    _, kwargs = mock_http.call_args
+                    assert kwargs["host"] == "127.0.0.1"

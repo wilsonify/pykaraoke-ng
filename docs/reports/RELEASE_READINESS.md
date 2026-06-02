@@ -5,43 +5,48 @@ Date: 2026-06-02
 ## Build Status
 - Python package build: PASS (sdist + wheel)
 - Python editable install with dev/test/http extras: PASS on Python 3.13
-- Tauri and Docker builds: NOT RUN locally in this session (tooling unavailable)
+- Docker/compose image builds in WSL/Podman: PASS
+- Tauri native packaging: NOT RUN in this pass
 
 ## Test Status
 - Full pytest suite: PASS with expected skips
+- Targeted security regression suite: PASS
+- Containerized integration profile: PASS (26 passed, 18 skipped)
+- Containerized Selenium E2E UI suite: PASS (16 passed)
 - Former failures/errors fixed in this remediation pass
 
 ## Coverage Summary
 - Existing coverage pipeline and local coverage-capable setup are present
 - Confidence level:
   - High for Python unit/integration paths exercised by local pytest
-  - Medium for containerized and browser-remote paths not executed end-to-end locally
+  - High for containerized integration and browser-remote paths exercised in WSL/Podman
+  - Medium for native Tauri packaging/runtime path not exercised in this pass
 
 ## Security Summary
 - No known third-party dependency CVEs from pip-audit
-- Static findings remain for pickle usage and broad default bind host
+- Static findings remain for pickle usage and subprocess advisories
+- Backend broad default bind host finding addressed (localhost default)
 - No critical findings identified in this pass
 
 ## Deployment Readiness
 - Manifest syntax validation: PASS
-- Runtime deployment verification: INCOMPLETE in this local environment (Docker unavailable)
+- Runtime deployment verification: PASS in WSL/Podman (backend, integration, Selenium E2E)
 
 ## Remaining Risks
-- HIGH:
-  - Containerized deployment runtime not validated in this session
 - MEDIUM:
-  - Security posture: pickle deserialization pathway and 0.0.0.0 default bind behavior
-  - Browser E2E runtime not executed against real Selenium/grid stack locally
+  - Security posture: pickle deserialization pathway remains by design (mitigated with file safety checks)
+  - Native Tauri packaging/runtime not executed in this pass
 - LOW:
+  - Subprocess advisory in mpg player remains as low-confidence/low-severity operational risk
   - Minor technical debt markers and possible unused assets
 
 ## Recommended Next Actions
-1. Run docker-compose integration/e2e matrix on a Docker-enabled host and attach logs/results.
-2. Decide policy for pickle persistence hardening and backend bind defaults.
+1. Decide long-term replacement plan for pickle database persistence format.
+2. Run native Tauri packaging validation on target release platform(s).
 3. Triage and gradually reduce existing Ruff lint debt in tests.
 4. Optionally remove/archive unused asset candidates after maintainer confirmation.
 
 ## Readiness Verdict
-- Conditionally ready for continued maintenance and non-breaking Python releases.
-- Full production release confidence requires one additional containerized deployment and browser E2E validation pass.
+- Ready for continued maintenance and non-breaking Python releases, with containerized runtime path validated.
+- Production release confidence is now primarily gated by native Tauri packaging validation and long-term pickle format hardening.
 

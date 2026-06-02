@@ -1207,6 +1207,37 @@ class SongDB:
             return "New version of PyKaraoke, clearing settings"
         return None
 
+    def _is_safe_database_file(self, db_filepath):
+        """Basic safety checks before loading a pickle database file.
+
+        This does not make pickle safe, but it narrows accepted inputs to files
+        inside the configured save directory with sane ownership/permissions.
+        """
+        try:
+            save_dir_abs = os.path.abspath(self.save_dir)
+            db_abs = os.path.abspath(db_filepath)
+            if os.path.commonpath([save_dir_abs, db_abs]) != save_dir_abs:
+                return False
+
+            st = os.stat(db_abs)
+            # Guard against unexpectedly large files.
+            if st.st_size > 50 * 1024 * 1024:
+                return False
+
+            if env != ENV_WINDOWS:
+                try:
+                    if st.st_uid != os.geteuid():
+                        return False
+                except AttributeError:
+                    pass
+                # Reject group/world-writable files.
+                if st.st_mode & 0o022:
+                    return False
+        except OSError:
+            return False
+
+        return True
+
     def load_database(self, error_callback):
         """Load the saved database."""
 
@@ -1219,13 +1250,17 @@ class SongDB:
         # Load the database file
         db_filepath = os.path.join(self.save_dir, "songdb.dat")
         if os.path.exists(db_filepath):
-            file = open(db_filepath, "rb")
             loaddb = None
-            try:
-                loaddb = pickle.load(file)
-            except (EOFError, pickle.UnpicklingError, AttributeError):
-                # Corrupt or incompatible database file, will create new one
-                pass
+            if not self._is_safe_database_file(db_filepath):
+                if error_callback:
+                    error_callback("Unsafe database file detected, ignoring cached database")
+            else:
+                try:
+                    with open(db_filepath, "rb") as file:
+                        loaddb = pickle.load(file)
+                except (EOFError, pickle.UnpicklingError, AttributeError, OSError):
+                    # Corrupt or incompatible database file, will create new one
+                    pass
             if getattr(loaddb, "Version", None) == DATABASE_VERSION:
                 self.full_song_list = loaddb.full_song_list
                 self.song_list = loaddb.full_song_list
@@ -1233,7 +1268,7 @@ class SongDB:
                 self.titles_files = loaddb.titles_files
                 self.got_titles = loaddb.got_titles
                 self.got_artists = loaddb.got_artists
-            else:
+            elif loaddb is not None:
                 if error_callback:
                     error_callback("New version of PyKaraoke, clearing database")
 

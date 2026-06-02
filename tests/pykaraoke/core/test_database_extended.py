@@ -351,6 +351,28 @@ class TestSongDBMethodsExtended:
             db2.load_settings(None)
             assert db2.settings.sample_rate == 22050
 
+    def test_database_file_rejects_outside_save_dir(self):
+        db = SongDB()
+        with tempfile.TemporaryDirectory() as save_dir, tempfile.TemporaryDirectory() as other_dir:
+            db.save_dir = save_dir
+            outside_db = os.path.join(other_dir, "songdb.dat")
+            with open(outside_db, "wb") as f:
+                f.write(b"not-a-real-db")
+            assert db._is_safe_database_file(outside_db) is False
+
+    def test_load_database_reports_unsafe_file(self):
+        db = SongDB()
+        with tempfile.TemporaryDirectory() as save_dir:
+            db.save_dir = save_dir
+            db_path = os.path.join(save_dir, "songdb.dat")
+            with open(db_path, "wb") as f:
+                f.write(b"not-a-real-db")
+
+            callback = MagicMock()
+            with patch.object(db, "_is_safe_database_file", return_value=False):
+                db.load_database(callback)
+            callback.assert_called_once_with("Unsafe database file detected, ignoring cached database")
+
 
 class TestSongStructExtended:
     """Additional SongStruct tests."""

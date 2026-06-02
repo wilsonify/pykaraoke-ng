@@ -635,7 +635,7 @@ def create_stdio_server(backend: PyKaraokeBackend, *, json_out=None):
         backend.shutdown()
 
 
-def create_http_server(backend: PyKaraokeBackend, host: str = "0.0.0.0", port: int = 8080):
+def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port: int = 8080):
     """
     Create an HTTP-based command server using FastAPI.
     Exposes a REST API for controlling the backend.
@@ -874,8 +874,8 @@ Examples:
     parser.add_argument(
         "--host",
         type=str,
-        default=os.getenv("PYKARAOKE_API_HOST", "0.0.0.0"),
-        help="HTTP server host (default: 0.0.0.0, env: PYKARAOKE_API_HOST)",
+        default=os.getenv("PYKARAOKE_API_HOST", "127.0.0.1"),
+        help="HTTP server host (default: 127.0.0.1, env: PYKARAOKE_API_HOST)",
     )
 
     # Parse port with error handling for invalid env var

@@ -17,15 +17,21 @@ Date: 2026-06-02
   - Prefer safer serialization (json/sqlite/native structured format)
   - If pickle must remain, enforce trusted file location and strict ownership/permissions checks before load
 - Validation performed: bandit reported B403 and B301
+- Second-pass hardening implemented:
+  - Added `SongDB._is_safe_database_file` guard to reject unsafe db paths/files before load.
+  - Added size/ownership/permission checks (platform-appropriate).
+  - Added regression tests validating unsafe-file rejection path.
 
-### 2) Backend default bind host is 0.0.0.0
-- Severity: MEDIUM
-- Impact: Service may unintentionally listen on all interfaces if deployed without network controls
-- Evidence: src/pykaraoke/core/backend.py defaults
-- Remediation:
-  - Consider localhost default for dev mode and explicit opt-in for external bind
-  - Keep container deployments explicit via env override
-- Validation performed: bandit B104
+### 2) Backend default bind host behavior
+- Severity: RESOLVED (from MEDIUM)
+- Previous Impact: Service could listen on all interfaces by default.
+- Evidence: src/pykaraoke/core/backend.py defaults.
+- Remediation implemented:
+  - Default host changed from `0.0.0.0` to `127.0.0.1` in backend runtime and CLI defaults.
+  - Container deployment remains explicit via `PYKARAOKE_API_HOST=0.0.0.0` where external bind is intended.
+- Validation performed:
+  - Targeted backend regression tests passed.
+  - bandit no longer reports B104 for backend default bind host.
 
 ### 3) Subprocess usage in mpg player
 - Severity: LOW
@@ -45,6 +51,13 @@ Date: 2026-06-02
 - No hardcoded secret values found in audited files
 
 ## Remediation Implemented in This Pass
-- No direct security-behavior code change to pickle/bind defaults was applied to avoid behavior regressions without maintainer policy decision.
-- Operationally safer test behavior and tooling reliability improvements were implemented.
+- Applied backend default-host hardening (`127.0.0.1` default).
+- Applied guarded pickle-load path for song database cache.
+- Added targeted regression tests for both security fixes.
+- Re-ran bandit to confirm removal of bind-host finding and capture residual pickle/subprocess advisories.
+
+## Current Security Posture
+- High/Critical: none observed in this pass.
+- Medium: pickle deserialization remains a known residual risk by design (mitigated by file safety checks).
+- Low: subprocess advisory remains, with `shell=False` and expected command invocation pattern.
 
