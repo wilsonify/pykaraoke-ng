@@ -45,6 +45,24 @@ fn command_works(program: &str, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
+fn python_has_backend_deps(program: &str, prefix_args: &[&str]) -> bool {
+    let mut args: Vec<&str> = prefix_args.to_vec();
+    args.push("-c");
+    args.push("import pygame, numpy, mutagen");
+    command_works(program, &args)
+}
+
+fn venv_python_candidates_from_ancestors(start: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for ancestor in start.ancestors() {
+        out.push(ancestor.join(".venv313").join("Scripts").join("python.exe"));
+        out.push(ancestor.join(".venv").join("Scripts").join("python.exe"));
+        out.push(ancestor.join(".venv313").join("bin").join("python"));
+        out.push(ancestor.join(".venv").join("bin").join("python"));
+    }
+    out
+}
+
 fn resolve_python_launcher() -> Result<(String, Vec<String>), String> {
     if let Ok(py) = std::env::var("PYKARAOKE_PYTHON") {
         if !py.trim().is_empty() {
@@ -53,32 +71,29 @@ fn resolve_python_launcher() -> Result<(String, Vec<String>), String> {
     }
 
     let cwd = std::env::current_dir().unwrap_or_default();
-    let path_candidates = vec![
-        cwd.join(".venv").join("Scripts").join("python.exe"),
-        cwd.join("..").join(".venv").join("Scripts").join("python.exe"),
-        cwd.join("..").join("..").join(".venv").join("Scripts").join("python.exe"),
-        cwd.join("..").join("..").join("..").join(".venv").join("Scripts").join("python.exe"),
-        cwd.join(".venv").join("bin").join("python"),
-    ];
+    let path_candidates = venv_python_candidates_from_ancestors(&cwd);
 
     for p in path_candidates {
         if p.exists() {
-            return Ok((p.to_string_lossy().to_string(), vec![]));
+            let program = p.to_string_lossy().to_string();
+            if python_has_backend_deps(&program, &[]) {
+                return Ok((program, vec![]));
+            }
         }
     }
 
-    if command_works("python3", &["--version"]) {
+    if command_works("python3", &["--version"]) && python_has_backend_deps("python3", &[]) {
         return Ok(("python3".to_string(), vec![]));
     }
-    if command_works("python", &["--version"]) {
+    if command_works("python", &["--version"]) && python_has_backend_deps("python", &[]) {
         return Ok(("python".to_string(), vec![]));
     }
-    if command_works("py", &["-3", "--version"]) {
+    if command_works("py", &["-3", "--version"]) && python_has_backend_deps("py", &["-3"]) {
         return Ok(("py".to_string(), vec!["-3".to_string()]));
     }
 
     Err(
-        "No working Python interpreter found. Set PYKARAOKE_PYTHON or install Python/venv (e.g. .venv\\Scripts\\python.exe).".to_string(),
+        "No working Python interpreter with backend dependencies found. Install dependencies in a venv (e.g. .venv313\\Scripts\\python.exe -m pip install -e .) or set PYKARAOKE_PYTHON.".to_string(),
     )
 }
 
