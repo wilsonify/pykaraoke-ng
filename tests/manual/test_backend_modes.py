@@ -31,7 +31,7 @@ def test_stdio_help():
     assert "--stdio" in result.stdout
     assert "--http" in result.stdout
     assert "BACKEND_MODE" in result.stdout
-    print("✓ Help output looks good")
+    print("[OK] Help output looks good")
 
 
 def test_http_mode_startup():
@@ -54,7 +54,7 @@ def test_http_mode_startup():
     # Check that it tried to start in HTTP mode
     combined = stdout + stderr
     assert "http mode" in combined.lower() or "HTTP" in combined
-    print("✓ HTTP mode startup initiated")
+    print("[OK] HTTP mode startup initiated")
 
 
 def test_stdio_mode_startup():
@@ -77,7 +77,7 @@ def test_stdio_mode_startup():
     # Check that it tried to start in stdio mode
     combined = stdout + stderr
     assert "stdio mode" in combined.lower() or "stdio" in combined
-    print("✓ stdio mode startup initiated")
+    print("[OK] stdio mode startup initiated")
 
 
 if __name__ == "__main__":
@@ -85,4 +85,4 @@ if __name__ == "__main__":
     test_stdio_help()
     test_http_mode_startup()
     test_stdio_mode_startup()
-    print("\n✅ All mode selection tests passed!")
+    print("\n[PASS] All mode selection tests passed!")

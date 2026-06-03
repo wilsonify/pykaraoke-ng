@@ -179,14 +179,11 @@ class TestTauriBundleResources:
         )
 
     def test_before_build_command_stages_backend(self):
-        """beforeBuildCommand must copy the Python backend into the staging dir."""
+        """beforeBuildCommand must build a standalone backend executable."""
         conf = json.loads(TAURI_CONF.read_text())
         before_build = conf.get("build", {}).get("beforeBuildCommand", "")
         assert before_build, "tauri.conf.json must have a beforeBuildCommand"
 
-        # The command may be an inline shell command or a script invocation.
-        # If it references a script file, read that script and verify it
-        # stages the backend/pykaraoke tree.
         if before_build.startswith("node "):
             script_rel = before_build.split("node ", 1)[1].strip()
             script_path = TAURI_CONF.parent.parent / script_rel
@@ -195,40 +192,49 @@ class TestTauriBundleResources:
                 f"{script_path} does not exist"
             )
             script_src = script_path.read_text()
-            assert "backend" in script_src and "pykaraoke" in script_src, (
-                "Stage-backend script must reference 'backend' and "
-                "'pykaraoke' to stage the Python backend tree"
+            assert "backend" in script_src and "backend.exe" in script_src, (
+                "Stage-backend script must produce a 'backend.exe' "
+                "standalone executable (via PyInstaller)"
             )
         else:
-            assert "backend" in before_build and "pykaraoke" in before_build, (
-                "tauri.conf.json beforeBuildCommand must stage the Python "
-                "backend tree into the backend/ directory so the resource "
-                "glob can bundle it"
+            assert "backend" in before_build and "backend.exe" in before_build, (
+                "tauri.conf.json beforeBuildCommand must build the "
+                "backend.exe executable so the resource glob can bundle it"
             )
 
     def test_core_python_modules_are_bundled(self):
-        """Critical Python modules should be staged by the beforeBuildCommand.
+        """Critical Python modules should be included in the PyInstaller build.
 
-        Since resources now uses a glob, we verify the beforeBuildCommand
-        (or the script it invokes) copies the required module directories
-        (core, config, players).
+        This test verifies that the PyInstaller spec file (backend.spec)
+        references the correct backend entry point so that PyInstaller's
+        dependency analyser will pull in all core modules (core, config,
+        players, etc.) automatically.
         """
         conf = json.loads(TAURI_CONF.read_text())
         before_build = conf.get("build", {}).get("beforeBuildCommand", "")
 
-        # Resolve the text that should list the module directories.
+        # Resolve the staging script text and find the spec file reference.
+        spec_path = None
         if before_build.startswith("node "):
             script_rel = before_build.split("node ", 1)[1].strip()
-            staging_text = (TAURI_CONF.parent.parent / script_rel).read_text()
+            script_text = (TAURI_CONF.parent.parent / script_rel).read_text()
+            # The script references the spec file explicitly.
+            for line in script_text.splitlines():
+                if "backend.spec" in line:
+                    spec_path = TAURI_CONF.parent.parent / "backend.spec"
+                    break
         else:
-            staging_text = before_build
+            spec_text = before_build
 
-        for module_dir in ["core", "config", "players"]:
-            assert module_dir in staging_text, (
-                f"beforeBuildCommand (or its staging script) should copy "
-                f"the pykaraoke/{module_dir}/ directory into the backend "
-                f"staging tree"
-            )
+        assert spec_path and spec_path.exists(), (
+            "beforeBuildCommand must reference a valid backend.spec file"
+        )
+
+        spec_text = spec_path.read_text()
+        assert "backend_api.py" in spec_text or "backend.py" in spec_text, (
+            "backend.spec must reference the backend entry point so that "
+            "PyInstaller follows imports into core/, config/, players/, etc."
+        )
 
 
 # ── JavaScript Tauri API resilience ──────────────────────────────────────

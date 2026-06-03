@@ -137,41 +137,58 @@ Modern web UI with:
    cargo install tauri-cli
    ```
 
-2. **Build the app**:
+2. **Install Python dependencies**:
 
    ```bash
-   cd tauri-app
-   cargo tauri dev  # Development mode
-   cargo tauri build  # Production build
+   python -m pip install -e ../../..  # install pykaraoke with pygame, numpy, mutagen
+   python -m pip install pyinstaller  # for production builds
    ```
 
-3. **Run Python backend standalone** (for testing):
+3. **Development mode** (uses Python interpreter directly):
 
    ```bash
-   python3 pykbackend.py
-   # Then send JSON commands via stdin
+   npx tauri dev
    ```
+
+   In dev mode the Rust backend searches for a Python interpreter with the
+   required dependencies and runs the backend script in place.  No
+   bundling is involved, so edit-test cycles are fast.
+
+4. **Production build** (standalone, no Python required on target):
+
+   ```bash
+   npx tauri build
+   ```
+
+   The `beforeBuildCommand` (`node scripts/stage-backend.js`) compiles the
+   Python backend into a standalone Windows executable via PyInstaller
+   (`backend.exe`, ~12 MB).  The Tauri resource glob bundles it into the
+   installer so the app runs on any Windows 10/11 machine without a
+   Python interpreter.
 
 ### Development Workflow
 
-1. **Backend changes**: Edit `pykbackend.py`, restart Tauri app
+1. **Backend changes**: Edit files in `src/pykaraoke/`, restart `npx tauri dev`
 2. **Frontend changes**: Edit files in `src/`, hot-reload enabled
-3. **Rust changes**: Edit `src-tauri/src/main.rs`, rebuild with `cargo tauri dev`
+3. **Rust changes**: Edit `src-tauri/src/main.rs`, rebuild with `npx tauri dev`
+4. **Packaging changes**: Edit `backend.spec` or `scripts/stage-backend.js`, run `npx tauri build`
 
 ## Project Structure
 
 ```txt
-tauri-app/
 ├── src/                      # Frontend web app
 │   ├── index.html           # Main UI
 │   ├── styles.css           # Styling
 │   └── app.js               # Frontend logic
+├── scripts/
+│   └── stage-backend.js     # Build script (copies .py or runs PyInstaller)
+├── backend.spec             # PyInstaller spec for standalone backend.exe
 ├── src-tauri/               # Rust backend
 │   ├── src/
-│   │   └── main.rs          # Tauri application entry
+│   │   └── main.rs          # Tauri application entry + bundled exe launcher
 │   ├── Cargo.toml           # Rust dependencies
 │   ├── tauri.conf.json      # Tauri configuration
-│   └── build.rs             # Build script
+│   └── build.rs             # Build script (placeholder for cargo test)
 └── README.md                # This file
 ```
 
@@ -231,24 +248,26 @@ The following wxPython components have been migrated:
 ### Building for Distribution
 
 ```bash
-cd tauri-app
-cargo tauri build
+npx tauri build
 ```
 
-This creates platform-specific installers:
+The build runs `scripts/stage-backend.js` which uses PyInstaller to
+compile the Python backend into a standalone `backend.exe` (~12 MB),
+then Tauri bundles it into platform-specific installers.
 
-- **Windows**: `.exe`, `.msi`
-- **macOS**: `.app`, `.dmg`
-- **Linux**: `.AppImage`, `.deb`, `.rpm`
+- **Windows**: `.exe` (NSIS), `.msi` (WiX)
+  → `src-tauri/target/release/bundle/`
 
 ### Bundle Contents
 
-The bundle includes:
+The installer contains everything needed to run without a Python
+interpreter on the target machine:
 
-- Tauri executable
-- Python backend script (`pykbackend.py`)
-- Python dependencies (bundled with PyInstaller/similar)
-- Frontend assets
+- Tauri executable (WebView2-based desktop shell, ~4 MB)
+- Python backend compiled into `backend.exe` (~12 MB, includes
+  pygame, numpy, mutagen, SDL2, freetype, and all pykaraoke modules)
+- Frontend web assets (HTML/CSS/JS, <1 MB)
+- DejaVu fonts for CDG rendering
 
 ## Roadmap
 

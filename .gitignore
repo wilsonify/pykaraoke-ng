@@ -13,6 +13,8 @@ pytest-junit.xml
 dist/
 target/
 tauri-app/src-tauri/Cargo.lock
+src/runtimes/tauri/build/
+src/runtimes/tauri/src-tauri/backend/
 
 
 # Node modules (if using npm for frontend)

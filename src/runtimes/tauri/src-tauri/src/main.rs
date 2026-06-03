@@ -97,106 +97,35 @@ fn resolve_python_launcher() -> Result<(String, Vec<String>), String> {
     )
 }
 
-/// Start the Python backend process
-#[tauri::command]
-fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    let mut backend = state.lock().unwrap();
-    
-    if backend.process.is_some() {
-        return Ok("Backend already running".to_string());
-    }
-    
-    // Get the path to the Python backend script.
-    // Try multiple candidate locations so it works in both development
-    // (source tree) and production (.deb install with bundled resources).
-    let resource_dir = app_handle.path_resolver()
-        .resource_dir()
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
-
-    let candidates: Vec<PathBuf> = vec![
-        // 1. Bundled resource — new layered architecture path
-        resource_dir.join("backend").join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // 2. Bundled resource — legacy path
-        resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
-        // 3. Flat bundled resource
-        resource_dir.join("backend.py"),
-        // 4. Development: project root -> new layered path
-        resource_dir.join("..").join("..").join("..").join("src")
-            .join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // 5. Development: project root -> legacy path
-        resource_dir.join("..").join("..").join("..").join("src")
-            .join("pykaraoke").join("core").join("backend.py"),
-        // 6. Development: CWD-based fallback (new path)
-        std::env::current_dir().unwrap_or_default()
-            .join("src").join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // 7. Development: CWD-based fallback (legacy path)
-        std::env::current_dir().unwrap_or_default()
-            .join("src").join("pykaraoke").join("core").join("backend.py"),
-    ];
-
-    let backend_script = candidates.iter()
-        .find(|p| p.exists())
-        .cloned()
-        .unwrap_or_else(|| {
-            // Last resort: use the bundled resource path (will produce a clear
-            // "file not found" error from Command::new below)
-            candidates[0].clone()
-        });
-    
-    // Compute the PYTHONPATH so Python can resolve `from pykaraoke…` imports.
-    // The backend script lives at  …/backend/pykaraoke/core/backend.py.
-    // PYTHONPATH must point to the directory that *contains* the `pykaraoke`
-    // package, i.e. the grandparent-of-grandparent of backend.py
-    // (backend.py -> core/ -> pykaraoke/ -> backend/).
-    let python_path = backend_script
-        .parent()                    // .../pykaraoke/core
-        .and_then(|p| p.parent())    // .../pykaraoke
-        .and_then(|p| p.parent())    // .../backend  (contains the pykaraoke package)
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .to_path_buf();
-
-    let (python_exe, python_prefix_args) = resolve_python_launcher()?;
-
-    // Start the Python backend process.
-    // stderr is inherited (not piped) so that Python logging output goes
-    // straight to the parent's stderr.  If we piped stderr but never read
-    // it, the 64 KiB pipe buffer would eventually fill up, blocking the
-    // Python process and causing a broken-pipe cascade on stdin.
-    let mut cmd = Command::new(&python_exe);
-    for arg in &python_prefix_args {
-        cmd.arg(arg);
-    }
-
+/// Spawn a child process and wire up stdin/stdout JSON IPC.
+/// Used by both the bundled backend.exe and the Python dev launcher.
+fn spawn_backend_process(
+    cmd: &mut Command,
+    app_handle: &tauri::AppHandle,
+    backend: &mut BackendState,
+) -> Result<String, String> {
     let mut child = cmd
-        .arg(&backend_script)
-        .env("PYTHONPATH", &python_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|e| format!("Failed to start backend using '{}': {}", python_exe, e))?;
-    
+        .map_err(|e| format!("Failed to start backend: {}", e))?;
+
     let stdin = child.stdin.take();
     let stdout = child.stdout.take();
 
-    // Create a channel for routing command responses from the reader thread
-    // back to send_command.
     let (response_tx, response_rx) = mpsc::channel::<serde_json::Value>();
-    
-    // Spawn thread to read backend output
+
     if let Some(stdout) = stdout {
         let app_handle_clone = app_handle.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    // Parse and emit events to frontend
                     if let Ok(output) = serde_json::from_str::<serde_json::Value>(&line) {
                         if output["type"] == "event" {
-                            // Emit event to frontend
                             app_handle_clone.emit_all("backend-event", output["event"].clone()).ok();
                         } else if output["type"] == "response" {
-                            // Route command response back to send_command
                             response_tx.send(output["response"].clone()).ok();
                         }
                     }
@@ -204,12 +133,82 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
             }
         });
     }
-    
+
     backend.process = Some(child);
     backend.stdin = stdin;
     backend.response_rx = Some(response_rx);
-    
+
     Ok("Backend started successfully".to_string())
+}
+
+/// Start the backend process.
+///
+/// Two modes:
+///  1. Production – launches the bundled backend.exe (PyInstaller)
+///  2. Development – finds a Python interpreter and runs backend.py
+#[tauri::command]
+fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    let mut backend = state.lock().unwrap();
+
+    if backend.process.is_some() {
+        return Ok("Backend already running".to_string());
+    }
+
+    let resource_dir = app_handle.path_resolver()
+        .resource_dir()
+        .unwrap_or_else(|| std::env::current_dir().unwrap());
+
+    // ── 1. Try bundled backend.exe (production build with PyInstaller) ──
+    let bundled_exe = resource_dir.join("backend").join("backend.exe");
+    if bundled_exe.exists() {
+        let mut cmd = Command::new(&bundled_exe);
+        return spawn_backend_process(&mut cmd, &app_handle, &mut backend);
+    }
+
+    // ── 2. Fall back to Python launcher (dev mode) ──────────────────────
+    let candidates: Vec<PathBuf> = vec![
+        // Bundled resource — layered path
+        resource_dir.join("backend").join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // Bundled resource — legacy path
+        resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
+        // Flat bundled resource
+        resource_dir.join("backend.py"),
+        // Development: project root -> layered path
+        resource_dir.join("..").join("..").join("..").join("src")
+            .join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // Development: project root -> legacy path
+        resource_dir.join("..").join("..").join("..").join("src")
+            .join("pykaraoke").join("core").join("backend.py"),
+        // Development: CWD-based fallback (layered path)
+        std::env::current_dir().unwrap_or_default()
+            .join("src").join("pykaraoke").join("interfaces").join("backend_api.py"),
+        // Development: CWD-based fallback (legacy path)
+        std::env::current_dir().unwrap_or_default()
+            .join("src").join("pykaraoke").join("core").join("backend.py"),
+    ];
+
+    let backend_script = candidates.iter()
+        .find(|p| p.exists())
+        .cloned()
+        .unwrap_or_else(|| candidates[0].clone());
+
+    let python_path = backend_script
+        .parent()
+        .and_then(|p| p.parent())
+        .and_then(|p| p.parent())
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_path_buf();
+
+    let (python_exe, python_prefix_args) = resolve_python_launcher()?;
+
+    let mut cmd = Command::new(&python_exe);
+    for arg in &python_prefix_args {
+        cmd.arg(arg);
+    }
+    cmd.arg(&backend_script)
+        .env("PYTHONPATH", &python_path);
+
+    spawn_backend_process(&mut cmd, &app_handle, &mut backend)
 }
 
 /// Send a command to the Python backend

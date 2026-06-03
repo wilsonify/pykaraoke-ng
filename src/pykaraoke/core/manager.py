@@ -67,13 +67,27 @@ class PykManager:
 
         # Find the correct font path. If fully installed on Linux this
         # will be sys.prefix/share/pykaraoke/fonts. Otherwise look for
-        # it in the current directory or assets directory.
-        if os.path.isfile("fonts/DejaVuSans.ttf"):
-            self.font_path = "fonts"
-            self.icon_path = "icons"
-        elif os.path.isfile("assets/fonts/DejaVuSans.ttf"):
-            self.font_path = "assets/fonts"
-            self.icon_path = "assets/icons"
+        # it in the current directory, assets directory, or relative to
+        # the pykaraoke package location (works for editable/dev installs).
+        _pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        _src_root = os.path.dirname(_pkg_dir)
+        _project_root = os.path.dirname(_src_root)
+        for candidate in [
+            "fonts",
+            "assets/fonts",
+            os.path.join(_project_root, "fonts"),
+            os.path.join(_project_root, "assets", "fonts"),
+            os.path.join(_src_root, "..", "fonts"),
+            os.path.join(_src_root, "..", "assets", "fonts"),
+            # PyInstaller bundle: fonts are at sys._MEIPASS/fonts
+            os.path.join(_src_root, "fonts"),
+            os.path.join(_src_root, "assets", "fonts"),
+        ]:
+            _test = os.path.join(candidate, "DejaVuSans.ttf")
+            if os.path.isfile(_test):
+                self.font_path = os.path.normpath(candidate)
+                self.icon_path = os.path.normpath(candidate.replace("fonts", "icons"))
+                break
         else:
             self.font_path = os.path.join(sys.prefix, "share/pykaraoke/fonts")
             self.icon_path = os.path.join(sys.prefix, "share/pykaraoke/icons")
