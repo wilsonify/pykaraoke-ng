@@ -107,11 +107,14 @@ No layer may depend on a layer above it.
 
 ## Tauri Integration
 
-The Tauri runtime bundles the Python backend as a resource
-(`src-tauri/backend/`).  The staging script (`scripts/stage-backend.js`)
-copies **both** legacy and layered packages so that import paths resolve
-correctly at runtime.  The Rust launcher (`src/main.rs`) searches for
-`backend_api.py` first, then falls back to `backend.py`.
+The Tauri desktop build uses PyInstaller (`backend.spec`) to compile the
+Python backend into a standalone `backend.exe` (~12 MB).  The staging
+script (`scripts/stage-backend.js`) runs PyInstaller and places the
+result in `src-tauri/backend/`, which the Tauri resource glob
+(`backend/**`) bundles into the installer.
+
+The Rust launcher (`src/main.rs`) checks for `backend.exe` first
+(production), then falls back to finding a Python interpreter (dev mode).
 
 
 ```

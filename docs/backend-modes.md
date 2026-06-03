@@ -9,7 +9,7 @@ The backend supports two transport modes over identical core logic.
 ## stdio (default)
 
 Reads JSON commands from stdin, writes responses to stdout.
-Used by the Tauri desktop shell.
+Used by the Tauri desktop shell and the production `backend.exe`.
 
 ```bash
 python -m pykaraoke.core.backend           # default

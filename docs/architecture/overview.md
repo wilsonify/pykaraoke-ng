@@ -48,9 +48,11 @@ See [Backend Modes](../backend-modes.md) for the full API reference.
 ### Tauri Shell (`src/runtimes/tauri/src-tauri/src/main.rs`)
 
 Rust-based native desktop wrapper:
-- Manages the Python subprocess lifecycle
+- Manages the backend subprocess lifecycle
 - Routes IPC messages between the web frontend and the backend
 - Emits events to the frontend on state changes
+- Launches the bundled `backend.exe` in production, or finds a Python
+  interpreter in dev mode
 
 ### Web Frontend (`src/runtimes/tauri/src/`)
 
@@ -135,7 +137,7 @@ The frontend polls `get_state` to stay in sync.
 
 | Decision | Rationale |
 |----------|-----------|
-| **Tauri** | ~10 MB bundle; native webview; low memory |
+| **Tauri** | ~17 MB bundle (incl. backend); native webview; low memory |
 | **stdio IPC** | No exposed ports; no network config; easy to secure |
 | **JSON lines** | Human-readable; easy to debug; sufficient performance |
 | **Vanilla JS** | No build step; zero frontend dependencies |

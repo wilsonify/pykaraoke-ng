@@ -17,17 +17,10 @@ uv sync                       # or: pip install -e .
 ## 2. Run tests
 
 ```bash
-./scripts/run-tests.sh        # or: uv run pytest tests/ -v
+uv run pytest tests/ -v       # or: ./scripts/run-tests.sh
 ```
 
-## 3. Run the backend
-
-```bash
-uv run python -m pykaraoke.core.backend          # stdio (desktop IPC)
-uv run python -m pykaraoke.core.backend --http    # HTTP (headless)
-```
-
-## 4. Play a file
+## 3. Play a file
 
 ```bash
 uv run python -m pykaraoke.players.cdg song.cdg
@@ -35,34 +28,49 @@ uv run python -m pykaraoke.players.kar song.kar
 uv run python -m pykaraoke.players.mpg song.mpg
 ```
 
-## 5. Build the Tauri app
+## 4. Start the backend (stdio mode)
 
-Windows (recommended):
+```bash
+uv run python -m pykaraoke.core.backend
+```
+
+Send commands via stdin:
+
+```bash
+echo '{"action":"get_state","params":{}}' | uv run python -m pykaraoke.core.backend
+```
+
+Or start the HTTP API:
+
+```bash
+uv run python -m pykaraoke.core.backend --http
+curl http://localhost:8080/health
+```
+
+## 5. Tauri desktop app
+
+### Dev mode (uses local Python)
 
 ```bash
 cd src/runtimes/tauri
-tauri dev -c src-tauri/tauri.conf.json
+npx tauri dev
 ```
 
-Linux/macOS:
+### Production build (standalone .exe, no Python needed on target)
 
 ```bash
 cd src/runtimes/tauri
-tauri dev -c src-tauri/tauri.conf.json
-
-cd src/runtimes/tauri/src-tauri
-cargo tauri build    # production
+python -m pip install pyinstaller
+npx tauri build
 ```
 
-## Common issues
+Installer at `src-tauri/target/release/bundle/`.
+
+## Common Issues
 
 | Problem | Fix |
 |---------|-----|
 | `ModuleNotFoundError: pykaraoke` | Run `uv sync` or `pip install -e .` |
 | Tests fail with import errors | Use `uv run pytest` or set `PYTHONPATH=src` |
-| Tauri linker errors (`kernel32.lib` not found, `link.exe` operand errors) on Windows | Install Build Tools C++ workload + Windows SDK, run `vcvars64.bat`, then launch `tauri dev -c src-tauri/tauri.conf.json` |
-
-## Next
-
-- [Developer Guide](developers.md) — full development workflow
-- [Repository Structure](architecture/structure.md) — project layout
+| Tauri linker errors (Windows) | Run `vcvars64.bat` first |
+| `cargo tauri` not found | Install CLI via npm: `npm install -g @tauri-apps/cli@1` |

@@ -1,6 +1,6 @@
 # Developer Guide
 
-Set up the development environment, run tests, and contribute.
+Set up, test, and contribute to PyKaraoke-NG.
 
 [← Home](index.md)
 
@@ -8,27 +8,18 @@ Set up the development environment, run tests, and contribute.
 
 ## Prerequisites
 
-- Python 3.10+
-- Git
-- [uv](https://github.com/astral-sh/uv) (recommended) or pip
+- Python 3.10+, Git, uv (recommended) or pip
 - Docker (optional — for integration tests)
-- Rust toolchain (optional — for Tauri development)
+- Rust toolchain (optional — for Tauri)
+- PyInstaller (optional — for production builds)
 
 ## Setup
 
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-
-# With uv (recommended)
-uv sync
-
-# With pip
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync                    # or: python -m venv .venv && pip install -e ".[dev]"
 ```
-
----
 
 ## Project Structure
 
@@ -40,59 +31,36 @@ src/pykaraoke/              # Core Python package
 
 src/runtimes/tauri/         # Tauri desktop app
 ├── src/                    # Frontend (HTML / CSS / JS)
-└── src-tauri/              # Rust backend
+├── src-tauri/              # Rust backend
+├── scripts/stage-backend.js # Staging script (copies .py or runs PyInstaller)
+└── backend.spec            # PyInstaller spec for standalone backend.exe
 
 tests/                      # Test suite
 ├── pykaraoke/              # Unit tests (mirrors src/)
 ├── integration/            # End-to-end tests
 └── fixtures/               # Test data
 
-specs/                      # Specifications and governance
-├── constitution.md         # Engineering invariants
-├── ux-design.md            # Slim sidebar UX spec
-├── workflow.md             # Spec-driven development lifecycle
-└── features/               # Per-feature spec directories
+specs/                      # Governance & design specs
 ```
-
-See [Repository Structure](architecture/structure.md) for the full tree.
-
----
 
 ## Tests
 
 ```bash
 # All tests
-./scripts/run-tests.sh
-
-# pytest directly
 uv run pytest tests/ -v
 
 # Single file
 uv run pytest tests/pykaraoke/core/test_filename_parser.py -v
 
+# Rust tests (Tauri)
+cd src/runtimes/tauri/src-tauri && cargo test
+
+# Frontend JS
+cd src/runtimes/tauri && node --test src/app.test.js
+
 # With coverage
 uv run pytest tests/ --cov=. --cov-report=html
 ```
-
-### Tauri tests
-
-```bash
-# Rust
-cd src/runtimes/tauri/src-tauri && cargo test
-
-# JavaScript
-cd src/runtimes/tauri && node --test src/app.test.js src/index.test.js
-```
-
-### Integration tests (Docker)
-
-```bash
-./scripts/run-tests.sh --integration-only
-```
-
-See [Integration Testing](development/integration-testing.md) for full details.
-
----
 
 ## Code Quality
 
@@ -102,44 +70,44 @@ uv run ruff check . --fix    # auto-fix
 uv run ruff format .         # format
 ```
 
-SonarCloud runs on every PR. See [SonarQube Setup](development/sonarqube-setup.md).
-
----
-
-## Key Modules
-
-| Module | Purpose |
-|--------|---------|
-| `core/backend.py` | Headless backend — stdio and HTTP modes |
-| `core/database.py` | Song database, library scanning, settings |
-| `core/filename_parser.py` | Artist–title extraction from filenames |
-| `core/manager.py` | Playback coordination and queues |
-| `players/cdg.py` | CD+G playback |
-| `players/kar.py` | MIDI / KAR playback with lyrics |
-| `players/mpg.py` | MPEG / AVI video playback |
-
----
-
 ## Tauri Development
 
-### Windows prerequisites
+### Dev mode
 
-Install required tooling:
+```bash
+cd src/runtimes/tauri
+npx tauri dev
+```
+
+In dev mode the Rust backend searches for a local Python interpreter and
+runs the backend script directly.  Edit the Python/JS source and refresh
+the window to see changes.
+
+### Production build
+
+```bash
+cd src/runtimes/tauri
+python -m pip install pyinstaller
+npx tauri build
+```
+
+The build runs `scripts/stage-backend.js` which uses PyInstaller to
+compile the Python backend into a standalone `backend.exe` (~12 MB).
+The output is at `src-tauri/target/release/bundle/`.
+
+### Windows prerequisites
 
 ```powershell
 winget install --id Microsoft.VisualStudio.2022.BuildTools -e \
     --accept-source-agreements --accept-package-agreements \
     --override "--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --add Microsoft.VisualStudio.Component.Windows10SDK.19041"
-
 npm install -g @tauri-apps/cli@1
 ```
 
-Run from a Developer Command Prompt or initialize MSVC env first:
+Run from a Developer Command Prompt or initialize MSVC env:
 
 ```bat
 "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-cd src\runtimes\tauri
-tauri dev -c src-tauri\tauri.conf.json
 ```
 
 ### Linux prerequisites
@@ -147,26 +115,8 @@ tauri dev -c src-tauri\tauri.conf.json
 ```bash
 sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget \
     libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-cargo install tauri-cli --version "^1"
+npm install -g @tauri-apps/cli@1
 ```
-
-### Run
-
-```bash
-cd src/runtimes/tauri
-tauri dev -c src-tauri/tauri.conf.json
-
-cd src/runtimes/tauri/src-tauri
-cargo tauri build   # production
-```
-
-### Troubleshooting
-
-- If you see linker errors like `kernel32.lib` not found or `link.exe` operand errors, use Windows Developer Command Prompt and run `vcvars64.bat` before launching Tauri.
-- If `cargo tauri` fails while installing the CLI on Windows, install CLI via npm: `npm install -g @tauri-apps/cli@1`.
-
----
 
 ## Docker Development
 
@@ -175,39 +125,36 @@ docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
 docker compose -f deploy/docker/docker-compose.yml --profile dev up
 ```
 
----
+## Key Modules
+
+| Module | Purpose |
+|--------|---------|
+| `core/backend.py` | Headless backend — stdio and HTTP modes |
+| `core/database.py` | Song database, scanning, settings |
+| `core/filename_parser.py` | Artist–title extraction from filenames |
+| `core/manager.py` | Playback coordination and queues |
+| `players/cdg.py` | CD+G playback |
+| `players/kar.py` | MIDI / KAR playback with lyrics |
+| `players/mpg.py` | MPEG / AVI video playback |
+
+## Packaging Notes
+
+- The **PyInstaller spec** (`backend.spec`) uses `onedir` mode for faster
+  startup.  The `backend.exe` + `_internal/` directory go into
+  `src-tauri/backend/` and are bundled by the Tauri resource glob.
+- In **dev mode**, `main.rs` falls back to searching for a Python
+  interpreter and running the backend script directly — no PyInstaller
+  needed.
+- The `build.rs` script creates a placeholder file so `cargo test`
+  passes even when the staging script hasn't run yet.
 
 ## Contributing
 
-### Governance
-
-All contributions follow Spec-Driven Development. Read these first:
-
-- [Project Constitution](../specs/constitution.md) — engineering invariants
-- [Developer Workflow](../specs/workflow.md) — specify → clarify → plan → implement
-- [UX Design Spec](../specs/ux-design.md) — slim sidebar design constraints
-
-### Workflow
-
-1. Create a feature branch: `NNN-short-description` (see [workflow](../specs/workflow.md)).
-2. Write spec artifacts in `specs/features/NNN-*/`.
-3. Implement via TDD: failing test → pass → refactor.
+1. Create a feature branch: `NNN-short-description`
+2. Write spec artifacts in `specs/features/NNN-*/`
+3. Implement via TDD: failing test → pass → refactor
 4. Lint: `uv run ruff check .`
-5. Open a PR referencing the spec.
+5. Open a PR
 
-### Commit messages
-
-```
-feat: add support for OGG audio files
-fix: resolve CDG timing issue on Windows
-docs: update installation instructions
-test: add tests for MIDI parsing
-refactor: simplify player state management
-```
-
-### Code style
-
-- PEP 8.
-- Type hints on public interfaces.
-- Docstrings on public functions.
-- Tests for every new behaviour.
+Read the [Project Constitution](../specs/constitution.md) and
+[Developer Workflow](../specs/workflow.md) first.
