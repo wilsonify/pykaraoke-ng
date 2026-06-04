@@ -133,6 +133,23 @@ The backend maintains the authoritative state:
 
 The frontend polls `get_state` to stay in sync.
 
+### State lifecycle invariants
+
+- `position_ms` and `duration_ms` are **reset on every new playback** in
+  `_start_playback()`.  Stale values from a previous song must not
+  persist.
+- `poll()` is called from `get_state()` before assembling the state
+  dict.  It must **never raise** — `manager.poll()` is wrapped in
+  `try/except` so that player errors do not corrupt the state snapshot.
+- The `seek` command sets `position_ms` directly in `_handle_seek()` and
+  forwards the position to `player.seek()`.  Subsequent `poll()` calls
+  updated the position via `player.get_pos()`.
+- When no player is active, `poll()` is a no-op and state reflects the
+  last known values (or defaults).
+
+See [Playback Controls Fix](../issues/playback-controls-fixes.md) for
+the detailed postmortem of the state-related defects.
+
 ## Key Design Decisions
 
 | Decision | Rationale |

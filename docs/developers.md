@@ -133,9 +133,46 @@ docker compose -f deploy/docker/docker-compose.yml --profile dev up
 | `core/database.py` | Song database, scanning, settings |
 | `core/filename_parser.py` | Artist–title extraction from filenames |
 | `core/manager.py` | Playback coordination and queues |
-| `players/cdg.py` | CD+G playback |
+| `core/player.py` | Base `PykPlayer` class with `seek()`, `get_pos()`, state machine |
+| `players/cdg.py` | CD+G playback (overrides `seek()` for audio restart + packet sync) |
 | `players/kar.py` | MIDI / KAR playback with lyrics |
 | `players/mpg.py` | MPEG / AVI video playback |
+
+## Backend State & Poll Architecture
+
+The backend maintains authoritative state in `PyKaraokeBackend`:
+
+- `state` — `BackendState` enum (`IDLE`, `PLAYING`, `PAUSED`, etc.)
+- `position_ms` / `duration_ms` — current playback position and total length
+- `current_player` — the active `PykPlayer` subclass instance
+
+Key method `poll()` is called from `get_state()` on every state change
+emission.  It must never raise — wrap `manager.poll()` in try/except.
+See [Playback Controls Fix](issues/playback-controls-fixes.md) for the
+consequences of an unhandled poll exception.
+
+### Seek flow
+
+```
+Frontend: slider change event → sendCommand('seek', { position_ms })
+Backend:  _handle_seek → player.seek(position_ms) → _emit_state_change()
+Player:   PykPlayer.seek() sets seek_pos_ms; subclass overrides restart
+          audio at the given position (e.g. pygame.mixer.music.play(start=...))
+Poll:     get_pos() returns seek_pos_ms + elapsed for correct position reading
+```
+
+### Known gotchas
+
+- `pygame.mixer.music.play(start=...)` does **not** seek MIDI files on
+  all platforms (SDL_mixer limitation).  KAR seeking sets `seek_pos_ms`
+  correctly for the UI position display but audio may start from the
+  beginning.
+- `STATE_CAPTURING` in `kar.py:do_stuff()` was not imported until
+  v0.7.5-fix2.  The short-circuit `or` in
+  `if self.state == STATE_PLAYING or self.state == STATE_CAPTURING:`
+  masked the bug during playback; it only surfaced on stop/pause.
+  Always add `STATE_CAPTURING` to any import block that references
+  player states.
 
 ## Packaging Notes
 

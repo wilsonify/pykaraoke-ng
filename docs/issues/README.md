@@ -12,6 +12,7 @@ Documentation of issues inherited from the original
 - **[legacy-issues.md](legacy-issues.md)** - Complete documentation of all 18 open issues from the original project
 - **[webkit-dmabuf-empty-window.md](webkit-dmabuf-empty-window.md)** - Empty window on launch due to WebKitGTK DMA-BUF failure (fixed)
 - **[deb-buttons-not-working.md](deb-buttons-not-working.md)** - Add Folder, Scan Library, and Settings buttons do nothing in packaged .deb (fixed)
+- **[playback-controls-fixes.md](playback-controls-fixes.md)** - Double-click adds 3 queue entries; progress bar shows stale position; slider does nothing; stop crashes with `NameError` (fixed)
 
 ## Summary
 
