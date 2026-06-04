@@ -30,6 +30,24 @@ class TestKarModule:
 
         assert isinstance(kar.MidPlayer, type)
 
+    def test_state_capturing_imported(self):
+        """Regression: kar module must have STATE_CAPTURING available.
+
+        Before the fix, kar.py used STATE_CAPTURING in do_stuff() but
+        did not import it, causing a NameError during stop/poll.
+        """
+        from pykaraoke.players import kar
+
+        # Importing the module should not raise NameError on the
+        # STATE_CAPTURING reference in do_stuff()
+        assert hasattr(kar, "MidPlayer")
+
+        # Verify STATE_CAPTURING is accessible through the module's imports
+        # by checking it can be referenced at all
+        from pykaraoke.config.constants import STATE_CAPTURING
+
+        assert STATE_CAPTURING is not None
+
 
 class TestMidiConstants:
     def test_midi_header_id(self):

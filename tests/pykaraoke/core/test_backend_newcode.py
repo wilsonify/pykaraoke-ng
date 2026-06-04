@@ -135,6 +135,16 @@ class TestHandleCommandDispatch:
         result = backend.handle_command({"action": "attrerr", "params": {}})
         assert result["status"] == "error"
 
+    def test_dispatch_handler_raises_name_error(self):
+        """Regression: NameError must be caught (e.g. STATE_CAPTURING typo)."""
+        backend = _make_backend()
+        backend._command_handlers["nameerr"] = MagicMock(
+            side_effect=NameError("name 'STATE_CAPTURING' is not defined")
+        )
+        result = backend.handle_command({"action": "nameerr", "params": {}})
+        assert result["status"] == "error"
+        assert "STATE_CAPTURING" in result["message"]
+
     def test_dispatch_get_state_returns_data(self):
         backend = _make_backend()
         result = backend.handle_command({"action": "get_state"})

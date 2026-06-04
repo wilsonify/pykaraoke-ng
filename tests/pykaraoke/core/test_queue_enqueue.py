@@ -101,6 +101,29 @@ class TestEnqueueBasic:
 
             assert len(backend.playlist) == 3
 
+    def test_enqueue_same_filepath_three_times_three_entries(self):
+        """Calling add_to_playlist 3× with the same filepath adds 3 entries.
+
+        Regression: the frontend was sending 3 add_to_playlist commands on
+        double-click (click × 2 + dblclick × 1). The backend correctly
+        adds one entry per command (no dedup). The fix was in the frontend
+        to send exactly one command per double-click.
+        """
+        backend = _get_backend()
+        mock_song = _mock_song("Test", "Artist", "/tmp/dupe.kar")
+        with patch.object(backend.song_db, "make_song_struct", return_value=mock_song):
+            for _ in range(3):
+                resp = backend.handle_command({
+                    "action": "add_to_playlist",
+                    "params": {"filepath": "/tmp/dupe.kar"},
+                })
+                assert resp["status"] == "ok"
+
+            assert len(backend.playlist) == 3, (
+                "Backend must add one entry per add_to_playlist call — "
+                "deduplication is the frontend's responsibility"
+            )
+
     def test_enqueue_error_surfaces_message(self):
         """When make_song_struct raises, the error should surface in the response."""
         backend = _get_backend()
