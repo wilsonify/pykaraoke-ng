@@ -124,6 +124,7 @@ class PykPlayer:
         self.play_time = 0
         self.play_start_time = 0
         self.play_frame = 0
+        self.seek_pos_ms = 0
 
         # self.play_start_time is valid while State == STATE_PLAYING; it
         # indicates the get_ticks() value at which the song started
@@ -177,12 +178,20 @@ class PykPlayer:
     def close(self):
         self.state = STATE_CLOSING
 
+    def seek(self, position_ms):
+        self.seek_pos_ms = position_ms
+        if self.state == STATE_PLAYING:
+            self.play_start_time = pygame.time.get_ticks() - position_ms
+        else:
+            self.play_time = position_ms
+
     # you must call play() to restart. Blocks until pygame is initialised
     def rewind(self):
         self.do_rewind()
         self.play_time = 0
         self.play_start_time = 0
         self.play_frame = 0
+        self.seek_pos_ms = 0
         self.state = STATE_NOT_PLAYING
 
     # stop the song and go back to the start. As you would

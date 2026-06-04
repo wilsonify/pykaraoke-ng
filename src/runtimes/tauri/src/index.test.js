@@ -33,7 +33,7 @@ const REQUIRED_IDS = [
   "settings-btn",
   "current-song-title",
   "current-song-artist",
-  "progress-fill",
+  "progress-slider",
   "time-current",
   "time-total",
   "playlist",
@@ -130,14 +130,14 @@ describe("CSS classes used by app.js exist in HTML", () => {
     "song-item-title",
     "song-item-artist",
     "no-results",
-    "progress-fill",
+    "progress-slider",
   ];
 
   for (const cls of requiredClasses) {
     it(`HTML or CSS references class "${cls}"`, () => {
       // These classes are rendered dynamically by JS, but the progress-fill
       // class should exist in the static HTML as well
-      if (cls === "progress-fill") {
+      if (cls === "progress-slider") {
         assert.ok(
           html.includes(cls),
           `Class "${cls}" should appear in index.html`

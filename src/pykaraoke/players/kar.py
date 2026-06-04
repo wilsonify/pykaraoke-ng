@@ -153,6 +153,7 @@ import pygame
 from pykaraoke.config.constants import (
     ENV_GP2X,
     ENV_WINDOWS,
+    STATE_CAPTURING,
     STATE_CLOSED,
     STATE_CLOSING,
     STATE_INIT,
@@ -1144,7 +1145,7 @@ class MidPlayer(PykPlayer):
 
     def get_pos(self):
         if self.use_midi_timer:
-            return pygame.mixer.music.get_pos()
+            return self.seek_pos_ms + pygame.mixer.music.get_pos()
         else:
             return PykPlayer.get_pos(self)
 
@@ -1291,6 +1292,18 @@ class MidPlayer(PykPlayer):
             # a cheesy way around this, we'll just wait a bit right up
             # front.
             pygame.time.wait(50)
+
+    def seek(self, position_ms):
+        PykPlayer.seek(self, position_ms)
+        if self.state in (STATE_PLAYING, STATE_PAUSED) and not manager.options.nomusic:
+            pygame.mixer.music.stop()
+            start_sec = max(0.0, position_ms / 1000.0)
+            pygame.mixer.music.play(start=start_sec)
+            if self.state == STATE_PAUSED:
+                pygame.mixer.music.pause()
+            self.reset_playing_state()
+            self.current_ms = int(position_ms + self.internal_offset_time + manager.settings.sync_delay_ms)
+            self.colour_update_ms()
 
     def do_pause(self):
         if not manager.options.nomusic:

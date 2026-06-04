@@ -166,6 +166,15 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
     }
 
     // ── 2. Fall back to Python launcher (dev mode) ──────────────────────
+    //
+    //   resource_dir layout (dev):
+    //     .../pykaraoke-ng/src/runtimes/tauri/src-tauri/target/debug
+    //   Five levels up = project root: .../pykaraoke-ng/
+    //
+    //   current_dir layout (when `tauri dev` is run from src/runtimes/tauri):
+    //     .../pykaraoke-ng/src/runtimes/tauri
+    //   Three levels up = project root: .../pykaraoke-ng/
+    //
     let candidates: Vec<PathBuf> = vec![
         // Bundled resource — layered path
         resource_dir.join("backend").join("pykaraoke").join("interfaces").join("backend_api.py"),
@@ -173,18 +182,42 @@ fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -
         resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
         // Flat bundled resource
         resource_dir.join("backend.py"),
-        // Development: project root -> layered path
-        resource_dir.join("..").join("..").join("..").join("src")
-            .join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // Development: project root -> legacy path
-        resource_dir.join("..").join("..").join("..").join("src")
-            .join("pykaraoke").join("core").join("backend.py"),
-        // Development: CWD-based fallback (layered path)
-        std::env::current_dir().unwrap_or_default()
-            .join("src").join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // Development: CWD-based fallback (legacy path)
-        std::env::current_dir().unwrap_or_default()
-            .join("src").join("pykaraoke").join("core").join("backend.py"),
+        // Development: resource_dir -> layered path (5 levels up)
+        {
+            let mut p = resource_dir.clone();
+            for _ in 0..5 { p.pop(); }
+            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
+        },
+        // Development: resource_dir -> legacy path (5 levels up)
+        {
+            let mut p = resource_dir.clone();
+            for _ in 0..5 { p.pop(); }
+            p.join("src").join("pykaraoke").join("core").join("backend.py")
+        },
+        // Development: CWD -> layered path (3 levels up)
+        {
+            let mut p = std::env::current_dir().unwrap_or_default();
+            for _ in 0..3 { p.pop(); }
+            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
+        },
+        // Development: CWD -> legacy path (3 levels up)
+        {
+            let mut p = std::env::current_dir().unwrap_or_default();
+            for _ in 0..3 { p.pop(); }
+            p.join("src").join("pykaraoke").join("core").join("backend.py")
+        },
+        // Development: CWD -> layered path (4 levels up, fallback)
+        {
+            let mut p = std::env::current_dir().unwrap_or_default();
+            for _ in 0..4 { p.pop(); }
+            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
+        },
+        // Development: CWD -> legacy path (4 levels up, fallback)
+        {
+            let mut p = std::env::current_dir().unwrap_or_default();
+            for _ in 0..4 { p.pop(); }
+            p.join("src").join("pykaraoke").join("core").join("backend.py")
+        },
     ];
 
     let backend_script = candidates.iter()
@@ -224,6 +257,27 @@ async fn send_command(
         return Err("Backend not running".to_string());
     }
     
+    // Check if the child process is still alive.  If it has exited
+    // (crashed, killed, etc.) clean up the stale state immediately
+    // so the frontend can restart it.
+    if let Some(ref mut child) = backend.process {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                backend.stdin = None;
+                backend.process = None;
+                backend.response_rx = None;
+                return Err("Backend process has exited".to_string());
+            }
+            Ok(None) => {} // still running
+            Err(_e) => {
+                backend.stdin = None;
+                backend.process = None;
+                backend.response_rx = None;
+                return Err("Backend process check failed".to_string());
+            }
+        }
+    }
+    
     let command = CommandRequest { action, params };
     let command_json = serde_json::to_string(&command)
         .map_err(|e| format!("Failed to serialize command: {}", e))?;
@@ -256,7 +310,15 @@ async fn send_command(
                 })
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                Err("Timeout waiting for backend response".to_string())
+                // Kill the unresponsive process so the frontend's retry
+                // loop can start fresh instead of hanging forever.
+                if let Some(mut child) = backend.process.take() {
+                    child.kill().ok();
+                }
+                backend.process = None;
+                backend.stdin = None;
+                backend.response_rx = None;
+                Err("Backend did not respond within 5 seconds".to_string())
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 backend.stdin = None;
@@ -608,6 +670,57 @@ mod tests {
         assert!(
             source.contains("resource_dir"),
             "start_backend should use resource_dir() for bundled installs"
+        );
+    }
+
+    // ── Regression: backend timeout cleanup ────────────────────────
+
+    #[test]
+    fn send_command_timeout_kills_backend() {
+        let source = include_str!("main.rs");
+        // When a command times out, the backend process must be killed
+        // and cleaned up so the frontend can retry from a clean state.
+        let timeout_pos = source.find("RecvTimeoutError::Timeout").unwrap();
+        let cleanup_region = &source[timeout_pos..timeout_pos + 400];
+        assert!(
+            cleanup_region.contains("child.kill()"),
+            "Timeout handler must kill the unresponsive backend process "
+        );
+        assert!(
+            cleanup_region.contains("backend.stdin = None"),
+            "Timeout handler must clear stdin so retry can spawn fresh"
+        );
+        assert!(
+            cleanup_region.contains("backend.process = None"),
+            "Timeout handler must clear process so start_backend can restart"
+        );
+    }
+
+    #[test]
+    fn send_command_checks_process_alive() {
+        let source = include_str!("main.rs");
+        // Before sending a command we should check if the child process
+        // is still alive via try_wait().
+        assert!(
+            source.contains("try_wait()"),
+            "send_command should check if child process is still alive with try_wait()"
+        );
+    }
+
+    #[test]
+    fn send_command_cleans_up_dead_process() {
+        let source = include_str!("main.rs");
+        // When try_wait() returns that the child has exited, the backend
+        // state should be cleaned up immediately.
+        let wait_pos = source.find("try_wait()").unwrap();
+        let cleanup_region = &source[wait_pos..wait_pos + 300];
+        assert!(
+            cleanup_region.contains("backend.stdin = None"),
+            "Dead process cleanup must clear stdin"
+        );
+        assert!(
+            cleanup_region.contains("backend.process = None"),
+            "Dead process cleanup must clear process"
         );
     }
 }

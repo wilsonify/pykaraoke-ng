@@ -60,7 +60,7 @@ function createMockDOM() {
     "setting-zoom",
     "current-song-title",
     "current-song-artist",
-    "progress-fill",
+    "progress-slider",
     "time-current",
     "time-total",
     "playlist",
@@ -369,7 +369,7 @@ describe("HTML DOM contract", () => {
       "settings-modal",
       "current-song-title",
       "current-song-artist",
-      "progress-fill",
+      "progress-slider",
       "time-current",
       "time-total",
       "playlist",
@@ -818,5 +818,95 @@ describe("Queue enqueue: .kar fixture filename in UI", () => {
     assert.ok(song.artist, "Song must have artist");
     assert.ok(song.filepath, "Song must have filepath");
     assert.ok(song.filepath.endsWith(".kar"), "Filepath must end in .kar");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: double-click fires enqueueSong exactly once (was 3x)
+// ---------------------------------------------------------------------------
+// Before the fix, clicking a search result fired:
+//   click → click → dblclick → 3 calls to enqueueSong.
+// The fix uses a 250ms timer on the first click that is cancelled on the
+// second click, allowing the dblclick handler to fire exactly once.
+
+describe("Regression: double-click adds exactly one queue entry", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("uses a clickTimer variable to debounce clicks", () => {
+    assert.ok(
+      appJsSource.includes("clickTimer"),
+      "app.js must use a clickTimer variable to detect double-click vs single-click"
+    );
+  });
+
+  it("click handler clears the timer on second click (double-click detection)", () => {
+    assert.ok(
+      appJsSource.includes("clearTimeout(clickTimer)"),
+      "app.js click handler must clearTimeout(clickTimer) to cancel the pending single-click enqueue " +
+        "when a second click arrives (part of a double-click)"
+    );
+  });
+
+  it("dblclick handler also clears any pending clickTimer", () => {
+    // The dblclick handler must clear clickTimer too so that a delayed
+    // single-click timer does not fire after the double-click has already
+    // enqueued the song.
+    const dblclickIdx = appJsSource.indexOf("dblclick");
+    const afterDblclick = appJsSource.slice(dblclickIdx);
+    assert.ok(
+      afterDblclick.includes("clearTimeout(clickTimer)"),
+      "app.js dblclick handler must also clearTimeout(clickTimer) to " +
+        "prevent a stale timer from adding a second entry"
+    );
+  });
+
+  it("dblclick handler does NOT call enqueueSong directly (calls local enqueue function)", () => {
+    const dblclickIdx = appJsSource.indexOf("dblclick");
+    const handlerEnd = appJsSource.indexOf("});", dblclickIdx);
+    const handlerBody = appJsSource.slice(dblclickIdx, handlerEnd + 3);
+    assert.ok(
+      handlerBody.includes("enqueue()"),
+      "The dblclick handler must call enqueue() (the local wrapper), " +
+        "not enqueueSong directly, to ensure proper guard checks"
+    );
+  });
+
+  it("click handler does NOT call enqueue() immediately — uses setTimeout", () => {
+    // Find the search-results `.song-item` click handler: locate the
+    // clickTimer variable declaration, then find the first
+    // addEventListener('click' that follows it.
+    const varDecl = appJsSource.indexOf("var clickTimer");
+    const clickAEL = appJsSource.indexOf("addEventListener('click'", varDecl);
+    const handlerEnd = appJsSource.indexOf("});", clickAEL);
+    const handlerBody = appJsSource.slice(clickAEL, handlerEnd + 3);
+    // The handler must call setTimeout before enqueue() — i.e. enqueue is
+    // *inside* the setTimeout callback, not directly in the handler body.
+    const setTimeoutIdx = handlerBody.indexOf("setTimeout");
+    const enqueueIdx = handlerBody.indexOf("enqueue()");
+    assert.ok(
+      setTimeoutIdx >= 0,
+      "The click handler must use setTimeout before calling enqueue(), " +
+        "so that a second click can cancel it"
+    );
+    assert.ok(
+      enqueueIdx > setTimeoutIdx,
+      "enqueue() must be called inside the setTimeout callback, " +
+        "not synchronously in the click handler"
+    );
+  });
+
+  it("does NOT have separate click() and dblclick() that both call enqueue directly", () => {
+    // The old pattern was: click → enqueue(), dblclick → enqueue()
+    // The new pattern is: click → setTimeout(enqueue, 250), dblclick → clearTimer + enqueue()
+    // Both should NOT directly call enqueue()  (except in the setTimeout callback)
+    const clickPattern = /addEventListener\('click',\s*enqueue\)/;
+    assert.ok(
+      !clickPattern.test(appJsSource),
+      "app.js must NOT have addEventListener('click', enqueue) directly — " +
+        "that pattern calls enqueue synchronously on every click"
+    );
   });
 });

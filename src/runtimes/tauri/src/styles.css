@@ -94,7 +94,42 @@ body {
     margin-bottom: var(--spacing-xs);
 }
 
-/* Search Section — compact, always visible */
+/* Library Section — appears first for folder management */
+.library-section {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.folder-input-row {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-sm);
+}
+
+.folder-input-row input {
+    flex: 1;
+    padding: 4px 8px;
+    background-color: var(--bg-lighter);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.folder-input-row input:focus {
+    outline: 1px solid var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.library-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-top: 0;
+}
+
+/* Search Section — appears after library management */
 .search-section {
     padding: var(--spacing-md);
     border-bottom: 1px solid var(--border-color);
@@ -119,48 +154,6 @@ body {
 .search-box input:focus {
     outline: 1px solid var(--primary-color);
     border-color: var(--primary-color);
-}
-
-.search-filters {
-    margin-top: var(--spacing-sm);
-}
-
-.search-filters summary {
-    cursor: pointer;
-    font-size: 11px;
-    color: var(--text-secondary);
-    user-select: none;
-}
-
-.search-filters summary:hover {
-    color: var(--text-primary);
-}
-
-.folder-input-row {
-    display: flex;
-    gap: var(--spacing-xs);
-    margin-top: var(--spacing-sm);
-}
-
-.folder-input-row input {
-    flex: 1;
-    padding: 4px 8px;
-    background-color: var(--bg-lighter);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    border-radius: 3px;
-    font-size: 12px;
-}
-
-.folder-input-row input:focus {
-    outline: 1px solid var(--primary-color);
-    border-color: var(--primary-color);
-}
-
-.library-controls {
-    display: flex;
-    gap: var(--spacing-xs);
-    margin-top: var(--spacing-sm);
 }
 
 /* Buttons */
@@ -333,24 +326,23 @@ body {
     font-size: 11px;
 }
 
-/* Progress Bar */
-.progress-bar {
+/* Player Controls — left-aligned row */
+.player-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
     margin-bottom: var(--spacing-sm);
 }
 
-.progress-bar > div:first-child {
-    height: 4px;
-    background-color: var(--bg-lighter);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-bottom: 2px;
+/* Progress Bar — positioned after controls */
+.progress-bar {
+    margin-top: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
 }
 
-.progress-fill {
-    height: 100%;
-    background-color: var(--primary-color);
-    width: 0%;
-    transition: width 0.3s;
+.progress-slider {
+    width: 100%;
+    cursor: pointer;
 }
 
 .time-display {
@@ -358,14 +350,6 @@ body {
     justify-content: space-between;
     font-size: 10px;
     color: var(--text-secondary);
-}
-
-/* Player Controls — left-aligned row */
-.player-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-    margin-bottom: var(--spacing-sm);
 }
 
 /* Volume Control */

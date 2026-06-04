@@ -43,7 +43,7 @@ export const SELECTORS = {
   currentSongArtist: '#current-song-artist',
   timeCurrent: '#time-current',
   timeTotal: '#time-total',
-  progressFill: '#progress-fill',
+  progressSlider: '#progress-slider',
 
   // Queue
   playlist: '#playlist',

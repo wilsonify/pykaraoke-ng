@@ -33,6 +33,8 @@ class PyKaraokeApp {
         this.currentState = null;
         this.searchResults = [];
         this.lastBackendCheckAt = 0;
+        this.backendStartRetries = 0;
+        this.maxBackendRetries = 3;
         this.init();
     }
 
@@ -79,19 +81,35 @@ class PyKaraokeApp {
             }
 
             this.backendRunning = true;
+            this.backendStartRetries = 0;
             this.updateBackendStatus(true);
             this.updateStatus('Backend connected');
         } catch (e) {
             console.error('Backend startup failed:', e);
-            this.updateStatus('Backend startup failed: ' + this.errorMessage(e));
+            this.backendStartRetries++;
+            if (this.backendStartRetries >= this.maxBackendRetries) {
+                this.updateStatus(
+                    'Backend failed after ' + this.maxBackendRetries + ' attempts. '
+                    + 'Please check your installation and restart the application.'
+                );
+                this.backendRunning = false;
+                this.updateBackendStatus(false);
+                return;
+            }
+            this.updateStatus('Backend startup failed (' + this.backendStartRetries
+                + '/' + this.maxBackendRetries + '): ' + this.errorMessage(e));
             this.backendRunning = false;
             this.updateBackendStatus(false);
         }
     }
 
     startStatePolling() {
+        var self = this;
         setInterval(async () => {
             if (!this.backendRunning) {
+                if (this.backendStartRetries >= this.maxBackendRetries) {
+                    return; // stop retrying after max attempts
+                }
                 const now = Date.now();
                 if (now - this.lastBackendCheckAt > 3000) {
                     this.lastBackendCheckAt = now;
@@ -121,16 +139,55 @@ class PyKaraokeApp {
         var self = this;
         function $(id) { return document.getElementById(id); }
 
-        $('play-btn').addEventListener('click', function() { self.sendCommand('play'); });
-        $('pause-btn').addEventListener('click', function() { self.sendCommand('pause'); });
-        $('stop-btn').addEventListener('click', function() { self.sendCommand('stop'); });
-        $('next-btn').addEventListener('click', function() { self.sendCommand('next'); });
-        $('prev-btn').addEventListener('click', function() { self.sendCommand('previous'); });
+        $('play-btn').addEventListener('click', async function() {
+            try {
+                var r = await self.sendCommand('play');
+                if (r.status !== 'ok') self.updateStatus(r.message || 'Play failed');
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        });
+        $('pause-btn').addEventListener('click', async function() {
+            try {
+                var r = await self.sendCommand('pause');
+                if (r.status !== 'ok') self.updateStatus(r.message || 'Pause failed');
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        });
+        $('stop-btn').addEventListener('click', async function() {
+            try { await self.sendCommand('stop'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        });
+        $('next-btn').addEventListener('click', async function() {
+            try { await self.sendCommand('next'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        });
+        $('prev-btn').addEventListener('click', async function() {
+            try { await self.sendCommand('previous'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        });
 
         $('volume-slider').addEventListener('input', function(e) {
             var v = parseInt(e.target.value);
             self.sendCommand('set_volume', { volume: v / 100 });
             $('volume-value').textContent = v + '%';
+        });
+
+        $('progress-slider').addEventListener('input', function(e) {
+            var s = self.currentState;
+            if (s && s.duration_ms > 0) {
+                var pct = parseInt(e.target.value) / 10;
+                var pos_ms = Math.round((pct / 100) * s.duration_ms);
+                document.getElementById('time-current').textContent = self.fmtTime(pos_ms);
+            }
+        });
+
+        $('progress-slider').addEventListener('change', async function(e) {
+            var s = self.currentState;
+            if (s && s.duration_ms > 0) {
+                var pct = parseInt(e.target.value) / 10;
+                var pos_ms = Math.round((pct / 100) * s.duration_ms);
+                try {
+                    var r = await self.sendCommand('seek', { position_ms: pos_ms });
+                    if (r && r.status !== 'ok') self.updateStatus(r.message || 'Seek failed');
+                } catch (ex) {
+                    self.updateStatus('Seek error: ' + self.errorMessage(ex));
+                }
+            }
         });
 
         $('search-btn').addEventListener('click', function() { self.handleSearch(); });
@@ -312,9 +369,9 @@ class PyKaraokeApp {
         document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
         document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
 
-        if (s.duration_ms > 0) {
-            var pct = (s.position_ms / s.duration_ms) * 100;
-            document.getElementById('progress-fill').style.width = pct + '%';
+        if (s.duration_ms > 0 && typeof s.position_ms === 'number') {
+            var pct = Math.min(1000, Math.max(0, (s.position_ms / s.duration_ms) * 1000));
+            document.getElementById('progress-slider').value = Math.round(pct);
             document.getElementById('time-current').textContent = this.fmtTime(s.position_ms);
             document.getElementById('time-total').textContent = this.fmtTime(s.duration_ms);
         }
@@ -376,6 +433,7 @@ class PyKaraokeApp {
         el.innerHTML = html;
 
         el.querySelectorAll('.song-item').forEach(function(item) {
+            var clickTimer = null;
             var enqueue = function() {
                 var song = self.searchResults[parseInt(item.dataset.index)];
                 if (!song || !song.filepath) {
@@ -386,12 +444,23 @@ class PyKaraokeApp {
                 console.debug('[PyKaraoke] enqueue: click/enter on', song.filepath);
                 self.enqueueSong(song);
             };
-            // Single-click adds to queue
-            item.addEventListener('click', enqueue);
-            // Double-click also adds (alias for discoverability)
+            item.addEventListener('click', function(e) {
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                    return;
+                }
+                clickTimer = setTimeout(function() {
+                    clickTimer = null;
+                    enqueue();
+                }, 250);
+            });
             item.addEventListener('dblclick', function(e) {
                 e.preventDefault();
-                console.debug('[PyKaraoke] enqueue: double-click on index', item.dataset.index);
+                if (clickTimer) {
+                    clearTimeout(clickTimer);
+                    clickTimer = null;
+                }
                 enqueue();
             });
             item.addEventListener('keydown', function(e) { if (e.key === 'Enter') enqueue(); });

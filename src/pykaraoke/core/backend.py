@@ -240,12 +240,13 @@ class PyKaraokeBackend:
             if handler is None:
                 return {"status": "error", "message": f"Unknown action: {action}"}
             return handler(params)
-        except (RuntimeError, OSError, ValueError, TypeError, AttributeError) as e:
+        except (NameError, RuntimeError, OSError, ValueError, TypeError, AttributeError) as e:
             logger.error("Error handling command %s: %s", action, e, exc_info=True)
             return {"status": "error", "message": str(e)}
 
     def get_state(self) -> dict[str, Any]:
-        """Get current backend state"""
+        """Get current backend state (polls player for up-to-date position)."""
+        self.poll()
         return {
             "playback_state": self.state.value,
             "current_song": self._song_to_dict(self.current_song) if self.current_song else None,
@@ -333,11 +334,16 @@ class PyKaraokeBackend:
 
     def _handle_seek(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle seek command"""
-        # Note: Seeking support depends on player implementation
         position_ms = params.get("position_ms", 0)
         self.position_ms = position_ms
-        logger.warning("Seek functionality not yet implemented")
-        return {"status": "ok", "message": "Seek not yet supported"}
+        if self.current_player:
+            try:
+                self.current_player.seek(position_ms)
+            except Exception as e:
+                logger.error("Seek error: %s", e)
+                return {"status": "error", "message": str(e)}
+        self._emit_state_change()
+        return {"status": "ok"}
 
     def _handle_set_volume(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle volume change"""
@@ -378,6 +384,8 @@ class PyKaraokeBackend:
             # Start playback
             self.current_player.play()
             self.state = BackendState.PLAYING
+            self.position_ms = 0
+            self.duration_ms = int(self.current_player.get_length() * 1000) if hasattr(self.current_player, 'get_length') else 0
             manager.set_volume(self.volume)
 
             self._emit_state_change()
@@ -554,7 +562,10 @@ class PyKaraokeBackend:
     def poll(self):
         """Poll the manager - should be called regularly"""
         if self.current_player:
-            manager.poll()
+            try:
+                manager.poll()
+            except BaseException:
+                logger.exception("Manager poll error")
 
             # Update position
             if self.state == BackendState.PLAYING:

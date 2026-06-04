@@ -326,6 +326,27 @@ class CdgPlayer(PykPlayer):
             self.pauseOffsetTime = self.pauseOffsetTime + (self.get_pos() - self.pause_start_time)
             pygame.mixer.music.unpause()
 
+    def seek(self, position_ms):
+        PykPlayer.seek(self, position_ms)
+        if self.sound_file_data and self.state in (STATE_PLAYING, STATE_PAUSED):
+            pygame.mixer.music.stop()
+            start_sec = max(0.0, position_ms / 1000.0)
+            pygame.mixer.music.play(start=start_sec)
+            if self.state == STATE_PAUSED:
+                pygame.mixer.music.pause()
+        if self.state in (STATE_PLAYING, STATE_PAUSED):
+            packet_index = int((position_ms * 300) / 1000)
+            self.packetReader.seek_to_packet(packet_index)
+            self.cdgReadPackets = packet_index
+            self.cdgPacketsDue = packet_index
+            self.curr_pos = (
+                position_ms
+                + self.internal_offset_time
+                + manager.settings.sync_delay_ms
+                - self.pauseOffsetTime
+            )
+            self.LastPos = self.curr_pos
+
     # you must call Play() to restart. Blocks until pygame is initialised
     def do_rewind(self):
         # Reset the state of the packet-reading thread
@@ -350,7 +371,7 @@ class CdgPlayer(PykPlayer):
     # not initialised yet.
     def get_pos(self):
         if self.sound_file_data:
-            return pygame.mixer.music.get_pos()
+            return self.seek_pos_ms + pygame.mixer.music.get_pos()
         else:
             return PykPlayer.get_pos(self)
 

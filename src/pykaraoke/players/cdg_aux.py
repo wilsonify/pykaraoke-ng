@@ -152,6 +152,14 @@ class CdgPacketReader:
         # Start with all tiles requiring update
         self.__updated_tiles = 0xFFFFFFFF
 
+    def seek_to_packet(self, packet_index):
+        """Seek to a specific packet index, processing all packets
+        from the beginning to build up the correct CDG state."""
+        self.rewind()
+        if packet_index > 0:
+            self.do_packets(packet_index)
+        self.mark_tiles_dirty()
+
     def mark_tiles_dirty(self):
         """Marks all the tiles dirty, so that the next call to
         GetDirtyTiles() will return the complete list of tiles."""
