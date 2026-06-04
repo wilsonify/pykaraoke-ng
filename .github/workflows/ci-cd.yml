@@ -9,7 +9,7 @@
 # Main branch pushes: run full CI + release stage.
 #
 # Required secrets:
-#   SONARQUBE_TOKEN      – SonarQube/SonarCloud authentication token
+#   SONAR_TOKEN          – SonarQube/SonarCloud authentication token
 #   SONARQUBE_HOST_URL   – SonarQube server URL (e.g. https://sonarcloud.io)
 #   TAURI_PRIVATE_KEY    – (optional) Tauri updater signing key
 #   TAURI_KEY_PASSWORD   – (optional) Tauri updater key password
@@ -237,7 +237,7 @@ jobs:
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9 # v7
         env:
-          SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
 
       # Quality gate check — no continue-on-error: pipeline fails if gate fails.
@@ -245,7 +245,7 @@ jobs:
         uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
         timeout-minutes: 5
         env:
-          SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
 
   # ═══════════════════════════════════════════════════════════════════════════
