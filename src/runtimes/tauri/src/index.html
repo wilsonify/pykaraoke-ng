@@ -23,10 +23,13 @@
                     <input type="text" id="folder-input" placeholder="/path/to/songs" value="/app/songs">
                     <button id="add-folder-btn" class="btn btn-primary btn-sm">Add</button>
                 </div>
-                <div class="library-controls">
-                    <label class="section-label">Library</label>
-                    <button id="scan-library-btn" class="btn btn-secondary btn-sm">Scan Library</button>
-                </div>
+                <details class="search-filters">
+                    <summary>Library</summary>
+                    <div class="library-controls">
+                        <div class="section-label">Library</div>
+                        <button id="scan-library-btn" class="btn btn-secondary btn-sm">Scan Library</button>
+                    </div>
+                </details>
             </div>
 
             <!-- Search (appears after library management) -->
@@ -45,18 +48,7 @@
                 </div>
             </div>
 
-            <!-- Queue (appears before playback) -->
-            <div class="playlist-section">
-                <div class="section-header">
-                    <span class="section-label">Queue</span>
-                    <button id="clear-playlist-btn" class="btn btn-secondary btn-sm">Clear</button>
-                </div>
-                <div id="playlist" class="song-list">
-                    <div class="no-results">Playlist is empty</div>
-                </div>
-            </div>
-
-            <!-- Playback controls (appears after queue) -->
+            <!-- Playback controls (appears after search results) -->
             <div class="player-section">
                 <div class="section-label">Now Playing</div>
                 <div class="now-playing-info">
@@ -75,13 +67,23 @@
                     <input type="range" id="volume-slider" min="0" max="100" value="75">
                     <span id="volume-value">75%</span>
                 </div>
-                <!-- Playback progress (appears after controls, after queue) -->
                 <div class="progress-bar">
                     <input type="range" id="progress-slider" class="progress-slider" min="0" max="1000" value="0" step="1">
                     <div class="time-display">
                         <span id="time-current">0:00</span>
                         <span id="time-total">0:00</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Queue (appears after player) -->
+            <div class="playlist-section">
+                <div class="section-header">
+                    <span class="section-label">Queue</span>
+                    <button id="clear-playlist-btn" class="btn btn-secondary btn-sm">Clear</button>
+                </div>
+                <div id="playlist" class="song-list">
+                    <div class="no-results">Playlist is empty</div>
                 </div>
             </div>
 

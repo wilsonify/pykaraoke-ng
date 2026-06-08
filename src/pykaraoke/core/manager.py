@@ -108,27 +108,27 @@ class PykManager:
     # been renamed to snake_case.  This avoids touching dozens of
     # references in legacy player code.
     @property
-    def displaySize(self):          # noqa: N802 – legacy name
+    def displaySize(self):          # noqa: N802 – legacy name  # NOSONAR
         return self.display_size
 
     @displaySize.setter
-    def displaySize(self, value):   # noqa: N802
+    def displaySize(self, value):   # noqa: N802  # NOSONAR
         self.display_size = value
 
     @property
-    def audioProps(self):            # noqa: N802 – legacy name
+    def audioProps(self):            # noqa: N802 – legacy name  # NOSONAR
         return self.audio_props
 
     @audioProps.setter
-    def audioProps(self, value):     # noqa: N802
+    def audioProps(self, value):     # noqa: N802  # NOSONAR
         self.audio_props = value
 
     @property
-    def FontPath(self):              # noqa: N802 – legacy name
+    def FontPath(self):              # noqa: N802 – legacy name  # NOSONAR
         return self.font_path
 
     @FontPath.setter
-    def FontPath(self, value):       # noqa: N802
+    def FontPath(self, value):       # noqa: N802  # NOSONAR
         self.font_path = value
 
     def set_cpu_speed(self, activity_name):

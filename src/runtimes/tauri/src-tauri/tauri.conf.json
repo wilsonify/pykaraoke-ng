@@ -33,7 +33,6 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "backend/backend.exe",
         "backend/**"
       ]
     },

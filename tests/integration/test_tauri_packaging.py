@@ -192,9 +192,9 @@ class TestTauriBundleResources:
                 f"{script_path} does not exist"
             )
             script_src = script_path.read_text()
-            assert "backend" in script_src and "backend.exe" in script_src, (
-                "Stage-backend script must produce a 'backend.exe' "
-                "standalone executable (via PyInstaller)"
+            assert "backend" in script_src, (
+                "Stage-backend script must produce a standalone "
+                "backend executable (via PyInstaller)"
             )
         else:
             assert "backend" in before_build and "backend.exe" in before_build, (

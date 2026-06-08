@@ -13,7 +13,7 @@
 FROM python:3.12-slim AS python-builder
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Install Python dependencies
-RUN uv pip install --no-cache-dir \
+RUN uv pip install --no-build --no-cache-dir \
     pygame>=2.5.0 \
     numpy>=1.24.0 \
     mutagen>=1.47.0 \
@@ -45,6 +45,7 @@ FROM python:3.12-slim AS backend
 
 # Install runtime dependencies for pygame/SDL and create non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    freepats \
     libfreetype6 \
     libportmidi0 \
     libsdl2-2.0-0 \
@@ -52,7 +53,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsdl2-mixer-2.0-0 \
     libsdl2-ttf-2.0-0 \
     timidity \
-    freepats \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash pykaraoke
 
@@ -116,10 +116,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL --proto '=https' https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/* \
-    && cargo install tauri-cli
+    && cargo install tauri-cli --version 1.6.3
 
 # Install uv for Python
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -210,7 +210,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for development
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
 
 # Copy additional development files
 COPY tests/ /app/tests/
@@ -218,7 +218,7 @@ COPY scripts/ /app/scripts/
 COPY pyproject.toml /app/
 
 # Install dev dependencies including testing and integration test deps
-RUN uv pip install --no-cache-dir \
+RUN uv pip install --no-build --no-cache-dir \
     pytest \
     pytest-cov \
     pytest-xdist \

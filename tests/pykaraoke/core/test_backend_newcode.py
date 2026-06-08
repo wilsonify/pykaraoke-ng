@@ -268,8 +268,8 @@ class TestLazyLogging:
         )
         with patch("pykaraoke.core.backend.logger") as mock_logger:
             backend.handle_command({"action": "fail"})
-            mock_logger.error.assert_called()
-            call_args = mock_logger.error.call_args
+            mock_logger.exception.assert_called()
+            call_args = mock_logger.exception.call_args
             assert "%s" in call_args[0][0]
 
 

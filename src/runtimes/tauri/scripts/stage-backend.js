@@ -3,23 +3,22 @@
  * stage-backend.js — Stage the Python backend into src-tauri/backend/
  * before a Tauri build.
  *
- * Instead of copying raw .py files (which requires a Python interpreter
- * on the target machine), this script compiles the backend into a
- * standalone Windows executable using PyInstaller.
+ * Compiles the headless Python backend into a standalone executable
+ * using PyInstaller. Supports Windows, Linux, and macOS.
  *
  * Tauri's beforeBuildCommand runs from the project root (src/runtimes/tauri/).
  */
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { execSync } = require("child_process");
 
 const PROJECT_ROOT = __dirname.replace(/[\\/]scripts$/, "");
 const BACKEND_DIR = path.join(PROJECT_ROOT, "src-tauri", "backend");
 const WORK_DIR = path.join(PROJECT_ROOT, "build", "pyinstaller-work");
 const SPEC_FILE = path.join(PROJECT_ROOT, "backend.spec");
-
-// ── helpers ──────────────────────────────────────────────────────────
+const IS_WIN = os.platform() === "win32";
 
 function rmrf(dir) {
   if (fs.existsSync(dir)) {
@@ -28,9 +27,7 @@ function rmrf(dir) {
 }
 
 function cleanBuildArtifacts() {
-  // Remove the PyInstaller work directory.
   rmrf(WORK_DIR);
-  // PyInstaller also leaves a build/ directory at the project root — clean it.
   const pyiBuild = path.join(PROJECT_ROOT, "build");
   if (fs.existsSync(pyiBuild)) {
     const entries = fs.readdirSync(pyiBuild);
@@ -40,26 +37,25 @@ function cleanBuildArtifacts() {
   }
 }
 
-// ── main ─────────────────────────────────────────────────────────────
-
 console.log(`Building standalone backend into ${BACKEND_DIR}`);
 
-// 1. Clean previous staging area
 rmrf(BACKEND_DIR);
 
-// 2. Determine which Python to use
-// Check repo-root venv first, then project-root venv, then PATH.
+// Find Python interpreter — cross-platform
 const REPO_ROOT = path.resolve(PROJECT_ROOT, "..", "..", "..");
+const venvScriptsDir = IS_WIN ? "Scripts" : "bin";
+const pythonExe = IS_WIN ? "python.exe" : "python";
 const venvCandidates = [
-  path.join(REPO_ROOT, ".venv313", "Scripts", "python.exe"),
-  path.join(REPO_ROOT, ".venv", "Scripts", "python.exe"),
-  path.join(PROJECT_ROOT, ".venv313", "Scripts", "python.exe"),
-  path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe"),
+  path.join(REPO_ROOT, ".venv313", venvScriptsDir, pythonExe),
+  path.join(REPO_ROOT, ".venv", venvScriptsDir, pythonExe),
+  path.join(PROJECT_ROOT, ".venv313", venvScriptsDir, pythonExe),
+  path.join(PROJECT_ROOT, ".venv", venvScriptsDir, pythonExe),
 ];
 let python = venvCandidates.find((p) => fs.existsSync(p));
 if (!python) {
+  const whichCmd = IS_WIN ? "where python" : "which python";
   try {
-    python = execSync("where python", { encoding: "utf8" })
+    python = execSync(whichCmd, { encoding: "utf8" })
       .split(/\r?\n/)[0]
       .trim();
   } catch {
@@ -67,29 +63,34 @@ if (!python) {
   }
 }
 
-if (!python) {
-  console.error("No Python interpreter found.");
-  process.exit(1);
-}
-
-// 3. Verify PyInstaller is available
-try {
-  execSync(`"${python}" -m PyInstaller --version`, {
-    stdio: "pipe",
-    encoding: "utf8",
-  });
-} catch {
-  console.error(
-    "PyInstaller not installed. Run: python -m pip install pyinstaller"
-  );
-  process.exit(1);
-}
-
-// 4. Run PyInstaller with the spec file.
-//    The COLLECT(name='backend') in the spec creates a backend/ subdirectory
-//    under --distpath, so we set --distpath to PROJECT_ROOT/src-tauri so the
-//    final layout is src-tauri/backend/backend.exe (alongside _internal/).
 const DIST_DIR = path.join(PROJECT_ROOT, "src-tauri");
+
+// Check if PyInstaller is available; if not, create a minimal placeholder
+// so Tauri's resource glob backend/** doesn't fail (same approach as build.rs).
+if (python) {
+  try {
+    execSync(`"${python}" -m PyInstaller --version`, {
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+  } catch {
+    python = null;
+  }
+}
+
+if (!python) {
+  console.log("PyInstaller or Python not available; creating placeholder backend directory.");
+  const placeholderDir = path.join(DIST_DIR, "backend", "pykaraoke");
+  fs.mkdirSync(placeholderDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(placeholderDir, "PLACEHOLDER"),
+    "# placeholder so backend/** glob matches during tauri build\n"
+  );
+  console.log(`Created placeholder at ${placeholderDir}`);
+  process.exit(0);
+}
+
+// Run PyInstaller
 console.log(`Using Python: ${python}`);
 console.log(`Spec file:   ${SPEC_FILE}`);
 
@@ -100,7 +101,7 @@ try {
   execSync(pyiCmd, {
     stdio: "inherit",
     cwd: PROJECT_ROOT,
-    timeout: 5 * 60 * 1000, // 5 minutes
+    timeout: 5 * 60 * 1000,
   });
 } catch (err) {
   console.error(`PyInstaller failed: ${err.message}`);
@@ -108,15 +109,14 @@ try {
   process.exit(1);
 }
 
-// 5. Clean up build artifacts
 cleanBuildArtifacts();
 
-// 6. Verify the exe exists
-const backendExe = path.join(DIST_DIR, "backend", "backend.exe");
-if (fs.existsSync(backendExe)) {
-  const stat = fs.statSync(backendExe);
-  console.log(`Backend executable created: ${backendExe} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+// Verify the binary exists (cross-platform name)
+const backendBinary = path.join(DIST_DIR, "backend", IS_WIN ? "backend.exe" : "backend");
+if (fs.existsSync(backendBinary)) {
+  const stat = fs.statSync(backendBinary);
+  console.log(`Backend executable created: ${backendBinary} (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
 } else {
-  console.error("backend.exe not found in output directory.");
+  console.error("Backend executable not found in output directory.");
   process.exit(1);
 }

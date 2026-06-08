@@ -187,7 +187,7 @@ class PyKaraokeBackend:
             self._auto_configure_folders()
             logger.info("Song database loaded")
         except (OSError, RuntimeError, ValueError) as e:
-            logger.error("Failed to initialize database: %s", e)
+            logger.exception("Failed to initialize database")
             self.error_message = str(e)
 
     def _auto_configure_folders(self):
@@ -213,8 +213,8 @@ class PyKaraokeBackend:
         if self.event_callback:
             try:
                 self.event_callback(event)
-            except (TypeError, ValueError, RuntimeError) as e:
-                logger.error("Error emitting event: %s", e)
+            except (TypeError, ValueError, RuntimeError):
+                logger.exception("Error emitting event")
 
     def _emit_state_change(self):
         """Emit a state change event"""
@@ -241,7 +241,7 @@ class PyKaraokeBackend:
                 return {"status": "error", "message": f"Unknown action: {action}"}
             return handler(params)
         except (NameError, RuntimeError, OSError, ValueError, TypeError, AttributeError) as e:
-            logger.error("Error handling command %s: %s", action, e, exc_info=True)
+            logger.exception("Error handling command %s", action)
             return {"status": "error", "message": str(e)}
 
     def get_state(self) -> dict[str, Any]:
@@ -340,7 +340,7 @@ class PyKaraokeBackend:
             try:
                 self.current_player.seek(position_ms)
             except Exception as e:
-                logger.error("Seek error: %s", e)
+                logger.exception("Seek error")
                 return {"status": "error", "message": str(e)}
         self._emit_state_change()
         return {"status": "ok"}
@@ -391,8 +391,10 @@ class PyKaraokeBackend:
             self._emit_state_change()
             return {"status": "ok"}
 
-        except (RuntimeError, OSError, ValueError, SystemExit, Exception) as e:
-            logger.error("Playback error: %s", e)
+        except SystemExit:
+            raise
+        except Exception as e:
+            logger.exception("Playback error")
             self.state = BackendState.ERROR
             self.error_message = str(e)
             self._emit_state_change()
@@ -434,7 +436,7 @@ class PyKaraokeBackend:
             self._emit_state_change()
             return {"status": "ok"}
         except (RuntimeError, ValueError, OSError) as e:
-            logger.error("Failed to load song %s: %s", filepath, e)
+            logger.exception("Failed to load song %s", filepath)
             return {"status": "error", "message": str(e)}
 
     def _handle_add_to_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -456,8 +458,8 @@ class PyKaraokeBackend:
                 "playlist_updated", {"playlist": [self._song_to_dict(s) for s in self.playlist]}
             )
             return {"status": "ok"}
-        except (ValueError, IndexError, AttributeError, OSError, RuntimeError) as e:
-            logger.error("Failed to enqueue %s: %s", filepath, e, exc_info=True)
+        except Exception as e:
+            logger.exception("Failed to enqueue %s", filepath)
             return {"status": "error", "message": str(e)}
 
     def _handle_remove_from_playlist(self, params: dict[str, Any]) -> dict[str, Any]:
@@ -536,7 +538,7 @@ class PyKaraokeBackend:
             self.song_db.save_database()
             self._emit_event("library_scan_complete", {})
             return {"status": "ok", "message": f"Folder added and scanned: {folder}"}
-        except (OSError, RuntimeError, ValueError, AttributeError) as e:
+        except Exception as e:
             return {"status": "error", "message": str(e)}
 
     # Settings handlers
@@ -564,12 +566,12 @@ class PyKaraokeBackend:
         if self.current_player:
             try:
                 manager.poll()
-            except BaseException:
+            except Exception:
                 logger.exception("Manager poll error")
 
             # Update position
             if self.state == BackendState.PLAYING:
-                with contextlib.suppress(BaseException):
+                with contextlib.suppress(Exception):
                     self.position_ms = self.current_player.get_pos()
 
     def shutdown(self):
@@ -698,7 +700,7 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port:
             response = backend.handle_command(command)
             return response
         except (RuntimeError, OSError, ValueError, TypeError) as e:
-            logger.error("Error executing command: %s", e, exc_info=True)
+            logger.exception("Error executing command: %s", e)
             raise HTTPException(status_code=500, detail=str(e)) from e
 
     # Get events (polling endpoint)

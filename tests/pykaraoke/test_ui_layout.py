@@ -141,7 +141,7 @@ class TestDefect2SearchBoxPlacement:
 
 
 class TestDefect3PlaybackProgressPlacement:
-    """Playback progress should appear after queue management."""
+    """Playback progress should appear before queue management (per spec: Now Playing → Queue)."""
 
     def find_elements_by_id(self):
         html = _read_html()
@@ -149,29 +149,29 @@ class TestDefect3PlaybackProgressPlacement:
         finder.feed(html)
         return finder._id_order
 
-    def test_queue_before_progress_bar(self):
-        """Queue section must appear before the progress bar."""
+    def test_queue_after_progress_bar(self):
+        """Queue section must appear after the progress bar."""
         ids = self.find_elements_by_id()
         playlist_idx = ids.index("playlist")
         progress_idx = ids.index("progress-slider")
-        assert playlist_idx < progress_idx, (
-            "Playlist/Queue must appear before progress bar"
+        assert progress_idx < playlist_idx, (
+            "Progress bar must appear before Playlist/Queue"
         )
 
-    def test_queue_before_time_display(self):
+    def test_queue_after_time_display(self):
         ids = self.find_elements_by_id()
         playlist_idx = ids.index("playlist")
         time_current_idx = ids.index("time-current")
-        assert playlist_idx < time_current_idx, (
-            "Playlist must appear before time display"
+        assert time_current_idx < playlist_idx, (
+            "Time display must appear before Playlist"
         )
 
-    def test_clear_playlist_before_progress(self):
+    def test_clear_playlist_after_progress(self):
         ids = self.find_elements_by_id()
         clear_idx = ids.index("clear-playlist-btn")
         progress_idx = ids.index("progress-slider")
-        assert clear_idx < progress_idx, (
-            "Clear playlist button must appear before progress bar"
+        assert progress_idx < clear_idx, (
+            "Progress bar must appear before Clear playlist button"
         )
 
     def test_search_results_before_queue(self):
@@ -190,8 +190,8 @@ class TestDefect3PlaybackProgressPlacement:
             "scan-library-btn",
             "search-input", "search-btn",
             "results-list",
-            "clear-playlist-btn", "playlist",
             "progress-slider", "time-current", "time-total",
+            "clear-playlist-btn", "playlist",
         ]
         positions = []
         for eid in expected_ids:
@@ -306,11 +306,11 @@ class TestTabOrderAndAccessibility:
             "Results must appear before queue for logical tab flow"
         )
 
-    def test_tab_order_queue_before_playback(self):
-        """Queue should come before playback controls for logical workflow."""
+    def test_tab_order_player_before_queue(self):
+        """Playback controls should come before queue for logical workflow (per spec)."""
         ids = self.find_elements_by_id()
         playlist_idx = ids.index("playlist")
         play_idx = ids.index("play-btn")
-        assert playlist_idx < play_idx, (
-            "Queue must appear before playback controls for logical tab flow"
+        assert play_idx < playlist_idx, (
+            "Playback controls must appear before queue for logical tab flow"
         )

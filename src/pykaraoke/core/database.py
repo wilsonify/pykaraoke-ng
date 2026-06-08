@@ -46,6 +46,8 @@ from hashlib import sha256  # Use SHA-256 instead of MD5 for file hashing (secur
 
 from pykaraoke.core.filename_parser import FileNameType, FilenameParser
 
+import functools
+
 # The amount of time to wait, in milliseconds, before yielding to the
 # app for windowing updates during a long update process.
 YIELD_INTERVAL = 1000
@@ -181,6 +183,7 @@ class SongData:
 file_sort_key = None
 
 
+@functools.total_ordering
 class SongStruct:
     """This corresponds to a single song file entry, e.g. a .kar
     file, or a .mp3/.cdg filename pair.  The file might correspond to
@@ -1184,28 +1187,32 @@ class SongDB:
         loadsettings = SettingsStruct()
         with open(settings_filepath) as file:
             for line in file:
-                if "=" not in line:
-                    continue
-                key, value = line.split("=", 1)
-                key = key.strip()
-                if not hasattr(loadsettings, key):
-                    continue
-                try:
-                    import ast
-                    value = ast.literal_eval(value)
-                except (ValueError, SyntaxError):
-                    print("Invalid value for %s" % (key))
-                    continue
-                setattr(loadsettings, key, value)
+                self._parse_settings_line(loadsettings, line)
         return loadsettings
 
+    @staticmethod
+    def _parse_settings_line(loadsettings, line):
+        if "=" not in line:
+            return
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not hasattr(loadsettings, key):
+            return
+        try:
+            import ast
+            value = ast.literal_eval(value)
+        except (ValueError, SyntaxError):
+            print("Invalid value for %s" % (key))
+            return
+        setattr(loadsettings, key, value)
+
     def _validate_settings_version(self, loadsettings):
-        if loadsettings and loadsettings.version == SETTINGS_VERSION:
+        if not loadsettings:
+            return None
+        if loadsettings.version == SETTINGS_VERSION:
             self.settings = loadsettings
             return None
-        elif loadsettings:
-            return "New version of PyKaraoke, clearing settings"
-        return None
+        return "New version of PyKaraoke, clearing settings"
 
     def _is_safe_database_file(self, db_filepath):
         """Basic safety checks before loading a pickle database file.
