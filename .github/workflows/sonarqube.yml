@@ -4,6 +4,8 @@ name: SonarQube Analysis (Manual)
 # This workflow exists for on-demand standalone scans only.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
