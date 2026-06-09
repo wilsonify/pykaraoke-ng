@@ -93,7 +93,7 @@ jobs:
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
       - name: Install Python dependencies
-        run: uv sync --no-build --locked --extra dev --extra test
+        run: uv sync --locked --extra dev --extra test
 
       - name: Run Python unit tests with coverage
         run: |
@@ -280,7 +280,7 @@ jobs:
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies
-        run: uv sync --no-build --locked --extra dev --extra test
+        run: uv sync --locked --extra dev --extra test
 
       - name: Install Chromium for Selenium E2E helper
         run: |
@@ -376,6 +376,33 @@ jobs:
         working-directory: src/runtimes/tauri
         run: tauri build --bundles ${{ matrix.bundles }}
 
+        # ── Smoke-test the actual built artifact ──────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }} (for artifact validation)
+        if: matrix.platform == 'windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install artifact validation dependencies
+        if: matrix.platform == 'windows'
+        run: pip install pytest
+
+      - name: Validate built backend.exe artifact
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: |
+          export PYKARAOKE_BACKEND_EXE="src/runtimes/tauri/src-tauri/backend/backend.exe"
+          python -m pytest tests/validation/ \
+            -v -m artifact --tb=short --junitxml=validation-junit-windows.xml
+
+      - name: Upload validation test results
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-results-windows
+          path: validation-junit-windows.xml
+          retention-days: 7
+
       - name: Upload platform build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -444,7 +471,7 @@ jobs:
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
       - name: Install E2E test dependencies
-        run: uv sync --no-build --locked --extra dev --extra test
+        run: uv sync --locked --extra dev --extra test
 
       - name: Install Linux display and Chromium (for headless E2E)
         if: matrix.platform == 'linux'
@@ -459,11 +486,12 @@ jobs:
             -v -m "e2e or integration" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml
 
-      - name: Run E2E tests (Windows / macOS)
+      - name: Run E2E + artifact validation tests (Windows / macOS)
         if: matrix.platform != 'linux'
         run: |
           uv run pytest tests/integration/test_end_to_end.py \
-            -v -m "e2e or integration" \
+            tests/validation/ \
+            -v -m "e2e or integration or artifact" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml
         shell: bash
 
