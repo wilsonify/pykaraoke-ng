@@ -294,6 +294,12 @@ class PyKaraokeBackend:
             # Play current song
             return self._start_playback()
 
+        elif self.playlist:
+            # Auto-play first song from playlist
+            self.playlist_index = 0
+            self.current_song = self.playlist[0]
+            return self._start_playback()
+
         else:
             return {"status": "error", "message": "No song loaded"}
 
@@ -546,12 +552,18 @@ class PyKaraokeBackend:
     def _handle_get_settings(self) -> dict[str, Any]:
         """Get current settings"""
         settings = self.song_db.settings if hasattr(self.song_db, "settings") else {}
+        folder_list = (
+            self.song_db.get_folder_list()
+            if hasattr(self.song_db, "get_folder_list")
+            else []
+        )
         return {
             "status": "ok",
             "data": {
                 "fullscreen": getattr(settings, "FullScreen", False),
                 "player_size": getattr(settings, "PlayerSize", [640, 480]),
                 "zoom_mode": getattr(settings, "CdgZoom", "soft"),
+                "folder_list": folder_list,
             },
         }
 

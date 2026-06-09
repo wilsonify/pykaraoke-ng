@@ -29,6 +29,7 @@ a = Analysis(
         "pygame",
         "numpy",
         "mutagen",
+        "pykaraoke.config.constants",
     ],
     hookspath=[],
     hooksconfig={},
