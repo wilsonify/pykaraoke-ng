@@ -28,11 +28,11 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Install Python dependencies
 RUN uv pip install --no-build --no-cache-dir \
-    pygame>=2.5.0 \
-    numpy>=1.24.0 \
-    mutagen>=1.47.0 \
-    fastapi>=0.104.0 \
-    uvicorn>=0.24.0
+    pygame==2.6.1 \
+    numpy==2.4.6 \
+    mutagen==1.47.0 \
+    fastapi==0.136.3 \
+    uvicorn==0.48.0
 
 # Copy Python source code
 COPY src/pykaraoke /app/src/pykaraoke
@@ -113,10 +113,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js and Tauri CLI
-RUN curl -fsSL --proto '=https' https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && rm -rf /var/lib/apt/lists/* \
-    && cargo install tauri-cli --version 1.6.3
+RUN set -eux; \
+    NODE_VERSION="20.18.0"; \
+    ARCH="x64"; \
+    curl -fsSL --proto '=https' "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" -o /tmp/node.tar.xz; \
+    curl -fsSL --proto '=https' "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" -o /tmp/SHASUMS256.txt; \
+    grep "node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" /tmp/SHASUMS256.txt | sha256sum --check -; \
+    tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
+    rm /tmp/node.tar.xz /tmp/SHASUMS256.txt; \
+    cargo install tauri-cli --version 1.6.3
 
 # Install uv for Python
 COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
@@ -219,13 +224,13 @@ COPY pyproject.toml /app/
 
 # Install dev dependencies including testing and integration test deps
 RUN uv pip install --no-build --no-cache-dir \
-    pytest \
-    pytest-cov \
-    pytest-xdist \
-    ruff \
-    fastapi \
-    uvicorn \
-    selenium
+    pytest==9.0.3 \
+    pytest-cov==7.1.0 \
+    pytest-xdist==3.8.0 \
+    ruff==0.15.15 \
+    fastapi==0.136.3 \
+    uvicorn==0.48.0 \
+    selenium==4.44.0
 
 USER pykaraoke
 

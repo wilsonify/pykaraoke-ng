@@ -29,14 +29,14 @@ jobs:
           python-version: '3.12'
       
       - name: Install uv
-        run: pip install uv==0.4.30
+        run: pip install --only-binary :all: uv==0.4.30
 
       - name: Install dependencies
-        run: uv sync --locked --extra dev --extra test
-      
+        run: uv sync --locked --no-build --extra dev --extra test
+
       - name: Run tests with coverage
         run: |
-          uv run pytest --cov=src/pykaraoke --cov-report=xml:coverage.xml --cov-report=html \
+          uv run --no-build pytest --cov=src/pykaraoke --cov-report=xml:coverage.xml --cov-report=html \
             --junitxml=pytest-junit.xml tests/pykaraoke/ || true
         continue-on-error: true
       

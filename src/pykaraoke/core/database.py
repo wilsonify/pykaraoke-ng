@@ -1245,6 +1245,18 @@ class SongDB:
 
         return True
 
+    def _try_load_database(self, db_filepath, error_callback):
+        """Attempt to safely load the database file, handling errors."""
+        if not self._is_safe_database_file(db_filepath):
+            if error_callback:
+                error_callback("Unsafe database file detected, ignoring cached database")
+            return None
+        try:
+            with open(db_filepath, "rb") as file:
+                return pickle.load(file)
+        except (EOFError, pickle.UnpicklingError, AttributeError, OSError):
+            return None
+
     def load_database(self, error_callback):
         """Load the saved database."""
 
@@ -1257,26 +1269,16 @@ class SongDB:
         # Load the database file
         db_filepath = os.path.join(self.save_dir, "songdb.dat")
         if os.path.exists(db_filepath):
-            loaddb = None
-            if not self._is_safe_database_file(db_filepath):
-                if error_callback:
-                    error_callback("Unsafe database file detected, ignoring cached database")
-            else:
-                try:
-                    with open(db_filepath, "rb") as file:
-                        loaddb = pickle.load(file)
-                except (EOFError, pickle.UnpicklingError, AttributeError, OSError):
-                    # Corrupt or incompatible database file, will create new one
-                    pass
-            if getattr(loaddb, "Version", None) == DATABASE_VERSION:
-                self.full_song_list = loaddb.full_song_list
-                self.song_list = loaddb.full_song_list
-                self.unique_song_list = loaddb.unique_song_list
-                self.titles_files = loaddb.titles_files
-                self.got_titles = loaddb.got_titles
-                self.got_artists = loaddb.got_artists
-            elif loaddb is not None:
-                if error_callback:
+            loaddb = self._try_load_database(db_filepath, error_callback)
+            if loaddb is not None:
+                if getattr(loaddb, "Version", None) == DATABASE_VERSION:
+                    self.full_song_list = loaddb.full_song_list
+                    self.song_list = loaddb.full_song_list
+                    self.unique_song_list = loaddb.unique_song_list
+                    self.titles_files = loaddb.titles_files
+                    self.got_titles = loaddb.got_titles
+                    self.got_artists = loaddb.got_artists
+                elif error_callback:
                     error_callback("New version of PyKaraoke, clearing database")
 
         self.database_dirty = False
