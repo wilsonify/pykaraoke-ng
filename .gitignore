@@ -1,6 +1,7 @@
 *.pyc
 .venv/*
 __pycache__/
+.pykaraoke/
 
 # Coverage files
 .coverage
