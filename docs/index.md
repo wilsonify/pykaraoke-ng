@@ -5,7 +5,7 @@ Linux, Windows, macOS.
 
 ---
 
-**[User Guide](users.md)** · **[Developer Guide](developers.md)** · **[Admin Guide](administrators.md)** · **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
+**[User Guide](users.md)** · **[Developer Guide](developers.md)** · **[Admin Guide](administrators.md)** · **[Tester Guide](quickstart.md#validation-tests)** · **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
 
 ---
 
@@ -18,14 +18,20 @@ a live set.
 
 It is a professional utility panel — not a full-screen media player.
 
-## Quick Start
+Two deployment options:
+- **Desktop app** — Tauri-based native window with a bundled Python backend.
+  Pre-built installers for Windows (NSIS), macOS (DMG), Linux (AppImage/deb).
+- **Headless backend** — Python service via stdio or HTTP. Run it directly,
+  in Docker, or in Kubernetes. Drive it with any frontend.
+
+## Quick Start (Users)
 
 ```bash
-pip install pykaraoke-ng    # or: uv pip install pykaraoke-ng
-
-pycdg song.cdg              # CD+G
-pykar song.kar              # MIDI / KAR
-pympg song.mpg              # video
+# Install pre-built desktop app from GitHub Releases, or:
+git clone https://github.com/wilsonify/pykaraoke-ng.git
+cd pykaraoke-ng
+uv sync
+uv run python -m pykaraoke.core.backend --http   # HTTP API on :8080
 ```
 
 For development setup, see the **[Quick Start Guide](quickstart.md)**.
@@ -42,9 +48,9 @@ For development setup, see the **[Quick Start Guide](quickstart.md)**.
 
 ### By Audience
 
-- **[User Guide](users.md)** — Install, set up a song library, run karaoke
-- **[Developer Guide](developers.md)** — Clone, test, contribute
-- **[Admin Guide](administrators.md)** — Deploy via Docker, Kubernetes, or Tauri
+- **[User Guide](users.md)** — Install the desktop app, set up a song library, run a show
+- **[Developer Guide](developers.md)** — Clone, test, build, contribute
+- **[Admin Guide](administrators.md)** — Deploy via Docker, Kubernetes, or Tauri desktop builds
 
 ### Architecture
 
@@ -54,6 +60,7 @@ For development setup, see the **[Quick Start Guide](quickstart.md)**.
 
 ### Development
 
+- **[Quick Start](quickstart.md)** — Get running from a clone in under a minute
 - **[Integration Testing](development/integration-testing.md)** — Docker-based test orchestration
 - **[SonarQube Setup](development/sonarqube-setup.md)** — CI quality scanning
 - **[Code Quality History](development/quality-improvements.md)** — Python 3 migration log

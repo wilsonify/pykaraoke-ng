@@ -1,6 +1,6 @@
 # Developer Guide
 
-Set up, test, and contribute to PyKaraoke-NG.
+Set up, test, build, and contribute to PyKaraoke-NG.
 
 [← Home](index.md)
 
@@ -10,8 +10,9 @@ Set up, test, and contribute to PyKaraoke-NG.
 
 - Python 3.10+, Git, uv (recommended) or pip
 - Docker (optional — for integration tests)
-- Rust toolchain (optional — for Tauri)
+- Rust toolchain (optional — for Tauri builds)
 - PyInstaller (optional — for production builds)
+- Node.js 20+ (optional — for Tauri frontend + CLI)
 
 ## Setup
 
@@ -27,17 +28,22 @@ uv sync                    # or: python -m venv .venv && pip install -e ".[dev]"
 src/pykaraoke/              # Core Python package
 ├── players/                # CDG, KAR, MPG players
 ├── core/                   # Backend, database, manager
-└── config/                 # Constants, environment, version
+├── config/                 # Constants, environment, version
+├── interfaces/             # Entry points for Tauri / CLI / HTTP
+└── native/                 # C extensions
 
 src/runtimes/tauri/         # Tauri desktop app
 ├── src/                    # Frontend (HTML / CSS / JS)
 ├── src-tauri/              # Rust backend
 ├── scripts/stage-backend.js # Staging script (copies .py or runs PyInstaller)
-└── backend.spec            # PyInstaller spec for standalone backend.exe
+├── backend.spec            # PyInstaller spec for standalone backend.exe
+└── e2e/                    # BDD end-to-end tests (Cucumber.js)
 
 tests/                      # Test suite
 ├── pykaraoke/              # Unit tests (mirrors src/)
-├── integration/            # End-to-end tests
+├── integration/            # Docker-compose integration tests
+├── validation/             # Artifact tests against built backend.exe
+├── manual/                 # Environment-dependent tests
 └── fixtures/               # Test data
 
 specs/                      # Governance & design specs
@@ -45,21 +51,50 @@ specs/                      # Governance & design specs
 
 ## Tests
 
+### Python unit tests
+
 ```bash
-# All tests
-uv run pytest tests/ -v
+uv run pytest tests/ -v                         # all tests
+uv run pytest tests/pykaraoke/ -v                # unit only
+uv run pytest tests/validation/ -v               # artifact validation
+uv run pytest tests/pykaraoke/core/test_filename_parser.py -v  # single file
+uv run pytest tests/ --cov --cov-report=html     # with coverage
+```
 
-# Single file
-uv run pytest tests/pykaraoke/core/test_filename_parser.py -v
+### Running against a built artifact
 
-# Rust tests (Tauri)
-cd src/runtimes/tauri/src-tauri && cargo test
+Set `PYKARAOKE_BACKEND_EXE` to validate a specific `backend.exe`:
 
-# Frontend JS
-cd src/runtimes/tauri && node --test src/app.test.js
+```bash
+export PYKARAOKE_BACKEND_EXE=src/runtimes/tauri/src-tauri/backend/backend.exe
+uv run pytest tests/validation/test_artifact_backend.py -v
+```
 
-# With coverage
-uv run pytest tests/ --cov=. --cov-report=html
+This launches the real PyInstaller-built binary as a subprocess and
+tests it via stdin/stdout — no mocking.
+
+### Integration tests (Docker)
+
+```bash
+cd deploy/docker
+docker compose --profile integration run test-integration
+```
+
+See [Integration Testing](development/integration-testing.md) for details.
+
+### BDD end-to-end tests (Cucumber.js)
+
+```bash
+cd src/runtimes/tauri/e2e
+npm ci
+npm run test:e2e:ci
+```
+
+### Cross-project tests
+
+```bash
+cd src/runtimes/tauri/src-tauri && cargo test   # Rust
+cd src/runtimes/tauri && node --test src/app.test.js  # Frontend JS
 ```
 
 ## Code Quality
@@ -69,6 +104,34 @@ uv run ruff check .          # lint
 uv run ruff check . --fix    # auto-fix
 uv run ruff format .         # format
 ```
+
+SonarQube Cloud analyses every pull request and push to main.  The
+pipeline blocks release if the quality gate fails.  Key rules:
+
+- **Cognitive complexity ≤ 15** per function
+- **Zero blocker/vulnerability** issues in production code
+- **Coverage must not decrease** below the project baseline
+
+## CI/CD Pipeline
+
+The pipeline (`ci-cd.yml`) runs in stages:
+
+```
+unit-tests ─► sonarqube ─► integration-tests ─► build ─► e2e-tests ─► release
+```
+
+| Stage | What it does | Gating |
+|-------|-------------|--------|
+| `unit-tests-python` | Python unit tests + coverage | — |
+| `unit-tests-rust` | `cargo test` (skipped if no Rust changes) | — |
+| `unit-tests-frontend` | `node --test` | — |
+| `spec-validation` | Enforces spec-driven development | — |
+| `sonarqube` | Static analysis + quality gate | Blocks next stage on failure |
+| `integration-tests` | Docker compose integration tests | Blocks build on failure |
+| `build` | Platform matrix (Linux deb, Windows NSIS, macOS DMG) | — |
+| `e2e-tests` | Per-platform E2E + artifact validation | Blocks release on failure |
+| `bdd-e2e-tests` | Cucumber.js BDD suite in Docker | Blocks release on failure |
+| `release` | Tags + GitHub Release on main branch push | Main branch only |
 
 ## Tauri Development
 
@@ -88,12 +151,37 @@ the window to see changes.
 ```bash
 cd src/runtimes/tauri
 python -m pip install pyinstaller
-npx tauri build
+npm install -g @tauri-apps/cli@1
+npx tauri build --bundles nsis   # Windows
+npx tauri build --bundles dmg    # macOS
+npx tauri build --bundles deb    # Linux
 ```
 
-The build runs `scripts/stage-backend.js` which uses PyInstaller to
-compile the Python backend into a standalone `backend.exe` (~12 MB).
-The output is at `src-tauri/target/release/bundle/`.
+The `beforeBuildCommand` runs `scripts/stage-backend.js` which uses
+PyInstaller to compile the Python backend into a standalone `backend.exe`
+(~12 MB).  The Tauri resource glob bundles it into the installer.
+
+Output directory: `src-tauri/target/release/bundle/`.
+
+### Build the backend artifact standalone
+
+```bash
+cd src/runtimes/tauri
+python -m PyInstaller backend.spec --distpath src-tauri --workpath build/pyinstaller-work --clean -y
+```
+
+The resulting `src-tauri/backend/backend.exe` can be run standalone or
+tested with the validation suite.
+
+### Validate the built artifact
+
+```bash
+export PYKARAOKE_BACKEND_EXE=src/runtimes/tauri/src-tauri/backend/backend.exe
+pytest tests/validation/ -v -m artifact
+```
+
+16 smoke tests exercise the real binary: startup, settings, library scan,
+playlist, volume, and error handling.
 
 ### Windows prerequisites
 
@@ -125,10 +213,20 @@ docker build -f deploy/docker/Dockerfile -t pykaraoke-ng .
 docker compose -f deploy/docker/docker-compose.yml --profile dev up
 ```
 
+Available Docker Compose profiles:
+
+| Profile | Services | Use case |
+|---------|----------|----------|
+| `dev` | UI + backend + app | Development with hot reload |
+| `test` | test, test-all, test-all-coverage | Unit + integration tests |
+| `integration` | backend-test, test-integration | Integration tests only |
+| `e2e` | backend, ui, selenium | BDD end-to-end tests |
+
 ## Key Modules
 
 | Module | Purpose |
 |--------|---------|
+| `interfaces/backend_api.py` | Entry point — re-exports `PyKaraokeBackend` |
 | `core/backend.py` | Headless backend — stdio and HTTP modes |
 | `core/database.py` | Song database, scanning, settings |
 | `core/filename_parser.py` | Artist–title extraction from filenames |
@@ -167,8 +265,8 @@ Poll:     get_pos() returns seek_pos_ms + elapsed for correct position reading
   all platforms (SDL_mixer limitation).  KAR seeking sets `seek_pos_ms`
   correctly for the UI position display but audio may start from the
   beginning.
-- `STATE_CAPTURING` in `kar.py:do_stuff()` was not imported until
-  v0.7.5-fix2.  The short-circuit `or` in
+- `STATE_CAPTURING` in `kar.py:do_stuff()` must be imported from
+  `pykaraoke.config.constants`.  The short-circuit `or` in
   `if self.state == STATE_PLAYING or self.state == STATE_CAPTURING:`
   masked the bug during playback; it only surfaced on stop/pause.
   Always add `STATE_CAPTURING` to any import block that references
@@ -179,11 +277,30 @@ Poll:     get_pos() returns seek_pos_ms + elapsed for correct position reading
 - The **PyInstaller spec** (`backend.spec`) uses `onedir` mode for faster
   startup.  The `backend.exe` + `_internal/` directory go into
   `src-tauri/backend/` and are bundled by the Tauri resource glob.
+- Hidden imports required: `pygame`, `numpy`, `mutagen`,
+  `pykaraoke.config.constants` (see `backend.spec:hiddenimports`).
 - In **dev mode**, `main.rs` falls back to searching for a Python
   interpreter and running the backend script directly — no PyInstaller
   needed.
 - The `build.rs` script creates a placeholder file so `cargo test`
   passes even when the staging script hasn't run yet.
+
+## Spec-Driven Development
+
+Features start as spec artifacts in `specs/features/NNN-*/`:
+
+```
+specs/features/NNN-description/
+├── README.md           # Feature specification
+├── scenario-*.md       # User scenarios
+└── acceptance.md       # Acceptance criteria
+```
+
+CI enforces spec completion via `specs/ci/validate-spec-completion.sh`.
+The pipeline:
+1. Reads the branch name for the feature number
+2. Checks that the spec directory exists and is well-formed
+3. Fails the `spec-validation` job if specs are incomplete
 
 ## Contributing
 
@@ -191,7 +308,8 @@ Poll:     get_pos() returns seek_pos_ms + elapsed for correct position reading
 2. Write spec artifacts in `specs/features/NNN-*/`
 3. Implement via TDD: failing test → pass → refactor
 4. Lint: `uv run ruff check .`
-5. Open a PR
+5. Run full test suite: `uv run pytest tests/ -v`
+6. Open a PR
 
 Read the [Project Constitution](../specs/constitution.md) and
 [Developer Workflow](../specs/workflow.md) first.

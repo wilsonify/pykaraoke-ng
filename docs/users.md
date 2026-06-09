@@ -6,43 +6,81 @@ Install PyKaraoke-NG, set up a song library, and run karaoke at a live event.
 
 ---
 
-## Install
+## Desktop App
+
+The recommended way to use PyKaraoke-NG is the Tauri desktop app — a native
+window with a slim sidebar UI designed to sit beside your DJ software.
+
+### Install
+
+**Pre-built installers** are available from [GitHub Releases](https://github.com/wilsonify/pykaraoke-ng/releases):
+
+| Platform | Format | File |
+|----------|--------|------|
+| Windows | NSIS installer | `PyKaraoke NG_<version>_x64-setup.exe` |
+| macOS | DMG | `PyKaraoke NG_<version>_x64.dmg` |
+| Linux | AppImage | `PyKaraoke NG_<version>_x64.AppImage` |
+| Linux | deb | `pykaraoke-ng_<version>_amd64.deb` |
+
+### Build from source
+
+See the [Admin Guide](administrators.md#tauri-desktop-builds) for
+detailed build instructions.
 
 ### Requirements
 
-- Python 3.10+
 - A sound card and speakers
 - Karaoke files (CDG, KAR, or MPEG)
+- Windows, macOS, or Linux (no Python required on the target machine)
 
-### pip
+---
 
-```bash
-pip install pykaraoke-ng
-# or
-uv pip install pykaraoke-ng
-```
+## Headless Backend (for advanced users)
+
+The Python backend runs independently of the desktop app — useful for
+scripting, automation, or Docker deployments.
 
 ### From source
 
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-pip install -e .
+uv sync                              # or: pip install -e .
 ```
 
-### System dependencies
-
-pygame and SDL usually install automatically. If they don't:
+### Run in stdio mode
 
 ```bash
-# Debian / Ubuntu
-sudo apt install python3-pygame libsdl2-mixer-2.0-0
+uv run python -m pykaraoke.core.backend
+```
 
-# Fedora
-sudo dnf install python3-pygame SDL2_mixer
+Send a command:
 
-# macOS
-brew install sdl2 sdl2_mixer
+```bash
+echo '{"action":"get_state","params":{}}' | uv run python -m pykaraoke.core.backend
+```
+
+### Run in HTTP mode
+
+```bash
+uv run python -m pykaraoke.core.backend --http
+curl http://localhost:8080/health
+```
+
+### Production artifact (standalone .exe)
+
+The built `backend.exe` requires no Python on the target machine:
+
+```bash
+./backend.exe
+echo '{"action":"get_state","params":{}}' | ./backend.exe
+```
+
+Set the `PYKARAOKE_BACKEND_EXE` environment variable to use a custom
+backend with the desktop app:
+
+```bash
+export PYKARAOKE_BACKEND_EXE=/path/to/custom/backend.exe
 ```
 
 ---
@@ -71,19 +109,10 @@ Then scan:
 
 ## Play Songs
 
-### Command-line players
-
-```bash
-pycdg /path/to/song.cdg     # CD+G (needs matching .mp3)
-pykar /path/to/song.kar      # MIDI / KAR
-pympg /path/to/song.mpg      # video
-```
-
 ### Desktop app
 
-Launch the Tauri desktop app (see [Admin Guide](administrators.md#tauri-desktop-builds)
-for install instructions). The app is a slim sidebar designed to sit beside
-your DJ software.
+Launch the installed desktop app. The app is a slim sidebar that stays
+out of the way during a live set.
 
 ### Keyboard controls
 
@@ -109,14 +138,36 @@ The goal is to go from hearing a request to having it queued in under
 
 ---
 
+## Headless Usage (CLI / scripting)
+
+Send commands to the backend via stdin or HTTP:
+
+```bash
+# stdio
+echo '{"action":"play","params":{}}' | uv run python -m pykaraoke.core.backend
+
+# HTTP
+curl -X POST http://localhost:8080/api/play
+curl -X POST 'http://localhost:8080/api/playlist/add?filepath=/path/to/song.cdg'
+curl http://localhost:8080/api/state
+```
+
+See [Backend Modes](backend-modes.md) for the full API reference.
+
+---
+
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
-| No sound | Check system volume; verify the `.mp3` sits next to the `.cdg` file |
+|---------|------|
+| Desktop window is blank (Linux) | `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set automatically |
+| No sound | Check system volume; verify `.mp3` sits next to `.cdg` file |
 | Video stuttering | Close other apps; try a smaller window |
-| Songs not found after scan | Re-scan (**Scan Library**); check file extensions (`.cdg`, `.kar`, `.mpg`) |
-| `ModuleNotFoundError` | Run `pip install -e .` or `uv sync` |
+| Songs not found after scan | Re-scan; check file extensions (`.cdg`, `.kar`, `.mpg`) |
+| `mixer not initialized` | Plug a speaker / enable audio output before playing |
+| `ModuleNotFoundError` | Run `uv sync` or `pip install -e .` |
+| Backend won't start | Check `PYKARAOKE_BACKEND_EXE` points to a valid `backend.exe` |
+| NSIS installer fails | Download the `.msi` instead, or build from source |
 
 ---
 

@@ -5,6 +5,8 @@
 ---
 
 The backend supports two transport modes over identical core logic.
+When packaged with PyInstaller (`backend.exe`) it always runs in stdio
+mode — the HTTP mode is for Docker/headless deployments only.
 
 ## stdio (default)
 
@@ -14,6 +16,15 @@ Used by the Tauri desktop shell and the production `backend.exe`.
 ```bash
 python -m pykaraoke.core.backend           # default
 python -m pykaraoke.core.backend --stdio   # explicit
+```
+
+### Production artifact
+
+The built `backend.exe` runs in stdio mode automatically:
+
+```bash
+./backend.exe
+echo '{"action":"get_state","params":{}}' | ./backend.exe
 ```
 
 ### Protocol
@@ -33,12 +44,14 @@ Events (stdout):
 {"type": "event", "event": {"type": "state_changed", "timestamp": 1234567890.0, "data": {...}}}
 ```
 
+Two-line types interleave on stdout — consumers must skip event lines
+and read only response lines.
+
 ## HTTP
 
 FastAPI server for Docker, Kubernetes, and headless deployments.
 
 ```bash
-pip install pykaraoke-ng[http]                          # install deps
 python -m pykaraoke.core.backend --http                 # default port 8080
 python -m pykaraoke.core.backend --http --port 9000     # custom port
 ```
@@ -69,6 +82,7 @@ python -m pykaraoke.core.backend --http --port 9000     # custom port
 ### Docker example
 
 ```bash
+docker build --target backend -t pykaraoke-ng:backend .
 docker run -p 8080:8080 -e BACKEND_MODE=http pykaraoke-ng:backend
 curl http://localhost:8080/health
 curl http://localhost:8080/api/state
@@ -84,7 +98,8 @@ curl -X POST http://localhost:8080/api/play
 | CLI flag | `--stdio` | `--http` |
 | Env var | `BACKEND_MODE=stdio` | `BACKEND_MODE=http` |
 
-CLI flags override environment variables.
+CLI flags override environment variables.  In the PyInstaller-packaged
+`backend.exe`, only stdio mode is available.
 
 ## Architecture
 
@@ -98,7 +113,9 @@ create_stdio_server()     # stdin/stdout transport
 create_http_server()      # FastAPI + Uvicorn
 ```
 
-Core logic is shared. Transport concerns are isolated.
+Core logic is shared. Transport concerns are isolated.  The backend
+maintains authoritative state at all times — the frontend polls via
+`get_state`.
 
 ## Shutdown
 
@@ -112,5 +129,7 @@ Both modes handle `SIGTERM` and `SIGINT`: close active players, clean up, exit.
 ## Testing
 
 ```bash
-pytest tests/pykaraoke/core/test_backend_api.py tests/pykaraoke/core/test_backend_http.py -v
+pytest tests/pykaraoke/core/test_backend_api.py              # stdio
+pytest tests/pykaraoke/core/test_backend_http.py -v           # HTTP
+pytest tests/validation/test_artifact_backend.py -v           # artifact binary
 ```
