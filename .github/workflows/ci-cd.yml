@@ -97,7 +97,7 @@ jobs:
 
       - name: Run Python unit tests with coverage
         run: |
-          uv run --no-build pytest tests/pykaraoke/ \
+          uv run --locked --no-build pytest tests/pykaraoke/ \
             --cov=src/pykaraoke \
             --cov-report=xml:coverage.xml \
             --cov-report=html:htmlcov \
@@ -289,7 +289,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          xvfb-run -a uv run pytest tests/integration/ -v -m integration \
+          xvfb-run -a uv run --locked pytest tests/integration/ -v -m integration \
             --junitxml=integration-junit.xml
 
       - name: Upload integration test results
@@ -482,14 +482,14 @@ jobs:
       - name: Run E2E tests (Linux — headless via Xvfb)
         if: matrix.platform == 'linux'
         run: |
-          xvfb-run -a uv run --no-build pytest tests/integration/test_end_to_end.py \
+          xvfb-run -a uv run --locked --no-build pytest tests/integration/test_end_to_end.py \
             -v -m "e2e or integration" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml
 
       - name: Run E2E + artifact validation tests (Windows / macOS)
         if: matrix.platform != 'linux'
         run: |
-          uv run --no-build pytest tests/integration/test_end_to_end.py \
+          uv run --locked --no-build pytest tests/integration/test_end_to_end.py \
             tests/validation/ \
             -v -m "e2e or integration or artifact" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml

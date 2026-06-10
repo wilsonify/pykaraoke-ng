@@ -36,7 +36,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          uv run --no-build pytest --cov=src/pykaraoke --cov-report=xml:coverage.xml --cov-report=html \
+          uv run --locked --no-build pytest --cov=src/pykaraoke --cov-report=xml:coverage.xml --cov-report=html \
             --junitxml=pytest-junit.xml tests/pykaraoke/ || true
         continue-on-error: true
       

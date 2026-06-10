@@ -1268,18 +1268,16 @@ class SongDB:
 
         # Load the database file
         db_filepath = os.path.join(self.save_dir, "songdb.dat")
-        if os.path.exists(db_filepath):
-            loaddb = self._try_load_database(db_filepath, error_callback)
-            if loaddb is not None:
-                if getattr(loaddb, "Version", None) == DATABASE_VERSION:
-                    self.full_song_list = loaddb.full_song_list
-                    self.song_list = loaddb.full_song_list
-                    self.unique_song_list = loaddb.unique_song_list
-                    self.titles_files = loaddb.titles_files
-                    self.got_titles = loaddb.got_titles
-                    self.got_artists = loaddb.got_artists
-                elif error_callback:
-                    error_callback("New version of PyKaraoke, clearing database")
+        loaddb = self._try_load_database(db_filepath, error_callback) if os.path.exists(db_filepath) else None
+        if loaddb is not None and getattr(loaddb, "Version", None) == DATABASE_VERSION:
+            self.full_song_list = loaddb.full_song_list
+            self.song_list = loaddb.full_song_list
+            self.unique_song_list = loaddb.unique_song_list
+            self.titles_files = loaddb.titles_files
+            self.got_titles = loaddb.got_titles
+            self.got_artists = loaddb.got_artists
+        elif loaddb is not None and error_callback:
+            error_callback("New version of PyKaraoke, clearing database")
 
         self.database_dirty = False
 

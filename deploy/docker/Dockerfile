@@ -18,7 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Copy dependency files first for better caching
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY src/pykaraoke/config/version.py ./src/pykaraoke/config/
 
 # Create virtual environment and install dependencies
@@ -26,13 +26,8 @@ RUN uv venv /app/.venv
 ENV VIRTUAL_ENV=/app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Install Python dependencies
-RUN uv pip install --no-build --no-cache-dir \
-    pygame==2.6.1 \
-    numpy==2.4.6 \
-    mutagen==1.47.0 \
-    fastapi==0.136.3 \
-    uvicorn==0.48.0
+# Install Python dependencies from lockfile
+RUN uv sync --locked --no-build --no-cache --extra http
 
 # Copy Python source code
 COPY src/pykaraoke /app/src/pykaraoke
@@ -93,6 +88,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     git \
+    gpg \
     libasound2-dev \
     libayatana-appindicator3-dev \
     libgtk-3-dev \
@@ -118,9 +114,24 @@ RUN set -eux; \
     ARCH="x64"; \
     curl -fsSL --proto '=https' "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" -o /tmp/node.tar.xz; \
     curl -fsSL --proto '=https' "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" -o /tmp/SHASUMS256.txt; \
+    curl -fsSL --proto '=https' "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt.sig" -o /tmp/SHASUMS256.txt.sig; \
+    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
+    for key in \
+      4ED778F539E3634C779C87C6D7062848A1AB005C \
+      141F07595B7B3FFE74309A937405533BE57C7D57 \
+      74F12602B6F1C4E913FAA37AD3A89613643B6201 \
+      DD792F5973C6DE52C432CBDAC77ABFA00DDBF2B7 \
+      CC68F5A3106FF448322E48ED27F5E38D5B0A215F \
+      8FCCA16FEF1EFD16433F6CEFC1260E0B933C5B66 \
+    ; do \
+      gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "$key"; \
+    done; \
+    gpg --batch --verify /tmp/SHASUMS256.txt.sig /tmp/SHASUMS256.txt; \
+    gpgconf --kill all; \
+    rm -rf "$GNUPGHOME"; \
     grep "node-v${NODE_VERSION}-linux-${ARCH}.tar.xz" /tmp/SHASUMS256.txt | sha256sum --check -; \
     tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1; \
-    rm /tmp/node.tar.xz /tmp/SHASUMS256.txt; \
+    rm /tmp/node.tar.xz /tmp/SHASUMS256.txt /tmp/SHASUMS256.txt.sig; \
     cargo install tauri-cli --version 1.6.3
 
 # Install uv for Python
@@ -220,17 +231,10 @@ COPY --from=ghcr.io/astral-sh/uv:0.4.30 /uv /usr/local/bin/uv
 # Copy additional development files
 COPY tests/ /app/tests/
 COPY scripts/ /app/scripts/
-COPY pyproject.toml /app/
+COPY pyproject.toml uv.lock /app/
 
-# Install dev dependencies including testing and integration test deps
-RUN uv pip install --no-build --no-cache-dir \
-    pytest==9.0.3 \
-    pytest-cov==7.1.0 \
-    pytest-xdist==3.8.0 \
-    ruff==0.15.15 \
-    fastapi==0.136.3 \
-    uvicorn==0.48.0 \
-    selenium==4.44.0
+# Install dev dependencies from lockfile
+RUN uv sync --locked --no-build --no-cache --extra dev --extra test
 
 USER pykaraoke
 
