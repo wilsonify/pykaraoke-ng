@@ -584,3 +584,223 @@ class TestDefect4StopNoCrash:
         assert "playback_state" in state
         assert "position_ms" in state
         assert "duration_ms" in state
+
+
+class TestFastForwardRewind:
+    """Fast Forward and Rewind commands must seek by the configured increment."""
+
+    def _get_backend(self):
+        from pykaraoke.core.backend import BackendState, PyKaraokeBackend
+        return PyKaraokeBackend(), BackendState
+
+    def test_fast_forward_calls_seek_with_increased_position(self):
+        """_handle_fast_forward must call player.seek() at current_pos + increment."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 70000  # poll returns post-seek value
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 60000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({})
+
+        mock_player.seek.assert_called_once_with(70000)
+
+    def test_fast_forward_custom_increment(self):
+        """_handle_fast_forward must respect amount_seconds param."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 35000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 30000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({"amount_seconds": 5})
+
+        mock_player.seek.assert_called_once_with(35000)
+
+    def test_fast_forward_clamps_to_duration(self):
+        """Fast forward must not advance beyond song duration."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 300000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 295000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({})
+
+        mock_player.seek.assert_called_once_with(300000)
+
+    def test_rewind_calls_seek_with_decreased_position(self):
+        """_handle_rewind must call player.seek() at current_pos - increment."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 50000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 60000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({})
+
+        mock_player.seek.assert_called_once_with(50000)
+
+    def test_rewind_custom_increment(self):
+        """_handle_rewind must respect amount_seconds param."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 40000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 45000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({"amount_seconds": 5})
+
+        mock_player.seek.assert_called_once_with(40000)
+
+    def test_rewind_clamps_to_zero(self):
+        """Rewind must not go below position 0."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 0
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 3000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({})
+
+        mock_player.seek.assert_called_once_with(0)
+
+    def test_fast_forward_without_player_does_not_crash(self):
+        """fast_forward must not crash when no player is active."""
+        backend, states = self._get_backend()
+        backend.current_player = None
+        backend.position_ms = 10000
+        backend.duration_ms = 300000
+
+        result = backend._handle_fast_forward({})
+
+        assert result["status"] == "ok"
+        assert backend.position_ms == 20000
+
+    def test_rewind_without_player_does_not_crash(self):
+        """rewind must not crash when no player is active."""
+        backend, states = self._get_backend()
+        backend.current_player = None
+        backend.position_ms = 10000
+        backend.duration_ms = 300000
+
+        result = backend._handle_rewind({})
+
+        assert result["status"] == "ok"
+        assert backend.position_ms == 0
+
+    def test_fast_forward_emits_state_change(self):
+        """fast_forward must emit a state_changed event."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 130000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 120000
+        backend.duration_ms = 300000
+        events = []
+        backend.set_event_callback(lambda e: events.append(e))
+
+        backend._handle_fast_forward({})
+
+        assert any(e["type"] == "state_changed" for e in events)
+
+    def test_fast_forward_custom_30s(self):
+        """Fast forward must support a 30-second increment."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 40000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 10000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({"amount_seconds": 30})
+
+        mock_player.seek.assert_called_once_with(40000)
+
+    def test_rewind_custom_30s(self):
+        """Rewind must support a 30-second decrement."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 70000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 100000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({"amount_seconds": 30})
+
+        mock_player.seek.assert_called_once_with(70000)
+
+    def test_command_dispatch_has_fast_forward(self):
+        backend, _ = self._get_backend()
+        assert "fast_forward" in backend._command_handlers
+
+    def test_command_dispatch_has_rewind(self):
+        backend, _ = self._get_backend()
+        assert "rewind" in backend._command_handlers
+
+    def test_fast_forward_handles_player_seek_error(self):
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.seek.side_effect = RuntimeError("seek failed")
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 50000
+        backend.duration_ms = 300000
+
+        result = backend._handle_fast_forward({})
+
+        assert result["status"] == "error"
+        assert "seek failed" in result["message"]
+
+    def test_rewind_handles_player_seek_error(self):
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.seek.side_effect = RuntimeError("seek failed")
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 50000
+        backend.duration_ms = 300000
+
+        result = backend._handle_rewind({})
+
+        assert result["status"] == "error"
+        assert "seek failed" in result["message"]
+
+    def test_fast_forward_minimum_amount_is_one_second(self):
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 10000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({"amount_seconds": 0})
+
+        mock_player.seek.assert_called_once_with(11000)
+
+    def test_rewind_minimum_amount_is_one_second(self):
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 10000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({"amount_seconds": 0})
+
+        mock_player.seek.assert_called_once_with(9000)

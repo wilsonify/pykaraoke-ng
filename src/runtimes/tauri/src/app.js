@@ -2,40 +2,38 @@
 // Talks to Rust commands via Tauri invoke().
 
 // Keep a defensive fallback for environments where Tauri globals are absent.
-var invoke = async function(command, payload) {
+let invoke = async function(command, payload) {
     return { command: command, payload: payload || {} };
 };
-var listen = async function() {
+let listen = async function() {
     return function() {};
 };
-var dialogOpen = async function() {
+let dialogOpen = async function() {
     return null;
 };
 
 try {
-    if (window.__TAURI__ && window.__TAURI__.tauri && window.__TAURI__.tauri.invoke) {
-        invoke = window.__TAURI__.tauri.invoke;
+    if (globalThis.__TAURI__?.tauri?.invoke) {
+        invoke = globalThis.__TAURI__.tauri.invoke;
     }
-    if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
-        listen = window.__TAURI__.event.listen;
+    if (globalThis.__TAURI__?.event?.listen) {
+        listen = globalThis.__TAURI__.event.listen;
     }
-    if (window.__TAURI__ && window.__TAURI__.dialog && window.__TAURI__.dialog.open) {
-        dialogOpen = window.__TAURI__.dialog.open;
+    if (globalThis.__TAURI__?.dialog?.open) {
+        dialogOpen = globalThis.__TAURI__.dialog.open;
     }
-} catch (_) {
+} catch (err) {
     // Browser mode: keep fallback functions.
+    console.warn('Tauri API not available, using fallback mode:', err);
     dialogOpen = async function() { return null; };
 }
 
 class PyKaraokeApp {
     constructor() {
-        this.backendRunning = false;
-        this.currentState = null;
         this.searchResults = [];
         this.lastBackendCheckAt = 0;
         this.backendStartRetries = 0;
         this.maxBackendRetries = 3;
-        this.init();
     }
 
     async init() {
@@ -52,13 +50,14 @@ class PyKaraokeApp {
         if (typeof err.message === 'string' && err.message.length > 0) return err.message;
         try {
             return JSON.stringify(err);
-        } catch (_) {
+        } catch (e) {
+            console.error('Failed to stringify error:', e);
             return String(err);
         }
     }
 
     async sendCommand(action, params) {
-        if (!window.__TAURI__ || !window.__TAURI__.tauri || !window.__TAURI__.tauri.invoke) {
+        if (!globalThis.__TAURI__?.tauri?.invoke) {
             throw new Error('Tauri bridge unavailable');
         }
 
@@ -75,8 +74,8 @@ class PyKaraokeApp {
 
             // Validate round-trip so we know command pipe is alive.
             const r = await this.sendCommand('get_state');
-            if (!r || r.status !== 'ok') {
-                const msg = (r && r.message) ? r.message : 'Unknown backend error';
+            if (r?.status !== 'ok') {
+                const msg = (r?.message) ? r.message : 'Unknown backend error';
                 throw new Error(msg);
             }
 
@@ -104,7 +103,6 @@ class PyKaraokeApp {
     }
 
     startStatePolling() {
-        var self = this;
         setInterval(async () => {
             if (!this.backendRunning) {
                 if (this.backendStartRetries >= this.maxBackendRetries) {
@@ -119,14 +117,15 @@ class PyKaraokeApp {
             }
 
             try {
-                var r = await this.sendCommand('get_state');
+                let r = await this.sendCommand('get_state');
                 if (r.status === 'ok' && r.data) {
                     this.updateUIFromState(r.data);
                 } else if (r.status !== 'ok') {
                     this.backendRunning = false;
                     this.updateBackendStatus(false);
                 }
-            } catch (_) {
+            } catch (e) {
+                console.error('State polling error:', e);
                 this.backendRunning = false;
                 this.updateBackendStatus(false);
             }
@@ -136,56 +135,59 @@ class PyKaraokeApp {
     // ── Event listeners ──────────────────────────────────────────────────
 
     setupEventListeners() {
-        var self = this;
         function $(id) { return document.getElementById(id); }
 
-        $('play-btn').addEventListener('click', async function() {
+        $('play-btn').addEventListener('click', async () => {
             try {
-                var r = await self.sendCommand('play');
-                if (r.status !== 'ok') self.updateStatus(r.message || 'Play failed');
-            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+                let r = await this.sendCommand('play');
+                if (r.status !== 'ok') this.updateStatus(r.message || 'Play failed');
+            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
-        $('pause-btn').addEventListener('click', async function() {
+        $('pause-btn').addEventListener('click', async () => {
             try {
-                var r = await self.sendCommand('pause');
-                if (r.status !== 'ok') self.updateStatus(r.message || 'Pause failed');
-            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+                let r = await this.sendCommand('pause');
+                if (r.status !== 'ok') this.updateStatus(r.message || 'Pause failed');
+            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
-        $('stop-btn').addEventListener('click', async function() {
-            try { await self.sendCommand('stop'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        $('stop-btn').addEventListener('click', async () => {
+            try { await this.sendCommand('stop'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
-        $('next-btn').addEventListener('click', async function() {
-            try { await self.sendCommand('next'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        $('next-btn').addEventListener('click', async () => {
+            try { await this.sendCommand('next'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
-        $('prev-btn').addEventListener('click', async function() {
-            try { await self.sendCommand('previous'); } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
+        $('prev-btn').addEventListener('click', async () => {
+            try { await this.sendCommand('previous'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
 
+        // Fast-forward / Rewind: single-click step + hold for continuous seeking
+        globalThis._setupSeekButton('ff-btn', 'fast_forward', 10);
+        globalThis._setupSeekButton('rewind-btn', 'rewind', 10);
+
         $('volume-slider').addEventListener('input', function(e) {
-            var v = parseInt(e.target.value);
-            self.sendCommand('set_volume', { volume: v / 100 });
+            let v = Number.parseInt(e.target.value);
+            globalThis.sendCommand('set_volume', { volume: v / 100 });
             $('volume-value').textContent = v + '%';
         });
 
         $('progress-slider').addEventListener('input', function(e) {
-            var s = self.currentState;
+            let s = globalThis.currentState;
             if (s && s.duration_ms > 0) {
-                var pct = parseInt(e.target.value) / 10;
-                var pos_ms = Math.round((pct / 100) * s.duration_ms);
-                document.getElementById('time-current').textContent = self.fmtTime(pos_ms);
+                let pct = Number.parseInt(e.target.value) / 10;
+                let pos_ms = Math.round((pct / 100) * s.duration_ms);
+                document.getElementById('time-current').textContent = globalThis.fmtTime(pos_ms);
             }
         });
 
         $('progress-slider').addEventListener('change', async function(e) {
-            var s = self.currentState;
+            let s = globalThis.currentState;
             if (s && s.duration_ms > 0) {
-                var pct = parseInt(e.target.value) / 10;
-                var pos_ms = Math.round((pct / 100) * s.duration_ms);
+                let pct = Number.parseInt(e.target.value) / 10;
+                let pos_ms = Math.round((pct / 100) * s.duration_ms);
                 try {
-                    var r = await self.sendCommand('seek', { position_ms: pos_ms });
-                    if (r && r.status !== 'ok') self.updateStatus(r.message || 'Seek failed');
+                    let r = await globalThis.sendCommand('seek', { position_ms: pos_ms });
+                    if (r && r.status !== 'ok') globalThis.updateStatus(r.message || 'Seek failed');
                 } catch (ex) {
-                    self.updateStatus('Seek error: ' + self.errorMessage(ex));
+                    globalThis.updateStatus('Seek error: ' + globalThis.errorMessage(ex));
                 }
             }
         });
@@ -501,6 +503,37 @@ class PyKaraokeApp {
         }
     }
 
+    _setupSeekButton(btnId, action, stepSeconds) {
+        var btn = document.getElementById(btnId);
+        if (!btn) return;
+        var self = this;
+        var timer = null;
+
+        function stopSeek() {
+            if (timer) { clearInterval(timer); timer = null; }
+        }
+
+        function doSeek() {
+            self.sendCommand(action, { amount_seconds: stepSeconds }).catch(function(e) {
+                self.updateStatus('Error: ' + self.errorMessage(e));
+                stopSeek();
+            });
+        }
+
+        btn.addEventListener('mousedown', function() {
+            doSeek();
+            if (timer) clearInterval(timer);
+            timer = setInterval(doSeek, 500);
+        });
+
+        btn.addEventListener('mouseup', stopSeek);
+        btn.addEventListener('mouseleave', stopSeek);
+        btn.addEventListener('click', function(e) {
+            // Click is handled by mousedown; prevent double-fire
+            e.preventDefault();
+        });
+    }
+
     updateStatus(msg) {
         document.getElementById('status-message').textContent = msg;
     }
@@ -516,6 +549,8 @@ class PyKaraokeApp {
         var secs = s % 60;
         return Math.floor(s / 60) + ':' + (secs < 10 ? '0' : '') + secs;
     }
+    backendRunning = false;
+    currentState = null;
 }
 
 // Boot

@@ -114,6 +114,8 @@ class PyKaraokeBackend:
             "next": lambda _: self._handle_next(),
             "previous": lambda _: self._handle_previous(),
             "seek": self._handle_seek,
+            "fast_forward": self._handle_fast_forward,
+            "rewind": self._handle_rewind,
             "set_volume": self._handle_set_volume,
             "load_song": self._handle_load_song,
             "add_to_playlist": self._handle_add_to_playlist,
@@ -350,6 +352,20 @@ class PyKaraokeBackend:
                 return {"status": "error", "message": str(e)}
         self._emit_state_change()
         return {"status": "ok"}
+
+    def _handle_fast_forward(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle fast forward by seeking forward by a fixed amount."""
+        amount_seconds = max(1, params.get("amount_seconds", 10))
+        increment_ms = amount_seconds * 1000
+        new_position = min(self.position_ms + increment_ms, self.duration_ms)
+        return self._handle_seek({"position_ms": new_position})
+
+    def _handle_rewind(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle rewind by seeking backward by a fixed amount."""
+        amount_seconds = max(1, params.get("amount_seconds", 10))
+        increment_ms = amount_seconds * 1000
+        new_position = max(0, self.position_ms - increment_ms)
+        return self._handle_seek({"position_ms": new_position})
 
     def _handle_set_volume(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle volume change"""

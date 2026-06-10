@@ -84,7 +84,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --only-binary :all: uv==0.4.30
+        run: 'pip install --only-binary :all: uv==0.4.30'
 
       - name: Restore uv cache
         uses: actions/cache@v4
@@ -271,7 +271,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --only-binary :all: uv==0.4.30
+        run: 'pip install --only-binary :all: uv==0.4.30'
 
       - name: Restore uv cache
         uses: actions/cache@v4
@@ -385,7 +385,7 @@ jobs:
 
       - name: Install artifact validation dependencies
         if: matrix.platform == 'windows'
-        run: pip install --only-binary :all: pytest==9.0.3
+        run: 'pip install --only-binary :all: pytest==9.0.3'
 
       - name: Validate built backend.exe artifact
         if: matrix.platform == 'windows'
@@ -462,7 +462,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --only-binary :all: uv==0.4.30
+        run: 'pip install --only-binary :all: uv==0.4.30'
 
       - name: Restore uv cache
         uses: actions/cache@v4
