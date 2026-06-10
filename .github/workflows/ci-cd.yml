@@ -92,12 +92,15 @@ jobs:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
-      - name: Install Python dependencies
-        run: uv sync --locked --no-build --extra dev --extra test
+      - name: Install third-party dependencies (pre-built wheels only)
+        run: uv sync --frozen --no-build --extra dev --extra test --no-install-project
+
+      - name: Install project in editable mode
+        run: uv pip install --editable .
 
       - name: Run Python unit tests with coverage
         run: |
-          uv run --locked --no-build pytest tests/pykaraoke/ \
+          uv run --frozen pytest tests/pykaraoke/ \
             --cov=src/pykaraoke \
             --cov-report=xml:coverage.xml \
             --cov-report=html:htmlcov \
@@ -279,8 +282,11 @@ jobs:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
-      - name: Install dependencies
-        run: uv sync --locked --no-build --extra dev --extra test
+      - name: Install third-party dependencies (pre-built wheels only)
+        run: uv sync --frozen --no-build --extra dev --extra test --no-install-project
+
+      - name: Install project in editable mode
+        run: uv pip install --editable .
 
       - name: Install Chromium for Selenium E2E helper
         run: |
@@ -289,7 +295,7 @@ jobs:
 
       - name: Run integration tests
         run: |
-          xvfb-run -a uv run --locked pytest tests/integration/ -v -m integration \
+          xvfb-run -a uv run --frozen pytest tests/integration/ -v -m integration \
             --junitxml=integration-junit.xml
 
       - name: Upload integration test results
@@ -470,8 +476,11 @@ jobs:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
-      - name: Install E2E test dependencies
-        run: uv sync --locked --no-build --extra dev --extra test
+      - name: Install third-party dependencies (pre-built wheels only)
+        run: uv sync --frozen --no-build --extra dev --extra test --no-install-project
+
+      - name: Install project in editable mode
+        run: uv pip install --editable .
 
       - name: Install Linux display and Chromium (for headless E2E)
         if: matrix.platform == 'linux'
@@ -482,14 +491,14 @@ jobs:
       - name: Run E2E tests (Linux — headless via Xvfb)
         if: matrix.platform == 'linux'
         run: |
-          xvfb-run -a uv run --locked --no-build pytest tests/integration/test_end_to_end.py \
+          xvfb-run -a uv run --frozen pytest tests/integration/test_end_to_end.py \
             -v -m "e2e or integration" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml
 
       - name: Run E2E + artifact validation tests (Windows / macOS)
         if: matrix.platform != 'linux'
         run: |
-          uv run --locked --no-build pytest tests/integration/test_end_to_end.py \
+          uv run --frozen pytest tests/integration/test_end_to_end.py \
             tests/validation/ \
             -v -m "e2e or integration or artifact" \
             --junitxml=e2e-junit-${{ matrix.platform }}.xml
