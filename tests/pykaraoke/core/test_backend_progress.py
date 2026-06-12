@@ -804,3 +804,162 @@ class TestFastForwardRewind:
         backend._handle_rewind({"amount_seconds": 0})
 
         mock_player.seek.assert_called_once_with(9000)
+
+
+class TestDefect5StopPreservesCurrentSong:
+    """Regression: _handle_stop must keep current_song so Play restarts the same song.
+
+    Before the fix, _handle_stop set current_song = None, which meant
+    pressing Play after Stop would start from the first playlist entry
+    instead of restarting the stopped song.
+    """
+
+    def _get_backend(self):
+        from pykaraoke.core.backend import BackendState, PyKaraokeBackend
+        return PyKaraokeBackend(), BackendState
+
+    def test_stop_preserves_current_song(self):
+        """_handle_stop must not clear current_song."""
+        backend, states = self._get_backend()
+        mock_song = MagicMock()
+        mock_player = MagicMock()
+        backend.current_song = mock_song
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 50000
+        backend.duration_ms = 240000
+
+        backend._handle_stop()
+
+        assert backend.current_song is mock_song, "current_song must be preserved after stop"
+        assert backend.current_player is None, "current_player must be cleared after stop"
+        assert backend.position_ms == 0, "position must reset to 0 after stop"
+        assert backend.duration_ms == 0, "duration must reset to 0 after stop"
+        assert backend.state == states.STOPPED
+
+    def test_stop_preserves_current_song_without_player(self):
+        """_handle_stop must not clear current_song even when no player exists."""
+        backend, states = self._get_backend()
+        mock_song = MagicMock()
+        backend.current_song = mock_song
+        backend.current_player = None
+        backend.state = states.PLAYING
+
+        backend._handle_stop()
+
+        assert backend.current_song is mock_song
+
+    def test_stop_play_cycle_restarts_same_song(self):
+        """After stop, calling play must restart the same song via _start_playback."""
+        backend, states = self._get_backend()
+        mock_song = MagicMock()
+        mock_player = MagicMock()
+        mock_song.make_player.return_value = mock_player
+        backend.current_song = mock_song
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+
+        # Stop
+        backend._handle_stop()
+
+        assert backend.current_song is mock_song
+        assert backend.current_player is None
+        assert backend.state == states.STOPPED
+
+        # Play — must restart same song
+        with patch.object(backend, '_start_playback', return_value={"status": "ok"}) as mock_start:
+            result = backend._handle_play({})
+            assert result["status"] == "ok"
+            mock_start.assert_called_once()
+
+    def test_stop_clears_player_reference(self):
+        """After stop, current_player must be None so poll() is skipped."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        backend.current_player = mock_player
+
+        backend._handle_stop()
+
+        assert backend.current_player is None
+        # poll should not call manager.poll when current_player is None
+        from pykaraoke.core.backend import manager as backend_mgr
+        with patch.object(backend_mgr, 'poll') as mock_poll:
+            backend.poll()
+            mock_poll.assert_not_called()
+
+    def test_position_after_stop_then_seek_before_play(self):
+        """Seeking after stop but before play should set position for next start."""
+        backend, states = self._get_backend()
+        mock_song = MagicMock()
+        backend.current_song = mock_song
+        backend.state = states.PLAYING
+
+        backend._handle_stop()
+
+        # Seek to a new position (preparing for next play)
+        result = backend._handle_seek({"position_ms": 30000})
+        assert result["status"] == "ok"
+        assert backend.position_ms == 30000
+
+
+class TestSeekEndToEnd:
+    """End-to-end seek behavior: fast_forward and rewind update backend position."""
+
+    def _get_backend(self):
+        from pykaraoke.core.backend import BackendState, PyKaraokeBackend
+        return PyKaraokeBackend(), BackendState
+
+    def test_fast_forward_calls_seek_with_correct_position(self):
+        """_handle_fast_forward must call player.seek() at current + increment."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 70000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 60000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({})
+
+        mock_player.seek.assert_called_once_with(70000)
+
+    def test_rewind_calls_seek_with_correct_position(self):
+        """_handle_rewind must call player.seek() at current - decrement."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 50000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 60000
+        backend.duration_ms = 300000
+
+        backend._handle_rewind({})
+
+        mock_player.seek.assert_called_once_with(50000)
+
+    def test_fast_forward_clamps_to_duration(self):
+        """Fast forward must not exceed song duration."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 300000
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 295000
+        backend.duration_ms = 300000
+
+        backend._handle_fast_forward({"amount_seconds": 10})
+
+        mock_player.seek.assert_called_once_with(300000)
+
+    def test_rewind_clamps_to_zero(self):
+        """Rewind must not go below 0."""
+        backend, states = self._get_backend()
+        mock_player = MagicMock()
+        mock_player.get_pos.return_value = 0
+        backend.current_player = mock_player
+        backend.state = states.PLAYING
+        backend.position_ms = 3000
+
+        backend._handle_rewind({"amount_seconds": 10})
+
+        mock_player.seek.assert_called_once_with(0)
