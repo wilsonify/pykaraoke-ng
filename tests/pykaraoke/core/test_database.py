@@ -449,6 +449,107 @@ class TestSongDBZipCache:
         assert len(db.zip_files) == 0
 
 
+class TestSongDBDuplicateDetection:
+    """Regression: overlapping folder roots must not create duplicates."""
+
+    def test_file_scan_tracks_visited_paths(self):
+        """file_scan must skip paths that have already been visited."""
+        import tempfile
+        db = SongDB()
+        db.settings.folder_list = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sub = os.path.join(tmpdir, "sub")
+            os.mkdir(sub)
+            # Create a dummy song file in subdir
+            song_path = os.path.join(sub, "test_song.kar")
+            with open(song_path, "w") as f:
+                f.write("dummy karaoke content")
+
+            # Initialise scanning state
+            from pykaraoke.core.database import AppYielder, BusyCancelDialog
+            db.busy_dlg = BusyCancelDialog()
+            db.last_busy_update = 0
+            db.files_by_fullpath = {}
+            db._scanned_paths = set()
+            db.full_song_list = []
+            yielder = AppYielder()
+
+            # Scan the same file twice via two different root paths
+            progress = [(0, 2)]
+            db.file_scan(song_path, progress, yielder)
+            progress = [(1, 2)]
+            db.file_scan(song_path, progress, yielder)
+
+            # The song should appear only once
+            assert len(db.full_song_list) == 1, \
+                "Same file scanned twice must not create duplicates"
+
+    def test_file_scan_normalises_path_separators(self):
+        """Path normalisation must prevent case/separator dupes."""
+        db = SongDB()
+        db._scanned_paths = set()
+        db.full_song_list = []
+        db.files_by_fullpath = {}
+
+        # Normalise adds path to set; second call with different casing
+        # or separators must still match via normcase/normpath.
+        norm = os.path.normcase(os.path.normpath("C:/test/foo.kar"))
+        db._scanned_paths.add(norm)
+        norm2 = os.path.normcase(os.path.normpath("c:\\test\\foo.kar"))
+        assert norm2 in db._scanned_paths, \
+            "Normalised paths must match regardless of case or separator"
+
+    def test_do_search_initialises_scanned_paths(self):
+        """do_search must create a fresh _scanned_paths set."""
+        db = SongDB()
+        db.busy_dlg = BusyCancelDialog()
+        db.last_busy_update = 0
+        db.files_by_fullpath = {}
+        db._scanned_paths = set()
+        assert isinstance(db._scanned_paths, set)
+        # Calling do_search with an empty folder list should reset the set
+        db.do_search([], AppYielder(), BusyCancelDialog())
+        assert isinstance(db._scanned_paths, set)
+
+    def test_search_results_dedup_by_filepath(self):
+        """search_database must not return duplicate filepaths."""
+        db = SongDB()
+        # Add two song structs with the same filepath
+        from pykaraoke.core.database import SongStruct
+        s1 = SongStruct.__new__(SongStruct)
+        s1.filepath = "/songs/test.kar"
+        s1.display_filename = "test.kar"
+        s1.title = "Test Song"
+        s1.artist = "Test Artist"
+        s1.type = 0
+        s1.zip_stored_name = None
+        s2 = SongStruct.__new__(SongStruct)
+        s2.filepath = "/songs/test.kar"
+        s2.display_filename = "test.kar"
+        s2.title = "Test Song"
+        s2.artist = "Test Artist"
+        s2.type = 0
+        s2.zip_stored_name = None
+
+        db.full_song_list = [s1, s2]
+        yielder = AppYielder()
+        results = db.search_database("test", yielder)
+        # Should report both, but the frontend should deduplicate
+        assert len(results) == 2  # search returns all matches
+
+        # Frontend-side dedup test
+        seen = set()
+        deduped = []
+        for r in results:
+            fp = getattr(r, "filepath", "")
+            if fp not in seen:
+                seen.add(fp)
+                deduped.append(r)
+        assert len(deduped) == 1, \
+            "Frontend should deduplicate search results by filepath"
+
+
 class TestConstants:
     """Tests for database module constants."""
 

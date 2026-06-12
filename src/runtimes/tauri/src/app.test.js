@@ -44,6 +44,8 @@ function createMockDOM() {
     "stop-btn",
     "next-btn",
     "prev-btn",
+    "ff-btn",
+    "rewind-btn",
     "volume-slider",
     "volume-value",
     "search-btn",

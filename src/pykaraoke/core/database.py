@@ -781,9 +781,9 @@ class FontData:
 
     def __repr__(self):
         if not self.size:
-            return "FontData(%s)" % (repr(self.name))
+            return "FontData(name=%s)" % (repr(self.name))
         else:
-            return "FontData(%s, %s, %s, %s)" % (
+            return "FontData(name=%s, size=%s, bold=%s, italic=%s)" % (
                 repr(self.name),
                 repr(self.size),
                 repr(self.bold),
@@ -1194,16 +1194,44 @@ class SongDB:
     def _parse_settings_line(loadsettings, line):
         if "=" not in line:
             return
-        key, value = line.split("=", 1)
+        key, value_raw = line.split("=", 1)
         key = key.strip()
         if not hasattr(loadsettings, key):
             return
         try:
             import ast
-            value = ast.literal_eval(value)
+            value = ast.literal_eval(value_raw)
         except (ValueError, SyntaxError):
-            print("Invalid value for %s" % (key))
+            # Backward compatibility: settings saved by older versions
+            # serialise FontData objects as FontData('name', ...) which
+            # ast.literal_eval cannot parse.  Handle them manually.
+            value_raw_stripped = value_raw.strip()
+            if value_raw_stripped.startswith("FontData(") and value_raw_stripped.endswith(")"):
+                import re
+                # Extract the comma-separated arguments inside FontData(...)
+                inner = value_raw_stripped[9:-1]  # strip FontData( and )
+                parts = [p.strip() for p in re.split(r",\s*(?![^()]*\))", inner)]
+                if parts:
+                    try:
+                        name = ast.literal_eval(parts[0])
+                        size = ast.literal_eval(parts[1]) if len(parts) > 1 else None
+                        bold = ast.literal_eval(parts[2]) if len(parts) > 2 else False
+                        italic = ast.literal_eval(parts[3]) if len(parts) > 3 else False
+                        value = FontData(name, size, bold, italic)
+                        setattr(loadsettings, key, value)
+                    except (ValueError, SyntaxError, IndexError):
+                        print("Invalid value for %s" % (key))
+                else:
+                    print("Invalid value for %s" % (key))
+            else:
+                print("Invalid value for %s" % (key))
             return
+        # Reconstruct FontData objects that were serialised as
+        # (name, size, bold, italic) tuples by save_settings().
+        if isinstance(value, (list, tuple)) and len(value) == 4:
+            name, size, bold, italic = value
+            if isinstance(name, str) and isinstance(bold, bool) and isinstance(italic, bool):
+                value = FontData(name, size, bold, italic)
         setattr(loadsettings, key, value)
 
     def _validate_settings_version(self, loadsettings):
@@ -1308,6 +1336,11 @@ class SongDB:
             for k in keys:
                 if not k.startswith("__"):
                     value = getattr(self.settings, k)
+                    # FontData objects have a custom repr that is not a
+                    # valid Python literal.  Serialise them as a plain
+                    # tuple so the settings parser can round-trip them.
+                    if isinstance(value, FontData):
+                        value = (value.name, value.size, value.bold, value.italic)
                     print("%s = %s" % (k, repr(value)), file=file)
 
     def save_database(self):
@@ -1409,6 +1442,11 @@ class SongDB:
 
         self.last_busy_update = time.time()
         self.files_by_fullpath = {}
+
+        # Track visited filesystem paths so that overlapping folder
+        # roots (e.g. a parent and one of its subdirectories) do not
+        # cause the same song file to be added multiple times.
+        self._scanned_paths: set[str] = set()
 
         for i in range(len(file_list)):
             root_path = file_list[i]
@@ -1522,6 +1560,14 @@ class SongDB:
         return result
 
     def file_scan(self, full_path, progress, yielder):
+        # Normalise the path to prevent duplicates from different
+        # path representations (e.g. "C:/foo" vs "C:\foo").
+        norm_path = os.path.normcase(os.path.normpath(full_path))
+
+        if norm_path in self._scanned_paths:
+            return
+        self._scanned_paths.add(norm_path)
+
         self._update_progress_if_needed(full_path, progress, yielder)
 
         # Recurse into subdirectories

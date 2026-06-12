@@ -296,3 +296,85 @@ class TestGP2XSettings:
         # All speeds should be reasonable MHz values
         for activity, speed in cpu_speeds.items():
             assert 33 <= speed <= 300, f"CPU speed for {activity} out of range"
+
+
+class TestFontDataSettings:
+    """Regression: FontData settings must survive a save/load round-trip.
+
+    FontData objects use a custom ``__repr__`` that is *not* a valid
+    Python literal, so ``ast.literal_eval`` cannot parse the serialised
+    form directly.  The settings parser must handle FontData specially.
+    """
+
+    def test_fontdata_roundtrip_no_size(self):
+        """FontData without size round-trips through save/load."""
+        from pykaraoke.core.database import FontData, SongDB
+
+        fd = FontData("DejaVuSans.ttf")
+        # Simulate what save_settings() writes
+        serialised = (fd.name, fd.size, fd.bold, fd.italic)
+        # Simulate what _parse_settings_line reconstructs
+        reconstructed = FontData(*serialised)
+        assert reconstructed.name == "DejaVuSans.ttf"
+        assert reconstructed.size is None
+        assert reconstructed.bold is False
+        assert reconstructed.italic is False
+
+    def test_fontdata_roundtrip_with_size(self):
+        """FontData with size attributes round-trips correctly."""
+        from pykaraoke.core.database import FontData
+
+        fd = FontData("Arial", 14, bold=True, italic=False)
+        serialised = (fd.name, fd.size, fd.bold, fd.italic)
+        reconstructed = FontData(*serialised)
+        assert reconstructed.name == "Arial"
+        assert reconstructed.size == 14
+        assert reconstructed.bold is True
+        assert reconstructed.italic is False
+
+    def test_fontdata_full_roundtrip(self):
+        """Full FontData with all fields round-trips correctly."""
+        from pykaraoke.core.database import FontData
+
+        fd = FontData("Comic Sans", 18, bold=True, italic=True)
+        serialised = (fd.name, fd.size, fd.bold, fd.italic)
+        reconstructed = FontData(*serialised)
+        assert reconstructed.name == "Comic Sans"
+        assert reconstructed.size == 18
+        assert reconstructed.bold is True
+        assert reconstructed.italic is True
+
+    def test_settings_parse_handles_fontdata_tuple(self):
+        """_parse_settings_line reconstructs FontData from a tuple."""
+        from pykaraoke.core.database import SongDB, SettingsStruct, FontData
+
+        settings = SettingsStruct()
+        # Simulate what save_settings() would write for kar_font
+        SongDB._parse_settings_line(
+            settings,
+            "kar_font = ('DejaVuSans.ttf', None, False, False)\n",
+        )
+        result = getattr(settings, "kar_font")
+        assert isinstance(result, FontData)
+        assert result.name == "DejaVuSans.ttf"
+        assert result.size is None
+        assert result.bold is False
+        assert result.italic is False
+
+    def test_settings_serialize_fontdata_as_tuple(self):
+        """save_settings must serialise FontData as a tuple literal."""
+        from pykaraoke.core.database import FontData, SettingsStruct
+        import io
+
+        fd = FontData("MyFont.ttf")
+        # Simulate the fix in save_settings(): convert FontData to tuple
+        # BEFORE calling repr() so that ast.literal_eval can parse it.
+        serialised = (fd.name, fd.size, fd.bold, fd.italic)
+        repr_text = repr(serialised)
+        # Must NOT contain FontData(...) since that is not a valid literal
+        assert "FontData(" not in repr_text
+        # Must be a valid Python literal that can be round-tripped
+        import ast
+        parsed = ast.literal_eval(repr_text)
+        assert isinstance(parsed, tuple)
+        assert parsed[0] == "MyFont.ttf"

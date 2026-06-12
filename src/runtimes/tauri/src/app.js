@@ -206,6 +206,9 @@ class PyKaraokeApp {
             if (e.key === 'Escape') {
                 $('search-input').value = '';
                 $('search-input').focus();
+                self.searchResults = [];
+                self.renderSearchResults();
+                self.updateStatus('');
                 e.preventDefault();
             }
             var tag = document.activeElement.tagName;
@@ -261,7 +264,12 @@ class PyKaraokeApp {
 
     async handleSearch() {
         var query = document.getElementById('search-input').value;
-        if (!query) return;
+        if (!query) {
+            this.searchResults = [];
+            this.renderSearchResults();
+            this.updateStatus('');
+            return;
+        }
         this.updateStatus('Searching…');
         try {
             var r = await this.sendCommand('search_songs', { query: query });

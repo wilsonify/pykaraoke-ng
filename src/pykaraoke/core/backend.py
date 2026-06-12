@@ -318,10 +318,18 @@ class PyKaraokeBackend:
         """Handle stop command"""
         if self.current_player:
             self.current_player.stop()
+            self.current_player = None
             self.state = BackendState.STOPPED
+            self.current_song = None
             self.position_ms = 0
+            self.duration_ms = 0
             self._emit_state_change()
             return {"status": "ok"}
+        if self.current_song:
+            self.current_song = None
+            self.position_ms = 0
+            self.duration_ms = 0
+            self.state = BackendState.STOPPED
         return {"status": "ok"}  # Already stopped
 
     def _handle_next(self) -> dict[str, Any]:
@@ -440,6 +448,10 @@ class PyKaraokeBackend:
             self.current_song = self.playlist[self.playlist_index]
             self._start_playback()
         else:
+            self.current_player = None
+            self.current_song = None
+            self.position_ms = 0
+            self.duration_ms = 0
             self.state = BackendState.IDLE
             self._emit_state_change()
 
