@@ -240,31 +240,79 @@ Available Docker Compose profiles:
 
 The backend maintains authoritative state in `PyKaraokeBackend`:
 
-- `state` — `BackendState` enum (`IDLE`, `PLAYING`, `PAUSED`, etc.)
+- `state` — `BackendState` enum (`IDLE`, `PLAYING`, `PAUSED`, `STOPPED`, etc.)
 - `position_ms` / `duration_ms` — current playback position and total length
-- `current_player` — the active `PykPlayer` subclass instance
+- `current_song` — the active `SongStruct` (persists across stop/play cycles)
+- `current_player` — the active `PykPlayer` subclass instance (cleared on stop)
 
-Key method `poll()` is called from `get_state()` on every state change
-emission.  It must never raise — wrap `manager.poll()` in try/except.
-See [Playback Controls Fix](issues/playback-controls-fixes.md) for the
-consequences of an unhandled poll exception.
+### State lifecycle invariants
+
+| Event | `current_song` | `current_player` | `position_ms` | `state` |
+|-------|---------------|-----------------|---------------|---------|
+| Play starts | set | created | 0 | PLAYING |
+| Pause | unchanged | unchanged | frozen | PAUSED |
+| **Stop** | **preserved** | **cleared** | **reset to 0** | STOPPED |
+| Seek | unchanged | unchanged | updated | unchanged |
+| Song finishes | advanced | cleared | 0 | IDLE |
+
+**Stop preserves `current_song`** so that pressing Play after Stop restarts
+the same song from the beginning.  Early versions cleared `current_song`,
+which caused Play to auto-play queue index 0 instead.
 
 ### Seek flow
 
 ```
-Frontend: slider change event → sendCommand('seek', { position_ms })
-Backend:  _handle_seek → player.seek(position_ms) → _emit_state_change()
-Player:   PykPlayer.seek() sets seek_pos_ms; subclass overrides restart
-          audio at the given position (e.g. pygame.mixer.music.play(start=...))
-Poll:     get_pos() returns seek_pos_ms + elapsed for correct position reading
+Frontend: slider drag → change event → sendCommand('seek', { position_ms })
+Backend:  _handle_seek → self.position_ms = pos → player.seek(pos)
+          → _emit_state_change()
+Player:   PykPlayer.seek() sets seek_pos_ms + adjusts play_start_time;
+          subclass overrides restart audio at the given position
+          (e.g. pygame.mixer.music.play(start=start_sec))
+Poll:     get_pos() returns seek_pos_ms + elapsed for correct position
 ```
+
+### Fast-forward / Rewind flow
+
+```
+Frontend: mousedown on ff-btn → sendCommand('fast_forward', { amount_seconds: 10 })
+          hold repeats every 500 ms via setInterval
+Backend:  _handle_fast_forward → new_pos = min(position_ms + 10s, duration_ms)
+          → _handle_seek(new_pos)
+```
+
+FF/RW clamp to `[0, duration_ms]`.  When no song is loaded (`duration_ms = 0`),
+the position clamps to 0 — expected behaviour.
+
+### Position tracking
+
+`position_ms` is the **authoritative** position used by the backend and
+frontend display.  It is:
+- **Set directly** by `_handle_seek` during a seek operation
+- **Updated** by `poll()` → `player.get_pos()` every state read during PLAYING
+- **Reset to 0** by `_handle_stop` and `_start_playback`
+
+The backend's `position_ms` is NOT read back from the player after seek;
+it is set to the target value, and subsequent `poll()` calls reconcile
+it with `player.get_pos()`.
+
+### Poll safety
+
+`poll()` is called from `get_state()` on every state change emission and
+state read.  It must **never raise** — `manager.poll()` is wrapped in
+`try/except` so that player errors (e.g. `NameError` from missing imports
+in `kar.py:do_stuff()`) do not corrupt the state snapshot.
+
+See [Playback Controls Fix](issues/playback-controls-fixes.md) for the
+consequences of an unhandled poll exception.
 
 ### Known gotchas
 
 - `pygame.mixer.music.play(start=...)` does **not** seek MIDI files on
-  all platforms (SDL_mixer limitation).  KAR seeking sets `seek_pos_ms`
-  correctly for the UI position display but audio may start from the
-  beginning.
+  all platforms (SDL_mixer limitation).  For KAR files:
+  `PykPlayer.seek()` still sets `seek_pos_ms` correctly so the UI
+  position display updates, but audio may start from the beginning.
+- The same limitation applies to some MP3 codecs in pygame —
+  `play(start=secs)` may be silently ignored on certain SDL_mixer builds.
 - `STATE_CAPTURING` in `kar.py:do_stuff()` must be imported from
   `pykaraoke.config.constants`.  The short-circuit `or` in
   `if self.state == STATE_PLAYING or self.state == STATE_CAPTURING:`

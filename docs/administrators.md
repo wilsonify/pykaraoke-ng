@@ -102,11 +102,37 @@ The Tauri resource glob (`backend/**`) bundles it into the installer.
 
 ```
 src-tauri/target/release/bundle/
-├── nsis/PyKaraoke NG_<version>_x64-setup.exe    # ~17 MB (Windows)
-├── msi/PyKaraoke NG_<version>_x64_en-US.msi      # ~25 MB (Windows)
+├── nsis/PyKaraoke NG_<version>_x64-setup.exe    # ~17 MB (Windows, NSIS)
+├── msi/PyKaraoke NG_<version>_x64_en-US.msi      # ~26 MB (Windows, MSI)
 ├── deb/pykaraoke-ng_<version>_amd64.deb          # Linux
 └── dmg/PyKaraoke NG_<version>_x64.dmg            # macOS
 ```
+
+The NSIS installer (`.exe`) is the recommended format for Windows.  The MSI
+installer (`.msi`) is available for managed deployments:
+
+```powershell
+# Silent MSI install
+msiexec /i "PyKaraoke NG_0.7.5_x64_en-US.msi" /quiet /norestart
+
+# Silent NSIS install
+"PyKaraoke NG_0.7.5_x64-setup.exe" /S
+```
+
+### System requirements (desktop app)
+
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 256 MB | 1 GB |
+| CPU | 1 GHz | 2+ cores |
+| Disk | 100 MB | 500 MB (for song library) |
+| GPU | Any (software rendering) | Any with OpenGL 2.1+ |
+| Display | 1366 × 768 | 1920 × 1080 |
+| Audio | Any sound output | Any sound output |
+| OS (Windows) | Windows 10 | Windows 11 |
+| OS (macOS) | macOS 12 Monterey | macOS 14+ |
+| OS (Linux) | Ubuntu 20.04 / equivalent | Ubuntu 24.04 / equivalent |
+| Python | Not required (packaged) | Not required |
 
 ### Standalone backend artifact
 
