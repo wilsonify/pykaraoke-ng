@@ -910,3 +910,157 @@ describe("Regression: double-click adds exactly one queue entry", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Regression: boot sequence must call init() (Defect 1)
+// ---------------------------------------------------------------------------
+// Before the fix, the boot code did `new PyKaraokeApp()` without `.init()`,
+// so the app never connected to the backend, never registered event listeners,
+// and was completely non-functional.
+
+describe("Regression: boot sequence calls init()", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("boot code calls .init() on the new PyKaraokeApp instance", () => {
+    const lines = appJsSource.split("\n");
+    // Find the boot block at the end of the file
+    const bootLines = lines.slice(-10).join("\n");
+    assert.ok(
+      bootLines.includes("new PyKaraokeApp().init()"),
+      "Boot code must call .init() on the constructed PyKaraokeApp instance; " +
+        "without it, the app never connects to the backend or registers event listeners"
+    );
+  });
+
+  it("does NOT have bare new PyKaraokeApp() without .init()", () => {
+    // The old pattern was `new PyKaraokeApp();` with no `.init()` call.
+    // The new pattern should always chain `.init()`.
+    const barePattern = /new\s+PyKaraokeApp\s*\(\s*\)\s*;/;
+    assert.ok(
+      !barePattern.test(appJsSource),
+      "app.js must not contain bare 'new PyKaraokeApp();' without .init()"
+    );
+  });
+
+  it("DOMContentLoaded handler calls .init()", () => {
+    const domReadyLine = appJsSource
+      .split("\n")
+      .find(l => l.includes("DOMContentLoaded"));
+    assert.ok(
+      domReadyLine && domReadyLine.includes(".init()"),
+      "The DOMContentLoaded listener must call .init() on the instance"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: setupEventListeners captures self = this (Defect 2)
+// ---------------------------------------------------------------------------
+// Before the fix, event listeners referenced `self` which was not defined
+// in the closure scope, causing ReferenceErrors on every interaction.
+
+describe("Regression: self is captured in setupEventListeners", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("setupEventListeners declares var self = this", () => {
+    // Find the method definition (with opening brace), not the call site
+    const fnDefIdx = appJsSource.indexOf("setupEventListeners() {");
+    const declArea = appJsSource.slice(fnDefIdx, fnDefIdx + 300);
+    assert.ok(
+      declArea.includes("var self = this"),
+      "setupEventListeners() must capture 'var self = this' so that " +
+        "event listener closures can reference the app instance"
+    );
+  });
+
+  it("search-btn handler references self.handleSearch, not globalThis", () => {
+    const searchBtnIdx = appJsSource.indexOf("search-btn");
+    const afterSearchBtn = appJsSource.slice(searchBtnIdx, searchBtnIdx + 200);
+    assert.ok(
+      afterSearchBtn.includes("self.handleSearch"),
+      "search-btn click handler must use self.handleSearch"
+    );
+    assert.ok(
+      !afterSearchBtn.includes("globalThis"),
+      "search-btn handler must not reference globalThis"
+    );
+  });
+
+  it("volume slider references self.sendCommand with 'set_volume' string", () => {
+    assert.ok(
+      appJsSource.includes("self.sendCommand('set_volume'"),
+      "Volume slider must use self.sendCommand('set_volume', ...) — " +
+        "the old code had undeclared 'action' variable and globalThis.sendCommand"
+    );
+  });
+
+  it("progress slider references self.currentState, not globalThis.currentState", () => {
+    const progressIdx = appJsSource.indexOf("progress-slider");
+    const afterProgress = appJsSource.slice(progressIdx, progressIdx + 400);
+    assert.ok(
+      afterProgress.includes("self.currentState"),
+      "Progress slider handler must use self.currentState, not globalThis"
+    );
+    assert.ok(
+      !afterProgress.includes("globalThis.currentState"),
+      "Progress slider must not reference globalThis.currentState"
+    );
+  });
+
+  it("progress slider references self.fmtTime, not globalThis.fmtTime", () => {
+    assert.ok(
+      appJsSource.includes("self.fmtTime"),
+      "Progress slider must use self.fmtTime for time display"
+    );
+  });
+
+  it("clear-playlist-btn references self.sendCommand, not globalThis", () => {
+    const clearIdx = appJsSource.indexOf("clear-playlist-btn");
+    const afterClear = appJsSource.slice(clearIdx, clearIdx + 150);
+    assert.ok(
+      afterClear.includes("self.sendCommand"),
+      "Clear playlist must use self.sendCommand"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: seek buttons use this._setupSeekButton (Defect 3)
+// ---------------------------------------------------------------------------
+// Before the fix, the code used globalThis._setupSeekButton which was not
+// defined on the global scope.
+
+describe("Regression: seek buttons use instance method", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("ff-btn setup uses this._setupSeekButton, not globalThis", () => {
+    assert.ok(
+      appJsSource.includes("this._setupSeekButton('ff-btn'"),
+      "Fast-forward button must use this._setupSeekButton"
+    );
+  });
+
+  it("rewind-btn setup uses this._setupSeekButton, not globalThis", () => {
+    assert.ok(
+      appJsSource.includes("this._setupSeekButton('rewind-btn'"),
+      "Rewind button must use this._setupSeekButton"
+    );
+  });
+
+  it("does NOT reference globalThis._setupSeekButton", () => {
+    assert.ok(
+      !appJsSource.includes("globalThis._setupSeekButton"),
+      "app.js must not reference globalThis._setupSeekButton — " +
+        "it is an instance method, not a global function"
+    );
+  });
+});

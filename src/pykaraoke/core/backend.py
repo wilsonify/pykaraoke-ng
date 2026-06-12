@@ -576,18 +576,41 @@ class PyKaraokeBackend:
         return {
             "status": "ok",
             "data": {
-                "fullscreen": getattr(settings, "FullScreen", False),
-                "player_size": getattr(settings, "PlayerSize", [640, 480]),
-                "zoom_mode": getattr(settings, "CdgZoom", "soft"),
+                "fullscreen": getattr(settings, "full_screen", False),
+                "player_size": getattr(settings, "player_size", [640, 480]),
+                "zoom_mode": getattr(settings, "cdg_zoom", "soft"),
                 "folder_list": folder_list,
             },
         }
 
     def _handle_update_settings(self, params: dict[str, Any]) -> dict[str, Any]:
         """Update settings"""
-        # Update settings as needed
         logger.info("Updating settings: %d key(s)", len(params))
-        return {"status": "ok", "message": "Settings updated"}
+        try:
+            settings = self.song_db.settings if hasattr(self.song_db, "settings") else None
+            if settings is None:
+                return {"status": "error", "message": "Settings not available"}
+
+            changed = False
+            if "fullscreen" in params:
+                settings.full_screen = bool(params["fullscreen"])
+                if hasattr(manager, "options") and hasattr(manager.options, "fullscreen"):
+                    manager.options.fullscreen = settings.full_screen
+                changed = True
+            if "zoom_mode" in params:
+                settings.cdg_zoom = str(params["zoom_mode"])
+                if hasattr(manager, "options") and hasattr(manager.options, "zoom_mode"):
+                    manager.options.zoom_mode = settings.cdg_zoom
+                changed = True
+
+            if changed:
+                self.song_db.save_settings()
+                logger.info("Settings saved: full_screen=%s, cdg_zoom=%s",
+                            settings.full_screen, settings.cdg_zoom)
+            return {"status": "ok", "message": "Settings updated"}
+        except Exception as e:
+            logger.exception("Error updating settings")
+            return {"status": "error", "message": str(e)}
 
     def poll(self):
         """Poll the manager - should be called regularly"""

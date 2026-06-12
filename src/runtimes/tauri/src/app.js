@@ -136,6 +136,7 @@ class PyKaraokeApp {
 
     setupEventListeners() {
         function $(id) { return document.getElementById(id); }
+        var self = this;
 
         $('play-btn').addEventListener('click', async () => {
             try {
@@ -160,34 +161,34 @@ class PyKaraokeApp {
         });
 
         // Fast-forward / Rewind: single-click step + hold for continuous seeking
-        globalThis._setupSeekButton('ff-btn', 'fast_forward', 10);
-        globalThis._setupSeekButton('rewind-btn', 'rewind', 10);
+        this._setupSeekButton('ff-btn', 'fast_forward', 10);
+        this._setupSeekButton('rewind-btn', 'rewind', 10);
 
         $('volume-slider').addEventListener('input', function(e) {
             let v = Number.parseInt(e.target.value);
-            globalThis.sendCommand('set_volume', { volume: v / 100 });
+            self.sendCommand('set_volume', { volume: v / 100 });
             $('volume-value').textContent = v + '%';
         });
 
         $('progress-slider').addEventListener('input', function(e) {
-            let s = globalThis.currentState;
+            let s = self.currentState;
             if (s && s.duration_ms > 0) {
                 let pct = Number.parseInt(e.target.value) / 10;
                 let pos_ms = Math.round((pct / 100) * s.duration_ms);
-                document.getElementById('time-current').textContent = globalThis.fmtTime(pos_ms);
+                document.getElementById('time-current').textContent = self.fmtTime(pos_ms);
             }
         });
 
         $('progress-slider').addEventListener('change', async function(e) {
-            let s = globalThis.currentState;
+            let s = self.currentState;
             if (s && s.duration_ms > 0) {
                 let pct = Number.parseInt(e.target.value) / 10;
                 let pos_ms = Math.round((pct / 100) * s.duration_ms);
                 try {
-                    let r = await globalThis.sendCommand('seek', { position_ms: pos_ms });
-                    if (r && r.status !== 'ok') globalThis.updateStatus(r.message || 'Seek failed');
+                    let r = await self.sendCommand('seek', { position_ms: pos_ms });
+                    if (r && r.status !== 'ok') self.updateStatus(r.message || 'Seek failed');
                 } catch (ex) {
-                    globalThis.updateStatus('Seek error: ' + globalThis.errorMessage(ex));
+                    self.updateStatus('Seek error: ' + self.errorMessage(ex));
                 }
             }
         });
@@ -555,7 +556,7 @@ class PyKaraokeApp {
 
 // Boot
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { new PyKaraokeApp(); });
+    document.addEventListener('DOMContentLoaded', function() { new PyKaraokeApp().init(); });
 } else {
-    new PyKaraokeApp();
+    new PyKaraokeApp().init();
 }

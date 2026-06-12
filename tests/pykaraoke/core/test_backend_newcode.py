@@ -317,3 +317,90 @@ class TestMainHostDefault:
                     mock_http.assert_called_once()
                     _, kwargs = mock_http.call_args
                     assert kwargs["host"] == "127.0.0.1"
+
+
+# ---------- _handle_update_settings persistence (Defect 6) ----------
+
+class TestHandleUpdateSettings:
+    """Regression: _handle_update_settings must actually persist changes."""
+
+    def _make_backend(self):
+        return _make_backend()
+
+    def test_update_fullscreen_true(self):
+        backend = self._make_backend()
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {"fullscreen": True},
+            })
+        assert result["status"] == "ok"
+        assert backend.song_db.settings.full_screen is True
+        mock_save.assert_called_once()
+
+    def test_update_fullscreen_false(self):
+        backend = self._make_backend()
+        backend.song_db.settings.full_screen = True
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {"fullscreen": False},
+            })
+        assert result["status"] == "ok"
+        assert backend.song_db.settings.full_screen is False
+        mock_save.assert_called_once()
+
+    def test_update_zoom_mode(self):
+        backend = self._make_backend()
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {"zoom_mode": "none"},
+            })
+        assert result["status"] == "ok"
+        assert backend.song_db.settings.cdg_zoom == "none"
+        mock_save.assert_called_once()
+
+    def test_update_both_settings(self):
+        backend = self._make_backend()
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {"fullscreen": True, "zoom_mode": "hard"},
+            })
+        assert result["status"] == "ok"
+        assert backend.song_db.settings.full_screen is True
+        assert backend.song_db.settings.cdg_zoom == "hard"
+        mock_save.assert_called_once()
+
+    def test_update_empty_params_does_not_save(self):
+        backend = self._make_backend()
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {},
+            })
+        assert result["status"] == "ok"
+        mock_save.assert_not_called()
+
+    def test_update_invalid_zoom_still_sets_value(self):
+        backend = self._make_backend()
+        with patch.object(backend.song_db, "save_settings") as mock_save:
+            result = backend.handle_command({
+                "action": "update_settings",
+                "params": {"zoom_mode": "invalid_zoom"},
+            })
+        assert result["status"] == "ok"
+        assert backend.song_db.settings.cdg_zoom == "invalid_zoom"
+        mock_save.assert_called_once()
+
+    def test_get_settings_uses_correct_attribute_names(self):
+        """Defect 6 regression: get_settings must use 'full_screen' and 'cdg_zoom'."""
+        backend = self._make_backend()
+        backend.song_db.settings.full_screen = True
+        backend.song_db.settings.cdg_zoom = "none"
+        result = backend.handle_command({"action": "get_settings"})
+        assert result["status"] == "ok"
+        data = result.get("data", {})
+        assert data["fullscreen"] is True
+        assert data["zoom_mode"] == "none"
