@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/pykaraoke-engine"]
+
+[workspace.package]
+version = "0.7.5"
+edition = "2021"
+license = "LGPL-2.1-or-later"
+repository = "https://github.com/wilsonify/pykaraoke-ng"
