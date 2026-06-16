@@ -3,10 +3,10 @@
 """
 Test suite for PyKaraoke Backend HTTP API
 
-Tests the HTTP server mode to ensure it provides a proper REST API.
+Tests the HTTP server mode using FastAPI's TestClient
+so no external server process is needed.
 """
 
-import os
 import pytest
 
 
@@ -15,32 +15,29 @@ class TestBackendHTTPMode:
 
     def test_http_imports_available(self):
         """Test that FastAPI/Uvicorn are available for HTTP mode"""
-        try:
-            import fastapi
-            import uvicorn
+        import fastapi
+        import uvicorn
 
-            assert fastapi is not None
-            assert uvicorn is not None
-        except ImportError:
-            pytest.skip("FastAPI/Uvicorn not installed")
+        assert fastapi is not None
+        assert uvicorn is not None
 
     def test_create_http_server_function_exists(self):
         """Test that create_http_server function exists"""
-        try:
-            from pykaraoke.core import backend
+        from pykaraoke.core import backend
 
-            assert hasattr(backend, "create_http_server")
-        except ImportError as e:
-            pytest.skip(f"Backend module not importable: {e}")
+        assert hasattr(backend, "create_http_server")
 
     def test_main_function_exists(self):
         """Test that main function exists for CLI"""
-        try:
-            from pykaraoke.core import backend
+        from pykaraoke.core import backend
 
-            assert hasattr(backend, "main")
-        except ImportError as e:
-            pytest.skip(f"Backend module not importable: {e}")
+        assert hasattr(backend, "main")
+
+    def test_build_http_app_exists(self):
+        """build_http_app should be exposed for testing."""
+        from pykaraoke.core import backend
+
+        assert hasattr(backend, "build_http_app")
 
 
 class TestBackendModeSelection:
@@ -48,116 +45,61 @@ class TestBackendModeSelection:
 
     def test_argument_parsing_stdio_mode(self):
         """Test argument parsing for stdio mode"""
-        try:
-            import argparse
-            from pykaraoke.core.backend import main
+        import argparse
+        from pykaraoke.core.backend import main
 
-            # This would require mocking sys.argv, which we'll skip for now
-            # Just verify the imports work
-            assert argparse is not None
-            assert main is not None
-        except ImportError as e:
-            pytest.skip(f"Backend module not importable: {e}")
+        assert argparse is not None
+        assert main is not None
 
     def test_argument_parsing_http_mode(self):
         """Test argument parsing for HTTP mode"""
-        try:
-            import argparse
-            from pykaraoke.core.backend import main
+        import argparse
+        from pykaraoke.core.backend import main
 
-            # This would require mocking sys.argv and testing the server
-            # Just verify the imports work
-            assert argparse is not None
-            assert main is not None
-        except ImportError as e:
-            pytest.skip(f"Backend module not importable: {e}")
+        assert argparse is not None
+        assert main is not None
 
 
 class TestHTTPEndpoints:
-    """Integration tests for HTTP endpoints (require server to be running)"""
+    """Integration tests for HTTP endpoints using FastAPI TestClient."""
 
-    @pytest.mark.integration
+    @pytest.fixture(autouse=True)
+    def _app_and_client(self):
+        from pykaraoke.core import backend as backend_module
+
+        self.backend = backend_module.PyKaraokeBackend()
+        app = backend_module.build_http_app(self.backend)
+
+        from fastapi.testclient import TestClient
+
+        self.client = TestClient(app)
+
     def test_health_endpoint(self):
-        """Test /health endpoint"""
-        try:
-            import urllib.request
-            import urllib.error
-            
-            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
-            
-            try:
-                response = urllib.request.urlopen(f"{api_url}/health", timeout=5)
-                assert response.status == 200
-            except urllib.error.URLError:
-                pytest.skip("Backend API server not running")
-        except Exception as e:
-            pytest.skip(f"Health check failed: {e}")
+        """Test /health endpoint returns 200"""
+        response = self.client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
 
-    @pytest.mark.integration
     def test_state_endpoint(self):
-        """Test /api/state endpoint"""
-        try:
-            import json
-            import urllib.request
-            import urllib.error
-            
-            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
-            
-            try:
-                response = urllib.request.urlopen(f"{api_url}/api/state", timeout=5)
-                assert response.status == 200
-                data = json.loads(response.read().decode())
-                assert "playback_state" in data or "status" in data
-            except urllib.error.URLError:
-                pytest.skip("Backend API server not running")
-        except Exception as e:
-            pytest.skip(f"State endpoint test failed: {e}")
+        """Test /api/state endpoint returns backend state"""
+        response = self.client.get("/api/state")
+        assert response.status_code == 200
+        data = response.json()
+        assert "playback_state" in data
 
-    @pytest.mark.integration
     def test_command_endpoint(self):
-        """Test /api/command endpoint"""
-        try:
-            import json
-            import urllib.request
-            import urllib.error
-            
-            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
-            
-            try:
-                command = {"action": "get_state", "params": {}}
-                data = json.dumps(command).encode("utf-8")
-                req = urllib.request.Request(
-                    f"{api_url}/api/command",
-                    data=data,
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                response = urllib.request.urlopen(req, timeout=5)
-                assert response.status == 200
-                response_data = json.loads(response.read().decode())
-                assert "status" in response_data
-            except urllib.error.URLError:
-                pytest.skip("Backend API server not running")
-        except Exception as e:
-            pytest.skip(f"Command endpoint test failed: {e}")
+        """Test /api/command endpoint processes commands"""
+        command = {"action": "get_state", "params": {}}
+        response = self.client.post("/api/command", json=command)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "ok"
+        assert "data" in data
 
-    @pytest.mark.integration
     def test_events_endpoint(self):
-        """Test /api/events endpoint"""
-        try:
-            import urllib.request
-            import urllib.error
-            
-            api_url = os.environ.get("PYKARAOKE_API_URL", "http://localhost:8080")
-            
-            try:
-                response = urllib.request.urlopen(
-                    f"{api_url}/api/events",
-                    timeout=5
-                )
-                # For SSE endpoint, just check that it returns successfully
-                assert response.status == 200
-            except urllib.error.URLError:
-                pytest.skip("Backend API server not running")
-        except Exception as e:
-            pytest.skip(f"Events endpoint test failed: {e}")
+        """Test /api/events endpoint returns events list"""
+        response = self.client.get("/api/events")
+        assert response.status_code == 200
+        data = response.json()
+        assert "events" in data

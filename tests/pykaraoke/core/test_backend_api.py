@@ -8,6 +8,7 @@ without requiring UI components.
 """
 
 import json
+import sys
 
 import pytest
 
@@ -146,75 +147,114 @@ class TestBackendAPIIntegration:
             pytest.skip(f"Integration test - requires full environment: {e}")
 
 
-class TestBackendProcessIntegration:
-    """Integration tests for backend subprocess communication"""
+class TestBackendStdioProtocol:
+    """Tests for backend stdio protocol handling."""
 
-    @pytest.mark.integration
-    def test_stdio_server_startup(self):
-        """Test that stdio server can start (requires pygame/wx dependencies)"""
-        try:
-            from pykaraoke.core import backend as backend_module
-            import subprocess
-            import time
+    def test_stdio_cycle_get_state(self):
+        """Simulate a full stdin→handle_command→stdout cycle using StringIO."""
+        import io
+        import json
+        from unittest import mock
+        import threading
+        import time
 
-            # Try to start backend in stdio mode as a subprocess
-            proc = subprocess.Popen(
-                ["python", "-c", "from pykaraoke.core.backend import main; main()"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+        from pykaraoke.core import backend as backend_module
 
-            # Give it a moment to start
-            time.sleep(0.5)
+        backend_instance = backend_module.PyKaraokeBackend()
 
-            # Check if it's still running
-            poll_result = proc.poll()
+        command = {"action": "get_state", "params": {}}
+        stdin_mock = io.StringIO(json.dumps(command) + "\n")
+        stdout_mock = io.StringIO()
 
-            # Clean up
-            proc.terminate()
-            proc.wait(timeout=2)
+        # create_stdio_server blocks until stdin is exhausted,
+        # so drive it in a separate thread with a timeout.
+        exc_info = []
 
-            # If poll_result is None, process is running
-            if poll_result is not None:
-                pytest.skip("Backend startup failed")
-        except Exception as e:
-            pytest.skip(f"Integration test - requires full environment: {e}")
-
-    @pytest.mark.integration
-    def test_command_response_flow(self):
-        """Test sending command and receiving response via stdio"""
-        try:
-            from pykaraoke.core import backend as backend_module
-            import json
-            import subprocess
-
-            # Start backend in stdio mode
-            proc = subprocess.Popen(
-                ["python", "-c", "from pykaraoke.core.backend import main; main()"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-
+        def run():
             try:
-                # Send a command
-                command = {"action": "get_state", "params": {}}
-                proc.stdin.write(json.dumps(command) + "\n")
-                proc.stdin.flush()
+                with (
+                    mock.patch.object(sys, "stdin", stdin_mock),
+                    mock.patch.object(sys, "stderr", io.StringIO()),
+                ):
+                    backend_module.create_stdio_server(backend_instance, json_out=stdout_mock)
+            except Exception as e:
+                exc_info.append(e)
 
-                # Try to read response
-                response_line = proc.stdout.readline()
-                response = json.loads(response_line)
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join(timeout=5)
 
-                assert "status" in response
-            finally:
-                proc.terminate()
-                proc.wait(timeout=2)
-        except Exception as e:
-            pytest.skip(f"Integration test - requires full environment: {e}")
+        if exc_info:
+            raise exc_info[0]
+
+        output = stdout_mock.getvalue()
+        assert output, "No output from stdio server"
+        parsed = json.loads(output)
+        assert parsed["type"] == "response"
+        assert parsed["response"]["status"] == "ok"
+
+    def test_stdio_cycle_invalid_json(self):
+        """Invalid JSON input should produce an error response."""
+        import io
+        import json
+        from unittest import mock
+        import threading
+
+        from pykaraoke.core import backend as backend_module
+
+        backend_instance = backend_module.PyKaraokeBackend()
+
+        stdin_mock = io.StringIO("not valid json\n")
+        stdout_mock = io.StringIO()
+
+        exc_info = []
+
+        def run():
+            try:
+                with (
+                    mock.patch.object(sys, "stdin", stdin_mock),
+                    mock.patch.object(sys, "stderr", io.StringIO()),
+                ):
+                    backend_module.create_stdio_server(backend_instance, json_out=stdout_mock)
+            except Exception as e:
+                exc_info.append(e)
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join(timeout=5)
+
+        if exc_info:
+            raise exc_info[0]
+
+        output = stdout_mock.getvalue()
+        assert output, "No output from stdio server"
+        parsed = json.loads(output)
+        assert parsed["type"] == "response"
+        assert parsed["response"]["status"] == "error"
+
+    def test_backend_shutdown(self):
+        """Call shutdown — should complete without error."""
+        from pykaraoke.core import backend as backend_module
+
+        backend_instance = backend_module.PyKaraokeBackend()
+        backend_instance.shutdown()
+
+    def test_event_callback(self):
+        """Verify that set_event_callback works end-to-end."""
+        from pykaraoke.core import backend as backend_module
+
+        backend_instance = backend_module.PyKaraokeBackend()
+        received_events = []
+
+        def collector(event):
+            received_events.append(event)
+
+        backend_instance.set_event_callback(collector)
+        backend_instance._emit_event("test_event", {"key": "value"})
+
+        assert len(received_events) == 1
+        assert received_events[0]["type"] == "test_event"
+        assert received_events[0]["data"]["key"] == "value"
 
 
 if __name__ == "__main__":

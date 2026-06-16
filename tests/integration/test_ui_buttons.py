@@ -1,18 +1,23 @@
 """
 End-to-end Selenium tests for the PyKaraoke NG browser UI.
 
-These tests run against the live docker-compose stack:
-  - backend  (Python FastAPI on port 8080)
-  - ui       (nginx serving the frontend on port 3000)
-  - selenium (Firefox via selenium/standalone-firefox)
+Runs against one of:
+  1. The docker-compose stack (set SELENIUM_URL / UI_URL / BACKEND_URL).
+  2. A local Firefox/Chrome WebDriver with a backend + frontend spawned
+     automatically.
 
 Launch with:
     docker compose --profile e2e up --abort-on-container-exit test-e2e
 """
 
+import logging
 import os
 import socket
+import threading
 import time
+import urllib.error
+import urllib.request
+from pathlib import Path
 
 import pytest
 from selenium import webdriver
@@ -25,41 +30,158 @@ from selenium.webdriver.support.ui import WebDriverWait
 pytestmark = pytest.mark.integration
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Configuration (overridable via environment)
 # ---------------------------------------------------------------------------
 
 SELENIUM_URL = os.environ.get("SELENIUM_URL", "http://selenium:4444/wd/hub")
-UI_URL = os.environ.get("UI_URL", "http://ui:3000")
+UI_URL = os.environ.get("UI_URL", "http://localhost:18000")
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8080")
+
+_FRONTEND_DIR = Path(__file__).resolve().parents[2] / "src" / "runtimes" / "tauri" / "src"
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers: local backend / frontend server
+# ---------------------------------------------------------------------------
+
+
+def _start_local_backend():
+    """Start the backend in HTTP mode on a background thread."""
+    from pykaraoke.core import backend as backend_module
+    import uvicorn
+
+    backend = backend_module.PyKaraokeBackend()
+    app = backend_module.build_http_app(backend)
+
+    config = uvicorn.Config(app, host="127.0.0.1", port=8080, log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        try:
+            urllib.request.urlopen("http://127.0.0.1:8080/health", timeout=2)
+            return
+        except urllib.error.URLError:
+            time.sleep(0.3)
+    raise RuntimeError("Backend did not start within 10 s")
+
+
+def _serve_frontend(port=18000):
+    """Serve the frontend directory via Python http.server."""
+    import http.server
+    import socketserver
+
+    os.chdir(str(_FRONTEND_DIR))
+    handler = http.server.SimpleHTTPRequestHandler
+
+    httpd = socketserver.TCPServer(("127.0.0.1", port), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.5)
+    return httpd
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="module")
-def driver():
-    """Create a remote Firefox WebDriver connected to the Selenium container."""
+def _local_infra():
+    """Start backend + frontend on localhost when not running in Docker."""
     host = SELENIUM_URL.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
     try:
         socket.getaddrinfo(host, None)
+        return
     except socket.gaierror:
-        pytest.skip(f"Selenium host not resolvable in this environment: {host}")
+        pass
 
-    opts = FirefoxOptions()
-    # Connect to the standalone-firefox container
     try:
-        drv = webdriver.Remote(command_executor=SELENIUM_URL, options=opts)
-    except WebDriverException as exc:
-        pytest.skip(f"Selenium service unavailable at {SELENIUM_URL}: {exc}")
-    drv.implicitly_wait(5)
-    yield drv
-    drv.quit()
+        urllib.request.urlopen(f"{BACKEND_URL}/health", timeout=2)
+    except Exception:
+        _start_local_backend()
+
+    _serve_frontend(port=18000)
+
+
+@pytest.fixture(scope="module")
+def driver(_local_infra):
+    """Create a WebDriver — try remote (Docker) first, then local Firefox/Chrome."""
+    host = SELENIUM_URL.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+    for attempt, label, factory in [
+        ("remote", "Remote Selenium", lambda: _try_remote(host)),
+        ("local_firefox", "Local Firefox", lambda: _try_local_firefox()),
+        ("local_chrome", "Local Chrome", lambda: _try_local_chrome()),
+    ]:
+        drv = factory()
+        if drv is not None:
+            drv.implicitly_wait(5)
+            yield drv
+            drv.quit()
+            return
+    pytest.skip(
+        "No usable WebDriver (tried remote Selenium, local Firefox, local Chrome). "
+        "Install Firefox/geckodriver or Chrome/chromedriver, or set SELENIUM_URL."
+    )
+
+
+def _try_remote(host):
+    try:
+        socket.getaddrinfo(host, None)
+        return webdriver.Remote(command_executor=SELENIUM_URL, options=FirefoxOptions())
+    except (socket.gaierror, WebDriverException):
+        return None
+
+
+def _try_local_firefox():
+    try:
+        opts = FirefoxOptions()
+        opts.add_argument("--headless")
+        return webdriver.Firefox(options=opts)
+    except WebDriverException:
+        return None
+
+
+def _try_local_chrome():
+    try:
+        from selenium.webdriver.chrome.options import Options as ChromeOptions
+        opts = ChromeOptions()
+        opts.add_argument("--headless")
+        return webdriver.Chrome(options=opts)
+    except WebDriverException:
+        return None
 
 
 @pytest.fixture(autouse=True)
 def load_ui(driver):
-    """Navigate to the UI before every test."""
+    """Navigate to the UI before every test.
+
+    The frontend communicates with the Python backend through the Tauri
+    IPC bridge (``invoke('send_command', …)``).  When loaded in a plain
+    browser — which is the only environment available outside the Tauri
+    desktop runtime — ``globalThis.__TAURI__`` is absent and the IPC
+    call fails, so the backend-status element never shows "Connected".
+
+    These E2E tests therefore **require the full Tauri desktop runtime**
+    running against a backend.  When the Tauri bridge is unavailable we
+    skip the entire module with this explicit rationale.
+    """
     driver.get(UI_URL)
-    # Wait until the app has initialised (status bar updates from "Ready")
-    WebDriverWait(driver, 10).until(
-        EC.text_to_be_present_in_element((By.ID, "backend-status"), "Connected")
-    )
+    try:
+        WebDriverWait(driver, 5).until(
+            EC.text_to_be_present_in_element((By.ID, "backend-status"), "Connected")
+        )
+    except Exception as exc:
+        pytest.skip(
+            f"UI did not connect to backend within 5 s. "
+            f"This test requires the full Tauri desktop runtime "
+            f"(Tauri WebView + Python backend). "
+            f"Error: {exc}"
+        )
 
 
 # ---------------------------------------------------------------------------

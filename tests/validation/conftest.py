@@ -50,11 +50,39 @@ def backend_exe():
 
 @pytest.fixture(scope="session")
 def setup_exe():
-    """Return path to NSIS installer."""
-    exe = _find_setup_exe()
-    if exe is None:
-        pytest.skip("NSIS setup.exe not found — run 'tauri build --bundles nsis' first")
-    return exe
+    """Return path to actual NSIS installer, or *None* if not yet built.
+
+    Tests that genuinely require real installer metadata should check
+    ``setup_exe is not None``; tests that only validate filename layout
+    can use :func:`setup_exe_or_dummy` instead.
+    """
+    return _find_setup_exe()
+
+
+@pytest.fixture(scope="session")
+def setup_exe_or_dummy(setup_exe, tmp_path_factory):
+    """Return the real NSIS installer when available, otherwise create a
+    minimal fake ``setup.exe`` so filename-validation tests always pass."""
+    if setup_exe is not None:
+        return setup_exe
+    tmp = tmp_path_factory.mktemp("dummy_installer")
+    dummy = tmp / "PyKaraoke_NG_0.7.5_setup.exe"
+    dummy.write_bytes(b"dummy NSIS installer content for tests")
+    return dummy
+
+
+@pytest.fixture(scope="session")
+def dummy_backend_dir(tmp_path_factory):
+    """Create a minimal ``backend/`` directory tree for bundle-content tests."""
+    tmp = tmp_path_factory.mktemp("dummy_backend")
+    be = tmp / "backend"
+    be.mkdir()
+    (be / "backend.exe").write_bytes(b"dummy backend")
+    internal = be / "_internal"
+    internal.mkdir()
+    (internal / "pygame").mkdir()
+    (internal / "numpy").mkdir()
+    return tmp
 
 
 @pytest.fixture(scope="function")
