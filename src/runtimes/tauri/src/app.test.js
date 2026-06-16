@@ -724,6 +724,77 @@ describe("Slim sidebar: Tauri window dimensions", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Regression: stop/next/prev buttons check response status
+// ---------------------------------------------------------------------------
+
+describe("Regression: stop/next/prev buttons check response status", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("stop-btn checks r.status from sendCommand", () => {
+    const stopIdx = appJsSource.indexOf("stop-btn");
+    const handler = appJsSource.slice(stopIdx, stopIdx + 300);
+    assert.ok(
+      handler.includes("r.status !== 'ok'"),
+      "stop-btn handler must check sendCommand response status; " +
+        "previously it ignored errors from the backend"
+    );
+  });
+
+  it("next-btn checks r.status from sendCommand", () => {
+    const nextIdx = appJsSource.indexOf("next-btn");
+    const handler = appJsSource.slice(nextIdx, nextIdx + 300);
+    assert.ok(
+      handler.includes("r.status !== 'ok'"),
+      "next-btn handler must check sendCommand response status"
+    );
+  });
+
+  it("prev-btn checks r.status from sendCommand", () => {
+    const prevIdx = appJsSource.indexOf("prev-btn");
+    const handler = appJsSource.slice(prevIdx, prevIdx + 300);
+    assert.ok(
+      handler.includes("r.status !== 'ok'"),
+      "prev-btn handler must check sendCommand response status"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression: volume slider handles sendCommand errors gracefully
+// ---------------------------------------------------------------------------
+
+describe("Regression: volume slider handles errors gracefully", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("volume-slider handler uses .catch() on sendCommand", () => {
+    const volIdx = appJsSource.indexOf("volume-slider");
+    const handler = appJsSource.slice(volIdx, volIdx + 400);
+    assert.ok(
+      handler.includes(".catch("),
+      "volume-slider handler must use .catch() to handle sendCommand errors; " +
+        "previously errors from the backend were silently swallowed"
+    );
+  });
+
+  it("volume-slider updates display before sending command", () => {
+    const volIdx = appJsSource.indexOf("volume-slider");
+    const handler = appJsSource.slice(volIdx, volIdx + 400);
+    assert.ok(
+      handler.indexOf("volume-value") < handler.indexOf("sendCommand") ||
+        handler.indexOf("textContent") < handler.indexOf("sendCommand"),
+      "volume-slider should update the displayed value before sending the " +
+        "command so the UI feels responsive even if the backend is slow"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Queue / Enqueue functionality
 // ---------------------------------------------------------------------------
 

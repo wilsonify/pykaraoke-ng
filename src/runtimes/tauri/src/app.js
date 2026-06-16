@@ -151,13 +151,22 @@ class PyKaraokeApp {
             } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
         $('stop-btn').addEventListener('click', async () => {
-            try { await this.sendCommand('stop'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+            try {
+                let r = await this.sendCommand('stop');
+                if (r.status !== 'ok') this.updateStatus(r.message || 'Stop failed');
+            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
         $('next-btn').addEventListener('click', async () => {
-            try { await this.sendCommand('next'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+            try {
+                let r = await this.sendCommand('next');
+                if (r.status !== 'ok') this.updateStatus(r.message || 'Next failed');
+            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
         $('prev-btn').addEventListener('click', async () => {
-            try { await this.sendCommand('previous'); } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+            try {
+                let r = await this.sendCommand('previous');
+                if (r.status !== 'ok') this.updateStatus(r.message || 'Previous failed');
+            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
 
         // Fast-forward / Rewind: single-click step + hold for continuous seeking
@@ -166,8 +175,10 @@ class PyKaraokeApp {
 
         $('volume-slider').addEventListener('input', function(e) {
             let v = Number.parseInt(e.target.value);
-            self.sendCommand('set_volume', { volume: v / 100 });
             $('volume-value').textContent = v + '%';
+            self.sendCommand('set_volume', { volume: v / 100 }).catch(function(err) {
+                console.warn('Volume update failed:', err);
+            });
         });
 
         $('progress-slider').addEventListener('input', function(e) {
@@ -340,8 +351,12 @@ class PyKaraokeApp {
                 var zm = document.getElementById('setting-zoom');
                 if (fs) fs.checked = r.data.fullscreen || false;
                 if (zm) zm.value = r.data.zoom_mode || 'soft';
+            } else {
+                this.updateStatus('Could not load settings: ' + (r.message || 'Unknown error'));
             }
-        } catch (_) {}
+        } catch (_) {
+            this.updateStatus('Could not load settings (backend unavailable)');
+        }
         modal.style.display = 'flex';
     }
 

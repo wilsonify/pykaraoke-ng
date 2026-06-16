@@ -376,6 +376,73 @@ class TestBackendPoll:
         assert backend.position_ms == 1000
 
 
+class TestBackendVolume:
+    """Tests for volume setting robustness."""
+
+    def _get_backend(self):
+        try:
+            from pykaraoke.core.backend import PyKaraokeBackend
+
+            return PyKaraokeBackend()
+        except (RuntimeError, ImportError):
+            pytest.skip("Backend dependencies not available")
+
+    def test_set_volume_stores_value_when_mixer_uninitialized(self):
+        """Regression: set_volume must store the value even when
+        pygame.mixer is not yet initialized (e.g. before any song
+        has been played).  Previously the unconditional call to
+        manager.set_volume raised pygame.error('mixer not initialized')
+        which propagated as a command error."""
+        from pykaraoke.core.manager import manager
+        manager.initialized = False
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {"volume": 0.42}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 0.42
+
+    def test_set_volume_zero(self):
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {"volume": 0.0}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 0.0
+
+    def test_set_volume_max(self):
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {"volume": 1.0}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 1.0
+
+    def test_set_volume_clamps_above_max(self):
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {"volume": 2.0}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 1.0
+
+    def test_set_volume_clamps_below_min(self):
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {"volume": -1.0}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 0.0
+
+    def test_set_volume_without_params_uses_default(self):
+        backend = self._get_backend()
+        result = backend.handle_command({
+            "action": "set_volume", "params": {}
+        })
+        assert result["status"] == "ok"
+        assert backend.volume == 0.75
+
+
 class TestBackendShutdown:
     """Tests for backend shutdown."""
 

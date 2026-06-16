@@ -30,6 +30,7 @@ const REQUIRED_IDS = [
   "search-input",
   "add-folder-btn",
   "scan-library-btn",
+  "folder-input",
   "settings-btn",
   "clear-playlist-btn",
   "settings-btn",

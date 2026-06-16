@@ -377,7 +377,11 @@ class PyKaraokeBackend:
         volume = params.get("volume", 0.75)
         volume = max(0.0, min(1.0, volume))  # Clamp to [0, 1]
         self.volume = volume
-        manager.set_volume(volume)
+        if manager.initialized:
+            try:
+                manager.set_volume(volume)
+            except Exception:
+                logger.exception("Failed to set volume on player")
         self._emit_event("volume_changed", {"volume": volume})
         return {"status": "ok"}
 
