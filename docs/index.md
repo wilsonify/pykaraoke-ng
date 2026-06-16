@@ -73,20 +73,6 @@ Full setup instructions: [Quick Start](quickstart.md).
 | [SonarQube Setup](development/sonarqube-setup.md) | CI quality scanning |
 | [Code Quality History](development/quality-improvements.md) | Python 3 migration log |
 
-### Reports
-
-| Report | Status |
-|--------|--------|
-| [Build Audit](reports/BUILD_AUDIT.md) | Repository build/discovery audit |
-| [Test Report](reports/TEST_REPORT.md) | Full test execution outcomes |
-| [Deployment Report](reports/DEPLOYMENT_REPORT.md) | Deployment artifact validation |
-| [CI/CD Report](reports/CICD_REPORT.md) | Workflow and automation review |
-| [Security Report](reports/SECURITY_REPORT.md) | Security findings and remediation |
-| [Reliability Report](reports/RELIABILITY_REPORT.md) | Resilience fixes and remaining risks |
-| [Documentation Report](reports/DOCUMENTATION_REPORT.md) | Docs accuracy and gaps |
-| [E2E Report](reports/E2E_REPORT.md) | End-to-end validation status |
-| [Release Readiness](reports/RELEASE_READINESS.md) | Release risk assessment |
-
 ### Reference
 
 - [Project Constitution](../specs/constitution.md) — Engineering invariants
