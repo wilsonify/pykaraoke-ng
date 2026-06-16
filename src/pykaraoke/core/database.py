@@ -1255,29 +1255,33 @@ class SongDB:
                 return False
 
             st = os.stat(db_abs)
-            # Guard against unexpectedly large files.
             if st.st_size > 50 * 1024 * 1024:
                 return False
 
-            if env != ENV_WINDOWS:
-                try:
-                    if st.st_uid != os.geteuid():
-                        return False
-                except AttributeError:
-                    pass
-                # Reject group/world-writable files.
-                if st.st_mode & 0o022:
-                    return False
+            if env != ENV_WINDOWS and not self._is_owner_readonly(st):
+                return False
         except OSError:
             return False
 
         return True
 
+    def _is_owner_readonly(self, st):
+        """Check file ownership and permissions (non-Windows only)."""
+        try:
+            if st.st_uid != os.geteuid():
+                return False
+        except AttributeError:
+            pass
+        if st.st_mode & 0o022:
+            return False
+        return True
+
     def _try_load_database(self, db_filepath, error_callback):
         """Attempt to safely load the database file, handling errors."""
-        if not self._is_safe_database_file(db_filepath):
-            if error_callback:
-                error_callback("Unsafe database file detected, ignoring cached database")
+        safe = self._is_safe_database_file(db_filepath)
+        if not safe and error_callback:
+            error_callback("Unsafe database file detected, ignoring cached database")
+        if not safe:
             return None
         try:
             with open(db_filepath, "rb") as file:

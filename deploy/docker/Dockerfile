@@ -220,9 +220,9 @@ USER root
 
 # Install development dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    git \
-    vim \
+    curl=7.88.1-10+deb12u14 \
+    git=1:2.39.5-0+deb12u3 \
+    vim=2:9.0.1378-2+deb12u2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for development
