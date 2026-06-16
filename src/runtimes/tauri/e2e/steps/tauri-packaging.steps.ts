@@ -96,11 +96,11 @@ Then('backend.py should be reachable via bundled resources', function () {
   expect(hasBackendGlob || hasBackendLiteral).to.be.true;
 });
 
-Then('the beforeBuildCommand should stage the backend', function () {
+Then('the beforeBuildCommand should stage the Rust backend', function () {
   const beforeBuild = tauriConf?.build?.beforeBuildCommand || '';
   expect(beforeBuild).to.not.be.empty;
-  // Should reference the staging script
-  expect(beforeBuild).to.include('stage-backend');
+  // Should reference the Rust staging script
+  expect(beforeBuild).to.include('stage-rust-backend');
 });
 
 // ── JavaScript API resilience ───────────────────────────────────────────

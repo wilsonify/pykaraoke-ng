@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "node scripts/stage-backend.js",
+    "beforeBuildCommand": "node scripts/stage-rust-backend.js",
     "devPath": "../src",
     "distDir": "../src",
     "withGlobalTauri": true
@@ -33,7 +33,7 @@
         "icons/icon.ico"
       ],
       "resources": [
-        "backend/**"
+        "resources/**"
       ]
     },
     "security": {

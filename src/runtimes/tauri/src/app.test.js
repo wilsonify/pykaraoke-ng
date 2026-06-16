@@ -599,16 +599,13 @@ describe("Regression: tauri.conf.json dialog allowlist", () => {
   });
 
   it("beforeBuildCommand uses the cross-platform node staging script", () => {
-    // The beforeBuildCommand must invoke scripts/stage-backend.js (a cross-platform
-    // Node.js script that stages Python files into src-tauri/backend/).
-    // Shell one-liners using bash -c '...' with ../../../../ paths are forbidden:
-    // they resolve to the parent of the repo root and fail on CI (file not found),
-    // and they also fail outright on Windows where bash is not guaranteed.
+    // The beforeBuildCommand must invoke scripts/stage-rust-backend.js (a cross-platform
+    // Node.js script that stages the Rust engine binary into src-tauri/resources/).
     assert.equal(
       conf.build?.beforeBuildCommand,
-      "node scripts/stage-backend.js",
-      "tauri.conf.json beforeBuildCommand must use 'node scripts/stage-backend.js' " +
-        "(cross-platform; bash ../../../../ one-liners fail on Windows and CI)"
+      "node scripts/stage-rust-backend.js",
+      "tauri.conf.json beforeBuildCommand must use 'node scripts/stage-rust-backend.js' " +
+        "(Rust native engine replaces the legacy Python backend)"
     );
   });
 });

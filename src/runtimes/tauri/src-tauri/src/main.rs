@@ -1,346 +1,103 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use pykaraoke_engine::backend::{Backend, CommandRequest, CommandResponse};
+use pykaraoke_engine::database::Persistence;
 use serde::{Deserialize, Serialize};
-use std::process::{Child, Command, Stdio};
-use std::io::{BufRead, BufReader, Write};
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc;
-use std::time::Duration;
-use tauri::{Manager, State};
+use std::sync::Mutex;
 use std::path::PathBuf;
+use tauri::{Manager, State};
 
-/// Backend state shared across the application
-struct BackendState {
-    process: Option<Child>,
-    stdin: Option<std::process::ChildStdin>,
-    response_rx: Option<mpsc::Receiver<serde_json::Value>>,
+/// The Rust-native backend instance, thread-safe.
+struct AppBackend {
+    backend: Mutex<Option<Backend>>,
 }
 
-/// Wrapper for thread-safe backend state
-type SafeBackendState = Arc<Mutex<BackendState>>;
-
-/// Command request structure
+/// Command response structure (matches what the frontend expects).
 #[derive(Debug, Serialize, Deserialize)]
-struct CommandRequest {
-    action: String,
-    params: Option<serde_json::Value>,
-}
-
-/// Command response structure
-#[derive(Debug, Serialize, Deserialize)]
-struct CommandResponse {
+struct CommandResponseWrapper {
     status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<serde_json::Value>,
 }
 
-fn command_works(program: &str, args: &[&str]) -> bool {
-    Command::new(program)
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-}
-
-fn python_has_backend_deps(program: &str, prefix_args: &[&str]) -> bool {
-    let mut args: Vec<&str> = prefix_args.to_vec();
-    args.push("-c");
-    args.push("import pygame, numpy, mutagen");
-    command_works(program, &args)
-}
-
-fn venv_python_candidates_from_ancestors(start: &std::path::Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    for ancestor in start.ancestors() {
-        out.push(ancestor.join(".venv313").join("Scripts").join("python.exe"));
-        out.push(ancestor.join(".venv").join("Scripts").join("python.exe"));
-        out.push(ancestor.join(".venv313").join("bin").join("python"));
-        out.push(ancestor.join(".venv").join("bin").join("python"));
-    }
-    out
-}
-
-fn resolve_python_launcher() -> Result<(String, Vec<String>), String> {
-    if let Ok(py) = std::env::var("PYKARAOKE_PYTHON") {
-        if !py.trim().is_empty() {
-            return Ok((py, vec![]));
+impl From<CommandResponse> for CommandResponseWrapper {
+    fn from(r: CommandResponse) -> Self {
+        CommandResponseWrapper {
+            status: r.status,
+            message: r.message,
+            data: r.data,
         }
     }
-
-    let cwd = std::env::current_dir().unwrap_or_default();
-    let path_candidates = venv_python_candidates_from_ancestors(&cwd);
-
-    for p in path_candidates {
-        if p.exists() {
-            let program = p.to_string_lossy().to_string();
-            if python_has_backend_deps(&program, &[]) {
-                return Ok((program, vec![]));
-            }
-        }
-    }
-
-    if command_works("python3", &["--version"]) && python_has_backend_deps("python3", &[]) {
-        return Ok(("python3".to_string(), vec![]));
-    }
-    if command_works("python", &["--version"]) && python_has_backend_deps("python", &[]) {
-        return Ok(("python".to_string(), vec![]));
-    }
-    if command_works("py", &["-3", "--version"]) && python_has_backend_deps("py", &["-3"]) {
-        return Ok(("py".to_string(), vec!["-3".to_string()]));
-    }
-
-    Err(
-        "No working Python interpreter with backend dependencies found. Install dependencies in a venv (e.g. .venv313\\Scripts\\python.exe -m pip install -e .) or set PYKARAOKE_PYTHON.".to_string(),
-    )
 }
 
-/// Spawn a child process and wire up stdin/stdout JSON IPC.
-/// Used by both the bundled backend.exe and the Python dev launcher.
-fn spawn_backend_process(
-    cmd: &mut Command,
-    app_handle: &tauri::AppHandle,
-    backend: &mut BackendState,
-) -> Result<String, String> {
-    let mut child = cmd
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|e| format!("Failed to start backend: {}", e))?;
-
-    let stdin = child.stdin.take();
-    let stdout = child.stdout.take();
-
-    let (response_tx, response_rx) = mpsc::channel::<serde_json::Value>();
-
-    if let Some(stdout) = stdout {
-        let app_handle_clone = app_handle.clone();
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    if let Ok(output) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if output["type"] == "event" {
-                            app_handle_clone.emit_all("backend-event", output["event"].clone()).ok();
-                        } else if output["type"] == "response" {
-                            response_tx.send(output["response"].clone()).ok();
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    backend.process = Some(child);
-    backend.stdin = stdin;
-    backend.response_rx = Some(response_rx);
-
-    Ok("Backend started successfully".to_string())
+/// Resolve the data directory for settings/song database.
+fn resolve_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
+    // Use Tauri's app data directory, falling back to ~/.pykaraoke
+    app_handle
+        .path_resolver()
+        .app_data_dir()
+        .unwrap_or_else(|| {
+            dirs::data_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".pykaraoke")
+        })
 }
 
-/// Start the backend process.
-///
-/// Two modes:
-///  1. Production – launches the bundled backend.exe (PyInstaller)
-///  2. Development – finds a Python interpreter and runs backend.py
+/// Start the native Rust backend.
 #[tauri::command]
-fn start_backend(state: State<SafeBackendState>, app_handle: tauri::AppHandle) -> Result<String, String> {
-    let mut backend = state.lock().unwrap();
+fn start_backend(state: State<AppBackend>, app_handle: tauri::AppHandle) -> Result<String, String> {
+    let mut backend_guard = state.backend.lock().map_err(|e| format!("Lock error: {}", e))?;
 
-    if backend.process.is_some() {
+    if backend_guard.is_some() {
         return Ok("Backend already running".to_string());
     }
 
-    let resource_dir = app_handle.path_resolver()
-        .resource_dir()
-        .unwrap_or_else(|| std::env::current_dir().unwrap());
+    let data_dir = resolve_data_dir(&app_handle);
+    let persistence = Persistence::new(Some(data_dir));
 
-    // ── 1. Try bundled backend.exe (production build with PyInstaller) ──
-    let bundled_exe = resource_dir.join("backend").join("backend.exe");
-    if bundled_exe.exists() {
-        let mut cmd = Command::new(&bundled_exe);
-        return spawn_backend_process(&mut cmd, &app_handle, &mut backend);
-    }
+    // Load existing settings (if any)
+    let mut pers = persistence.clone();
+    pers.load_settings().ok();
+    pers.load_database().ok();
 
-    // ── 2. Fall back to Python launcher (dev mode) ──────────────────────
-    //
-    //   resource_dir layout (dev):
-    //     .../pykaraoke-ng/src/runtimes/tauri/src-tauri/target/debug
-    //   Five levels up = project root: .../pykaraoke-ng/
-    //
-    //   current_dir layout (when `tauri dev` is run from src/runtimes/tauri):
-    //     .../pykaraoke-ng/src/runtimes/tauri
-    //   Three levels up = project root: .../pykaraoke-ng/
-    //
-    let candidates: Vec<PathBuf> = vec![
-        // Bundled resource — layered path
-        resource_dir.join("backend").join("pykaraoke").join("interfaces").join("backend_api.py"),
-        // Bundled resource — legacy path
-        resource_dir.join("backend").join("pykaraoke").join("core").join("backend.py"),
-        // Flat bundled resource
-        resource_dir.join("backend.py"),
-        // Development: resource_dir -> layered path (5 levels up)
-        {
-            let mut p = resource_dir.clone();
-            for _ in 0..5 { p.pop(); }
-            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
-        },
-        // Development: resource_dir -> legacy path (5 levels up)
-        {
-            let mut p = resource_dir.clone();
-            for _ in 0..5 { p.pop(); }
-            p.join("src").join("pykaraoke").join("core").join("backend.py")
-        },
-        // Development: CWD -> layered path (3 levels up)
-        {
-            let mut p = std::env::current_dir().unwrap_or_default();
-            for _ in 0..3 { p.pop(); }
-            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
-        },
-        // Development: CWD -> legacy path (3 levels up)
-        {
-            let mut p = std::env::current_dir().unwrap_or_default();
-            for _ in 0..3 { p.pop(); }
-            p.join("src").join("pykaraoke").join("core").join("backend.py")
-        },
-        // Development: CWD -> layered path (4 levels up, fallback)
-        {
-            let mut p = std::env::current_dir().unwrap_or_default();
-            for _ in 0..4 { p.pop(); }
-            p.join("src").join("pykaraoke").join("interfaces").join("backend_api.py")
-        },
-        // Development: CWD -> legacy path (4 levels up, fallback)
-        {
-            let mut p = std::env::current_dir().unwrap_or_default();
-            for _ in 0..4 { p.pop(); }
-            p.join("src").join("pykaraoke").join("core").join("backend.py")
-        },
-    ];
+    let backend = Backend::new(pers);
+    *backend_guard = Some(backend);
 
-    let backend_script = candidates.iter()
-        .find(|p| p.exists())
-        .cloned()
-        .unwrap_or_else(|| candidates[0].clone());
-
-    let python_path = backend_script
-        .parent()
-        .and_then(|p| p.parent())
-        .and_then(|p| p.parent())
-        .unwrap_or_else(|| std::path::Path::new("."))
-        .to_path_buf();
-
-    let (python_exe, python_prefix_args) = resolve_python_launcher()?;
-
-    let mut cmd = Command::new(&python_exe);
-    for arg in &python_prefix_args {
-        cmd.arg(arg);
-    }
-    cmd.arg(&backend_script)
-        .env("PYTHONPATH", &python_path);
-
-    spawn_backend_process(&mut cmd, &app_handle, &mut backend)
+    Ok("Native Rust backend started".to_string())
 }
 
-/// Send a command to the Python backend
+/// Send a command to the Rust backend engine.
 #[tauri::command]
 async fn send_command(
-    state: State<'_, SafeBackendState>,
+    state: State<'_, AppBackend>,
     action: String,
     params: Option<serde_json::Value>,
-) -> Result<CommandResponse, String> {
-    let mut backend = state.lock().unwrap();
-    
-    if backend.stdin.is_none() {
-        return Err("Backend not running".to_string());
-    }
-    
-    // Check if the child process is still alive.  If it has exited
-    // (crashed, killed, etc.) clean up the stale state immediately
-    // so the frontend can restart it.
-    if let Some(ref mut child) = backend.process {
-        match child.try_wait() {
-            Ok(Some(_status)) => {
-                backend.stdin = None;
-                backend.process = None;
-                backend.response_rx = None;
-                return Err("Backend process has exited".to_string());
-            }
-            Ok(None) => {} // still running
-            Err(_e) => {
-                backend.stdin = None;
-                backend.process = None;
-                backend.response_rx = None;
-                return Err("Backend process check failed".to_string());
-            }
-        }
-    }
-    
-    let command = CommandRequest { action, params };
-    let command_json = serde_json::to_string(&command)
-        .map_err(|e| format!("Failed to serialize command: {}", e))?;
-    
-    // Send command to backend.  If the write fails the Python process has
-    // most likely exited; tear down the backend state immediately so that
-    // every subsequent call returns "Backend not running" rather than
-    // retrying a dead pipe.
-    if let Some(ref mut stdin) = backend.stdin {
-        if let Err(e) = writeln!(stdin, "{}", command_json) {
-            backend.stdin = None;
-            backend.process = None;
-            backend.response_rx = None;
-            return Err(format!("Backend process died (send): {}", e));
-        }
-        if let Err(e) = stdin.flush() {
-            backend.stdin = None;
-            backend.process = None;
-            backend.response_rx = None;
-            return Err(format!("Backend process died (flush): {}", e));
-        }
-    }
-    
-    // Read the actual response from the Python backend via the channel.
-    if let Some(ref rx) = backend.response_rx {
-        match rx.recv_timeout(Duration::from_secs(5)) {
-            Ok(value) => {
-                serde_json::from_value::<CommandResponse>(value.clone()).map_err(|_| {
-                    format!("Failed to parse backend response: {}", value)
-                })
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // Kill the unresponsive process so the frontend's retry
-                // loop can start fresh instead of hanging forever.
-                if let Some(mut child) = backend.process.take() {
-                    child.kill().ok();
-                }
-                backend.process = None;
-                backend.stdin = None;
-                backend.response_rx = None;
-                Err("Backend did not respond within 5 seconds".to_string())
-            }
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                backend.stdin = None;
-                backend.process = None;
-                backend.response_rx = None;
-                Err("Backend process disconnected".to_string())
-            }
-        }
-    } else {
-        Err("No response channel available".to_string())
-    }
+) -> Result<CommandResponseWrapper, String> {
+    let mut backend_guard = state.backend.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+    let backend = backend_guard.as_mut().ok_or("Backend not running")?;
+
+    let request = CommandRequest {
+        action,
+        params: params.unwrap_or(serde_json::Value::Null),
+    };
+
+    let response = backend.handle_command(request);
+    Ok(response.into())
 }
 
-/// Stop the Python backend process
+/// Stop the backend (persist state before shutdown).
 #[tauri::command]
-fn stop_backend(state: State<SafeBackendState>) -> Result<String, String> {
-    let mut backend = state.lock().unwrap();
-    
-    if let Some(mut child) = backend.process.take() {
-        child.kill().map_err(|e| format!("Failed to kill backend: {}", e))?;
-        backend.stdin = None;
-        backend.response_rx = None;
+fn stop_backend(state: State<AppBackend>) -> Result<String, String> {
+    let mut backend_guard = state.backend.lock().map_err(|e| format!("Lock error: {}", e))?;
+
+    if let Some(backend) = backend_guard.take() {
+        // Persist state on shutdown
+        backend.persistence.save_settings().ok();
+        backend.persistence.save_database().ok();
         Ok("Backend stopped".to_string())
     } else {
         Err("Backend not running".to_string())
@@ -366,11 +123,9 @@ fn main() {
     }
 
     tauri::Builder::default()
-        .manage(Arc::new(Mutex::new(BackendState {
-            process: None,
-            stdin: None,
-            response_rx: None,
-        })))
+        .manage(AppBackend {
+            backend: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             start_backend,
             send_command,
@@ -383,7 +138,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     // ── CommandRequest serialization ──────────────────────────────
 
@@ -391,7 +145,7 @@ mod tests {
     fn command_request_serializes_with_action_only() {
         let req = CommandRequest {
             action: "play".to_string(),
-            params: None,
+            params: serde_json::Value::Null,
         };
         let j = serde_json::to_value(&req).unwrap();
         assert_eq!(j["action"], "play");
@@ -402,7 +156,7 @@ mod tests {
     fn command_request_serializes_with_params() {
         let req = CommandRequest {
             action: "set_volume".to_string(),
-            params: Some(json!({"volume": 0.5})),
+            params: serde_json::json!({"volume": 0.5}),
         };
         let j = serde_json::to_value(&req).unwrap();
         assert_eq!(j["action"], "set_volume");
@@ -413,12 +167,12 @@ mod tests {
     fn command_request_roundtrips_through_json() {
         let original = CommandRequest {
             action: "search_songs".to_string(),
-            params: Some(json!({"query": "hello world"})),
+            params: Some(serde_json::json!({"query": "hello world"})),
         };
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: CommandRequest = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized.action, "search_songs");
-        assert_eq!(deserialized.params.unwrap()["query"], "hello world");
+        assert_eq!(deserialized.params.as_object().unwrap()["query"], "hello world");
     }
 
     #[test]
@@ -426,7 +180,7 @@ mod tests {
         let raw = r#"{"action":"stop"}"#;
         let req: CommandRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.action, "stop");
-        assert!(req.params.is_none());
+        assert!(req.params.is_null() || req.params.as_object().map_or(true, |o| o.is_empty()));
     }
 
     #[test]
@@ -434,7 +188,7 @@ mod tests {
         let raw = r#"{"action":"play","params":{"playlist_index":3}}"#;
         let req: CommandRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.action, "play");
-        assert_eq!(req.params.unwrap()["playlist_index"], 3);
+        assert_eq!(req.params["playlist_index"], 3);
     }
 
     // ── CommandResponse serialization ────────────────────────────
@@ -469,7 +223,7 @@ mod tests {
         let resp = CommandResponse {
             status: "ok".to_string(),
             message: None,
-            data: Some(json!({
+            data: Some(serde_json::json!({
                 "playback_state": "playing",
                 "volume": 0.75,
                 "playlist": []
@@ -485,7 +239,7 @@ mod tests {
         let original = CommandResponse {
             status: "ok".to_string(),
             message: Some("Command sent".to_string()),
-            data: Some(json!({"results": [{"title": "Test"}]})),
+            data: Some(serde_json::json!({"results": [{"title": "Test"}]})),
         };
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: CommandResponse = serde_json::from_str(&serialized).unwrap();
@@ -496,44 +250,71 @@ mod tests {
     // ── BackendState management ──────────────────────────────────
 
     #[test]
-    fn backend_state_initializes_with_no_process() {
-        let state = BackendState {
-            process: None,
-            stdin: None,
-            response_rx: None,
+    fn backend_state_initializes_with_no_backend() {
+        let app = AppBackend {
+            backend: Mutex::new(None),
         };
-        assert!(state.process.is_none());
-        assert!(state.stdin.is_none());
-        assert!(state.response_rx.is_none());
+        let guard = app.backend.lock().unwrap();
+        assert!(guard.is_none());
+    }
+
+    // ── Backend integration ──────────────────────────────────────
+
+    fn test_backend() -> Backend {
+        let dir = std::env::temp_dir().join("pykaraoke_test_tauri_main");
+        let _ = std::fs::remove_dir_all(&dir);
+        let persistence = Persistence::new(Some(dir));
+        Backend::new(persistence)
     }
 
     #[test]
-    fn safe_backend_state_is_mutex_lockable() {
-        let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
-            process: None,
-            stdin: None,
-            response_rx: None,
-        }));
-        let guard = state.lock().unwrap();
-        assert!(guard.process.is_none());
+    fn backend_responds_to_get_state() {
+        let mut backend = test_backend();
+        let req = CommandRequest {
+            action: "get_state".to_string(),
+            params: serde_json::Value::Null,
+        };
+        let resp = backend.handle_command(req);
+        assert_eq!(resp.status, "ok");
+        let data = resp.data.unwrap();
+        assert_eq!(data["playback_state"], "idle");
+        assert!(data["playlist"].is_array());
     }
 
     #[test]
-    fn safe_backend_state_clone_shares_data() {
-        let state: SafeBackendState = Arc::new(Mutex::new(BackendState {
-            process: None,
-            stdin: None,
-            response_rx: None,
-        }));
-        let clone = state.clone();
-        assert!(Arc::ptr_eq(&state, &clone));
+    fn backend_handles_unknown_command() {
+        let mut backend = test_backend();
+        let req = CommandRequest {
+            action: "nonexistent_action".to_string(),
+            params: serde_json::Value::Null,
+        };
+        let resp = backend.handle_command(req);
+        assert_eq!(resp.status, "error");
+        assert!(resp.message.unwrap().contains("Unknown action"));
+    }
+
+    #[test]
+    fn backend_enqueue_and_play() {
+        let mut backend = test_backend();
+        let req = CommandRequest {
+            action: "add_to_playlist".to_string(),
+            params: serde_json::json!({"filepath": "/tmp/test.kar"}),
+        };
+        let resp = backend.handle_command(req);
+        assert_eq!(resp.status, "ok");
+
+        let req = CommandRequest {
+            action: "play".to_string(),
+            params: serde_json::Value::Null,
+        };
+        let resp = backend.handle_command(req);
+        assert_eq!(resp.status, "ok");
     }
 
     // ── JSON protocol contract tests ─────────────────────────────
 
     #[test]
     fn frontend_play_command_matches_expected_shape() {
-        // Mirrors the JSON the JS frontend sends via invoke('send_command', ...)
         let raw = r#"{"action":"play","params":{"playlist_index":0}}"#;
         let req: CommandRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.action, "play");
@@ -544,14 +325,14 @@ mod tests {
         let raw = r#"{"action":"search_songs","params":{"query":"bohemian"}}"#;
         let req: CommandRequest = serde_json::from_str(raw).unwrap();
         assert_eq!(req.action, "search_songs");
-        assert_eq!(req.params.unwrap()["query"], "bohemian");
+        assert_eq!(req.params["query"], "bohemian");
     }
 
     #[test]
     fn frontend_volume_command_matches_expected_shape() {
         let raw = r#"{"action":"set_volume","params":{"volume":0.42}}"#;
         let req: CommandRequest = serde_json::from_str(raw).unwrap();
-        let vol = req.params.unwrap()["volume"].as_f64().unwrap();
+        let vol = req.params["volume"].as_f64().unwrap();
         assert!((vol - 0.42).abs() < f64::EPSILON);
     }
 
@@ -571,33 +352,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn backend_event_envelope_shape() {
-        // The Rust backend wraps Python output in {"type":"event","event":...}
-        let raw = r#"{"type":"event","event":{"type":"state_changed","data":{}}}"#;
-        let parsed: serde_json::Value = serde_json::from_str(raw).unwrap();
-        assert_eq!(parsed["type"], "event");
-        assert_eq!(parsed["event"]["type"], "state_changed");
-    }
-
-    #[test]
-    fn backend_response_envelope_shape() {
-        let raw = r#"{"type":"response","response":{"status":"ok","message":"done"}}"#;
-        let parsed: serde_json::Value = serde_json::from_str(raw).unwrap();
-        assert_eq!(parsed["type"], "response");
-        assert_eq!(parsed["response"]["status"], "ok");
-    }
-
     // ── Regression: empty-window workaround ──────────────────────
 
     #[test]
     fn dmabuf_env_var_is_set_on_linux() {
-        // Regression test for https://github.com/wilsonify/pykaraoke-ng/issues/...
-        // WebKitGTK renders a blank window when GBM buffer creation fails.
-        // The workaround sets WEBKIT_DISABLE_DMABUF_RENDERER=1.
-        //
-        // On non-Linux this test just verifies the source contains the
-        // workaround code (the #[cfg] gate means the code won't execute).
         let source = include_str!("main.rs");
         assert!(
             source.contains("WEBKIT_DISABLE_DMABUF_RENDERER"),
@@ -620,7 +378,6 @@ mod tests {
     #[test]
     fn dmabuf_workaround_checks_existing_value() {
         let source = include_str!("main.rs");
-        // Between the cfg gate and the set_var, we should see is_err() check
         let dmabuf_pos = source.find("WEBKIT_DISABLE_DMABUF_RENDERER").unwrap();
         let region = &source[dmabuf_pos.saturating_sub(100)..dmabuf_pos + 100];
         assert!(
@@ -638,89 +395,6 @@ mod tests {
         assert!(
             dmabuf_pos < builder_pos,
             "WEBKIT_DISABLE_DMABUF_RENDERER must be set before tauri::Builder"
-        );
-    }
-
-    // ── Regression: backend path resolution ──────────────────────
-
-    #[test]
-    fn backend_path_uses_multiple_candidates() {
-        let source = include_str!("main.rs");
-        let count = source.matches(r#".join("backend.py")"#).count();
-        assert!(
-            count >= 2,
-            "start_backend should try at least 2 candidate paths for \
-             backend.py (found {count})"
-        );
-    }
-
-    #[test]
-    fn backend_path_checks_exists() {
-        let source = include_str!("main.rs");
-        // The candidates should be filtered with .exists()
-        assert!(
-            source.contains(".exists()"),
-            "start_backend should verify candidate paths with .exists()"
-        );
-    }
-
-    #[test]
-    fn backend_path_uses_resource_dir() {
-        let source = include_str!("main.rs");
-        assert!(
-            source.contains("resource_dir"),
-            "start_backend should use resource_dir() for bundled installs"
-        );
-    }
-
-    // ── Regression: backend timeout cleanup ────────────────────────
-
-    #[test]
-    fn send_command_timeout_kills_backend() {
-        let source = include_str!("main.rs");
-        // When a command times out, the backend process must be killed
-        // and cleaned up so the frontend can retry from a clean state.
-        let timeout_pos = source.find("RecvTimeoutError::Timeout").unwrap();
-        let cleanup_region = &source[timeout_pos..timeout_pos + 400];
-        assert!(
-            cleanup_region.contains("child.kill()"),
-            "Timeout handler must kill the unresponsive backend process "
-        );
-        assert!(
-            cleanup_region.contains("backend.stdin = None"),
-            "Timeout handler must clear stdin so retry can spawn fresh"
-        );
-        assert!(
-            cleanup_region.contains("backend.process = None"),
-            "Timeout handler must clear process so start_backend can restart"
-        );
-    }
-
-    #[test]
-    fn send_command_checks_process_alive() {
-        let source = include_str!("main.rs");
-        // Before sending a command we should check if the child process
-        // is still alive via try_wait().
-        assert!(
-            source.contains("try_wait()"),
-            "send_command should check if child process is still alive with try_wait()"
-        );
-    }
-
-    #[test]
-    fn send_command_cleans_up_dead_process() {
-        let source = include_str!("main.rs");
-        // When try_wait() returns that the child has exited, the backend
-        // state should be cleaned up immediately.
-        let wait_pos = source.find("try_wait()").unwrap();
-        let cleanup_region = &source[wait_pos..wait_pos + 300];
-        assert!(
-            cleanup_region.contains("backend.stdin = None"),
-            "Dead process cleanup must clear stdin"
-        );
-        assert!(
-            cleanup_region.contains("backend.process = None"),
-            "Dead process cleanup must clear process"
         );
     }
 }

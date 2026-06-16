@@ -1,9 +1,21 @@
 [workspace]
 resolver = "2"
-members = ["crates/pykaraoke-engine"]
+members = [
+    "crates/pykaraoke-engine",
+    # NOTE: The Tauri desktop app (src/runtimes/tauri/src-tauri) is intentionally
+    # NOT a workspace member.  Tauri v1's build.rs interacts with its own
+    # Cargo.toml in ways that conflict with workspace semantics.  To build
+    # the desktop app, run `cargo build` from within src/runtimes/tauri/src-tauri/
+    # or use `tauri build` from src/runtimes/tauri/.
+]
 
 [workspace.package]
 version = "0.7.5"
 edition = "2021"
 license = "LGPL-2.1-or-later"
 repository = "https://github.com/wilsonify/pykaraoke-ng"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
