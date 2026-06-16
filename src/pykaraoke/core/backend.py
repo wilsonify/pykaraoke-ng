@@ -712,13 +712,16 @@ def create_stdio_server(backend: PyKaraokeBackend, *, json_out=None):
         backend.shutdown()
 
 
-def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port: int = 8080):
-    """
-    Create an HTTP-based command server using FastAPI.
-    Exposes a REST API for controlling the backend.
+def build_http_app(backend: PyKaraokeBackend):
+    """Build the FastAPI application for the HTTP server.
+
+    Returns the ``FastAPI`` instance without starting uvicorn, so
+    tests can exercise it via ``fastapi.testclient.TestClient``.
+
+    The caller is responsible for starting the server (e.g. via
+    ``create_http_server``) or using ``TestClient`` in tests.
     """
     try:
-        import uvicorn
         from fastapi import FastAPI, HTTPException
     except ImportError as e:
         logger.error(
@@ -738,7 +741,6 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port:
     def event_callback(event: dict[str, Any]):
         """Store events for retrieval via API"""
         events_queue.append(event)
-        # Keep only last 100 events to prevent memory issues
         if len(events_queue) > 100:
             events_queue.pop(0)
 
@@ -854,11 +856,28 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port:
         """Add folder to library"""
         return backend.handle_command({"action": "add_folder", "params": {"folder": folder}})
 
+    return app
+
+
+def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port: int = 8080):
+    """
+    Create an HTTP-based command server using FastAPI.
+    Exposes a REST API for controlling the backend.
+    """
+    try:
+        import uvicorn
+    except ImportError as e:
+        logger.error(
+            "FastAPI/Uvicorn not available. Install with: pip install fastapi uvicorn"
+        )
+        raise RuntimeError("HTTP mode requires fastapi and uvicorn") from e
+
+    app = build_http_app(backend)
+
     # Graceful shutdown handling
     def handle_shutdown(signum, frame):  # noqa: ARG001
         """Handle shutdown signals"""
         logger.info("Received signal %s, shutting down gracefully...", signum)
-        # Use uvicorn's documented shutdown mechanism
         server.should_exit = True
 
     signal.signal(signal.SIGTERM, handle_shutdown)
@@ -885,7 +904,6 @@ def create_http_server(backend: PyKaraokeBackend, host: str = "127.0.0.1", port:
     logger.info("Starting HTTP server on %s:%d", host, port)
 
     try:
-        # Run server
         asyncio.run(server.serve())
     except KeyboardInterrupt:
         logger.info("Received interrupt signal")
