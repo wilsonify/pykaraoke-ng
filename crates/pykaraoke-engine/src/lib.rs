@@ -1,10 +1,3 @@
-//! PyKaraoke NG — Native Rust karaoke engine.
-//!
-//! This crate implements the core karaoke engine that was previously
-//! written in Python.  It is designed as an incremental, drop-in
-//! replacement: module by module, the Rust implementation mirrors
-//! the Python reference in `src/pykaraoke/`.
-
 pub mod filename_parser;
 pub mod song;
 pub mod discovery;
@@ -14,3 +7,13 @@ pub mod player;
 pub mod database;
 pub mod backend;
 pub mod format;
+
+pub mod views;
+pub mod engine;
+pub mod event_bus;
+pub mod engine_impl;
+
+pub use engine::{Engine, EngineError, EngineStatus};
+pub use event_bus::EventBus;
+pub use engine_impl::EngineImpl;
+pub use views::*;

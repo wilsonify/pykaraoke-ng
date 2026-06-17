@@ -1,11 +1,7 @@
-// PyKaraoke NG – Tauri Frontend
-// Talks to Rust commands via Tauri invoke().
-
-// Keep a defensive fallback for environments where Tauri globals are absent.
 let invoke = async function(command, payload) {
     return { command: command, payload: payload || {} };
 };
-let listen = async function() {
+let listenEvent = async function() {
     return function() {};
 };
 let dialogOpen = async function() {
@@ -17,13 +13,12 @@ try {
         invoke = globalThis.__TAURI__.tauri.invoke;
     }
     if (globalThis.__TAURI__?.event?.listen) {
-        listen = globalThis.__TAURI__.event.listen;
+        listenEvent = globalThis.__TAURI__.event.listen;
     }
     if (globalThis.__TAURI__?.dialog?.open) {
         dialogOpen = globalThis.__TAURI__.dialog.open;
     }
 } catch (err) {
-    // Browser mode: keep fallback functions.
     console.warn('Tauri API not available, using fallback mode:', err);
     dialogOpen = async function() { return null; };
 }
@@ -31,18 +26,16 @@ try {
 class PyKaraokeApp {
     constructor() {
         this.searchResults = [];
-        this.lastBackendCheckAt = 0;
         this.backendStartRetries = 0;
         this.maxBackendRetries = 3;
+        this._unlisteners = [];
     }
 
     async init() {
-        this.setupEventListeners();
-        await this.ensureBackendStarted();
-        this.startStatePolling();
+        this.setupUIEventListeners();
+        await this.ensureEngineStarted();
+        this.setupEngineEventListeners();
     }
-
-    // ── Backend communication ────────────────────────────────────────────
 
     errorMessage(err) {
         if (!err) return 'Unknown error';
@@ -56,148 +49,129 @@ class PyKaraokeApp {
         }
     }
 
-    async sendCommand(action, params) {
-        if (!globalThis.__TAURI__?.tauri?.invoke) {
-            throw new Error('Tauri bridge unavailable');
-        }
+    // ── Engine lifecycle ───────────────────────────────────────────────
 
-        return invoke('send_command', {
-            action: action,
-            params: params || {},
-        });
-    }
-
-    async ensureBackendStarted() {
+    async ensureEngineStarted() {
         try {
-            this.updateStatus('Starting backend...');
-            await invoke('start_backend');
+            this.updateStatus('Starting engine...');
+            await invoke('engine_start');
 
-            // Validate round-trip so we know command pipe is alive.
-            const r = await this.sendCommand('get_state');
-            if (r?.status !== 'ok') {
-                const msg = (r?.message) ? r.message : 'Unknown backend error';
-                throw new Error(msg);
-            }
+            var status = await invoke('engine_status');
+            var running = status === '"running"' || status === 'running';
 
-            this.backendRunning = true;
+            this.engineRunning = running;
             this.backendStartRetries = 0;
-            this.updateBackendStatus(true);
-            this.updateStatus('Backend connected');
+            this.updateBackendStatus(running);
+            this.updateStatus('Engine connected');
         } catch (e) {
-            console.error('Backend startup failed:', e);
+            console.error('Engine startup failed:', e);
             this.backendStartRetries++;
             if (this.backendStartRetries >= this.maxBackendRetries) {
                 this.updateStatus(
-                    'Backend failed after ' + this.maxBackendRetries + ' attempts. '
+                    'Engine failed after ' + this.maxBackendRetries + ' attempts. '
                     + 'Please check your installation and restart the application.'
                 );
-                this.backendRunning = false;
+                this.engineRunning = false;
                 this.updateBackendStatus(false);
                 return;
             }
-            this.updateStatus('Backend startup failed (' + this.backendStartRetries
+            this.updateStatus('Engine startup failed (' + this.backendStartRetries
                 + '/' + this.maxBackendRetries + '): ' + this.errorMessage(e));
-            this.backendRunning = false;
+            this.engineRunning = false;
             this.updateBackendStatus(false);
         }
     }
 
-    startStatePolling() {
-        setInterval(async () => {
-            if (!this.backendRunning) {
-                if (this.backendStartRetries >= this.maxBackendRetries) {
-                    return; // stop retrying after max attempts
-                }
-                const now = Date.now();
-                if (now - this.lastBackendCheckAt > 3000) {
-                    this.lastBackendCheckAt = now;
-                    await this.ensureBackendStarted();
-                }
-                return;
-            }
+    // ── Engine event listeners (event-driven, no polling) ──────────────
 
-            try {
-                let r = await this.sendCommand('get_state');
-                if (r.status === 'ok' && r.data) {
-                    this.updateUIFromState(r.data);
-                } else if (r.status !== 'ok') {
-                    this.backendRunning = false;
-                    this.updateBackendStatus(false);
-                }
-            } catch (e) {
-                console.error('State polling error:', e);
-                this.backendRunning = false;
-                this.updateBackendStatus(false);
-            }
-        }, 1000);
+    setupEngineEventListeners() {
+        var self = this;
+
+        listenEvent('engine:playback_changed', function(event) {
+            self.updateUIFromState(event.payload);
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:queue_changed', function(event) {
+            self.renderPlaylist(event.payload);
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:error', function(event) {
+            self.updateStatus('Error: ' + event.payload.message);
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:playback_changed', function(event) {
+            var s = event.payload;
+            var playing = s && s.status === 'playing';
+            document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
+            document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
     }
 
-    // ── Event listeners ──────────────────────────────────────────────────
+    destroy() {
+        this._unlisteners.forEach(function(fn) { fn(); });
+        this._unlisteners = [];
+    }
 
-    setupEventListeners() {
+    // ── UI Event listeners ─────────────────────────────────────────────
+
+    setupUIEventListeners() {
         function $(id) { return document.getElementById(id); }
         var self = this;
 
-        $('play-btn').addEventListener('click', async () => {
+        $('play-btn').addEventListener('click', async function() {
             try {
-                let r = await this.sendCommand('play');
-                if (r.status !== 'ok') this.updateStatus(r.message || 'Play failed');
-            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+                await invoke('playback_play', {});
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
-        $('pause-btn').addEventListener('click', async () => {
+        $('pause-btn').addEventListener('click', async function() {
             try {
-                let r = await this.sendCommand('pause');
-                if (r.status !== 'ok') this.updateStatus(r.message || 'Pause failed');
-            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+                await invoke('playback_pause', {});
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
-        $('stop-btn').addEventListener('click', async () => {
+        $('stop-btn').addEventListener('click', async function() {
             try {
-                let r = await this.sendCommand('stop');
-                if (r.status !== 'ok') this.updateStatus(r.message || 'Stop failed');
-            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+                await invoke('playback_stop', {});
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
-        $('next-btn').addEventListener('click', async () => {
+        $('next-btn').addEventListener('click', async function() {
             try {
-                let r = await this.sendCommand('next');
-                if (r.status !== 'ok') this.updateStatus(r.message || 'Next failed');
-            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+                await invoke('playback_next', {});
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
-        $('prev-btn').addEventListener('click', async () => {
+        $('prev-btn').addEventListener('click', async function() {
             try {
-                let r = await this.sendCommand('previous');
-                if (r.status !== 'ok') this.updateStatus(r.message || 'Previous failed');
-            } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+                await invoke('playback_previous', {});
+            } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
 
         // Fast-forward / Rewind: single-click step + hold for continuous seeking
-        this._setupSeekButton('ff-btn', 'fast_forward', 10);
-        this._setupSeekButton('rewind-btn', 'rewind', 10);
+        this._setupSeekButton('ff-btn', 10);
+        this._setupSeekButton('rewind-btn', -10);
 
         $('volume-slider').addEventListener('input', function(e) {
-            let v = Number.parseInt(e.target.value);
+            var v = Number.parseInt(e.target.value);
             $('volume-value').textContent = v + '%';
-            self.sendCommand('set_volume', { volume: v / 100 }).catch(function(err) {
+            invoke('playback_set_volume', { volume: v / 100 }).catch(function(err) {
                 console.warn('Volume update failed:', err);
             });
         });
 
         $('progress-slider').addEventListener('input', function(e) {
-            let s = self.currentState;
-            if (s && s.duration_ms > 0) {
-                let pct = Number.parseInt(e.target.value) / 10;
-                let pos_ms = Math.round((pct / 100) * s.duration_ms);
+            var s = self.currentState;
+            if (s && s.durationMs > 0) {
+                var pct = Number.parseInt(e.target.value) / 10;
+                var pos_ms = Math.round((pct / 100) * s.durationMs);
                 document.getElementById('time-current').textContent = self.fmtTime(pos_ms);
             }
         });
 
         $('progress-slider').addEventListener('change', async function(e) {
-            let s = self.currentState;
-            if (s && s.duration_ms > 0) {
-                let pct = Number.parseInt(e.target.value) / 10;
-                let pos_ms = Math.round((pct / 100) * s.duration_ms);
+            var s = self.currentState;
+            if (s && s.durationMs > 0) {
+                var pct = Number.parseInt(e.target.value) / 10;
+                var pos_ms = Math.round((pct / 100) * s.durationMs);
                 try {
-                    let r = await self.sendCommand('seek', { position_ms: pos_ms });
-                    if (r && r.status !== 'ok') self.updateStatus(r.message || 'Seek failed');
+                    await invoke('playback_seek', { position_ms: pos_ms });
                 } catch (ex) {
                     self.updateStatus('Seek error: ' + self.errorMessage(ex));
                 }
@@ -239,9 +213,9 @@ class PyKaraokeApp {
         if ($('settings-cancel-btn')) $('settings-cancel-btn').addEventListener('click', closeSettings);
         if ($('settings-save-btn'))   $('settings-save-btn').addEventListener('click', function() { self.handleSaveSettings(); });
 
-        $('clear-playlist-btn').addEventListener('click', function() { self.sendCommand('clear_playlist'); });
+        $('clear-playlist-btn').addEventListener('click', function() { self.handleClearPlaylist(); });
 
-        // ── Queue drop-target: accept songs dragged from search results ──
+        // ── Queue drop-target ──
         var playlist = $('playlist');
         playlist.addEventListener('dragover', function(e) {
             e.preventDefault();
@@ -271,7 +245,7 @@ class PyKaraokeApp {
         });
     }
 
-    // ── Command handlers ─────────────────────────────────────────────────
+    // ── Command handlers ───────────────────────────────────────────────
 
     async handleSearch() {
         var query = document.getElementById('search-input').value;
@@ -283,12 +257,10 @@ class PyKaraokeApp {
         }
         this.updateStatus('Searching…');
         try {
-            var r = await this.sendCommand('search_songs', { query: query });
-            if (r.status === 'ok' && r.data) {
-                this.searchResults = r.data.results || [];
-                this.renderSearchResults();
-                this.updateStatus('Found ' + this.searchResults.length + ' results');
-            }
+            var result = await invoke('search', { query: query });
+            this.searchResults = result.results || [];
+            this.renderSearchResults();
+            this.updateStatus('Found ' + this.searchResults.length + ' results');
         } catch (_) {
             this.updateStatus('Search failed');
         }
@@ -320,7 +292,7 @@ class PyKaraokeApp {
         }
         this.updateStatus('Adding folder: ' + folder);
         try {
-            await this.sendCommand('add_folder', { folder: folder });
+            await invoke('library_add_folder', { path: folder });
             this.updateStatus('Folder added: ' + folder);
         } catch (e) {
             this.updateStatus('Error: ' + this.errorMessage(e));
@@ -330,32 +302,27 @@ class PyKaraokeApp {
     async handleScanLibrary() {
         this.updateStatus('Scanning library…');
         try {
-            var r = await this.sendCommand('scan_library');
-            if (r.status === 'ok') {
-                var count = (r.data && r.data.song_count) || 0;
-                this.updateStatus('Scan complete – ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
-            } else {
-                this.updateStatus('Scan finished: ' + (r.message || 'no songs found'));
-            }
+            var result = await invoke('library_scan', {});
+            var count = (result && result.songsFound) || 0;
+            this.updateStatus('Scan complete – ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
+        } catch (e) {
+            this.updateStatus('Scan failed: ' + this.errorMessage(e));
         }
-        catch (e) { this.updateStatus('Scan failed: ' + this.errorMessage(e)); }
     }
 
     async handleShowSettings() {
         var modal = document.getElementById('settings-modal');
         if (!modal) return;
         try {
-            var r = await this.sendCommand('get_settings');
-            if (r.status === 'ok' && r.data) {
+            var result = await invoke('settings_get', {});
+            if (result) {
                 var fs = document.getElementById('setting-fullscreen');
-                var zm = document.getElementById('setting-zoom');
-                if (fs) fs.checked = r.data.fullscreen || false;
-                if (zm) zm.value = r.data.zoom_mode || 'soft';
+                if (fs) fs.checked = result.display && result.display.fullscreen || false;
             } else {
-                this.updateStatus('Could not load settings: ' + (r.message || 'Unknown error'));
+                this.updateStatus('Could not load settings');
             }
         } catch (_) {
-            this.updateStatus('Could not load settings (backend unavailable)');
+            this.updateStatus('Could not load settings (engine unavailable)');
         }
         modal.style.display = 'flex';
     }
@@ -366,48 +333,63 @@ class PyKaraokeApp {
     }
 
     async handleSaveSettings() {
-        var params = {
-            fullscreen: document.getElementById('setting-fullscreen') ? document.getElementById('setting-fullscreen').checked : false,
-            zoom_mode: document.getElementById('setting-zoom') ? document.getElementById('setting-zoom').value : 'soft',
+        var delta = {
+            fullscreen: document.getElementById('setting-fullscreen') ? document.getElementById('setting-fullscreen').checked : null,
         };
+        // Remove null values
+        var clean = {};
+        for (var key in delta) {
+            if (delta[key] !== null) clean[key] = delta[key];
+        }
         try {
-            await this.sendCommand('update_settings', params);
+            await invoke('settings_update', { delta: clean });
             this.updateStatus('Settings saved');
             this.handleCloseSettings();
-        } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
+        } catch (e) {
+            this.updateStatus('Error: ' + this.errorMessage(e));
+        }
     }
 
-    // ── UI updates ───────────────────────────────────────────────────────
+    async handleClearPlaylist() {
+        try {
+            await invoke('queue_clear', {});
+            this.updateStatus('Playlist cleared');
+        } catch (e) {
+            this.updateStatus('Error: ' + this.errorMessage(e));
+        }
+    }
+
+    // ── UI updates ─────────────────────────────────────────────────────
 
     updateUIFromState(s) {
+        if (!s) return;
         this.currentState = s;
 
         var title = 'No song loaded';
         var artist = '';
-        if (s.current_song) {
-            title = s.current_song.title || s.current_song.filename || 'Unknown';
-            artist = s.current_song.artist || '';
+        if (s.currentSong) {
+            title = s.currentSong.title || s.currentSong.filename || 'Unknown';
+            artist = s.currentSong.artist || '';
         }
         document.getElementById('current-song-title').textContent = title;
         document.getElementById('current-song-artist').textContent = artist;
 
-        var playing = s.playback_state === 'playing';
+        var playing = s.status === 'playing';
         document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
         document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
 
-        if (s.duration_ms > 0 && typeof s.position_ms === 'number') {
-            var pct = Math.min(1000, Math.max(0, (s.position_ms / s.duration_ms) * 1000));
+        if (s.durationMs > 0 && typeof s.positionMs === 'number') {
+            var pct = Math.min(1000, Math.max(0, (s.positionMs / s.durationMs) * 1000));
             document.getElementById('progress-slider').value = Math.round(pct);
-            document.getElementById('time-current').textContent = this.fmtTime(s.position_ms);
-            document.getElementById('time-total').textContent = this.fmtTime(s.duration_ms);
+            document.getElementById('time-current').textContent = this.fmtTime(s.positionMs);
+            document.getElementById('time-total').textContent = this.fmtTime(s.durationMs);
         }
-
-        if (s.playlist) this.renderPlaylist(s.playlist);
     }
 
-    renderPlaylist(list) {
+    renderPlaylist(view) {
         var el = document.getElementById('playlist');
         var self = this;
+        var list = view && view.songs ? view.songs : [];
         if (!list || !list.length) {
             el.innerHTML = '<div class="no-results">Playlist is empty</div>';
             return;
@@ -415,7 +397,7 @@ class PyKaraokeApp {
         var html = '';
         for (var i = 0; i < list.length; i++) {
             var s = list[i];
-            var cls = (self.currentState && self.currentState.playlist_index === i) ? ' active' : '';
+            var cls = (self.currentState && view.currentIndex === i) ? ' active' : '';
             html += '<div class="song-item' + cls + '" data-index="' + i + '">'
                   + '<div class="song-item-info">'
                   + '<div class="song-item-title">' + (s.title || s.filename) + '</div>'
@@ -429,15 +411,36 @@ class PyKaraokeApp {
         el.querySelectorAll('.song-item').forEach(function(item) {
             item.addEventListener('click', function(e) {
                 if (e.target.classList.contains('song-item-remove')) return;
-                self.sendCommand('play', { playlist_index: parseInt(item.dataset.index) });
+                var idx = parseInt(item.dataset.index);
+                // Find the song ID from the current queue view
+                var currentView = self.currentState; // no, the event payload has the songs
+                self.playFromQueue(idx);
             });
         });
         el.querySelectorAll('.song-item-remove').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                self.sendCommand('remove_from_playlist', { index: parseInt(btn.dataset.i) });
+                var idx = parseInt(btn.dataset.i);
+                invoke('queue_remove', { index: idx }).catch(function(err) {
+                    self.updateStatus('Error: ' + self.errorMessage(err));
+                });
             });
         });
+    }
+
+    async playFromQueue(index) {
+        try {
+            await invoke('queue_list', {});
+            var queueResult = await invoke('queue_list', {});
+            if (queueResult && queueResult.songs && queueResult.songs[index]) {
+                var song = queueResult.songs[index];
+                // For now, use playback_play with index-based approach
+                // The engine will handle queue index selection
+                await invoke('playback_play', {});
+            }
+        } catch (e) {
+            this.updateStatus('Error: ' + this.errorMessage(e));
+        }
     }
 
     renderSearchResults() {
@@ -500,11 +503,6 @@ class PyKaraokeApp {
         });
     }
 
-    /**
-     * Central enqueue function used by click, double-click, drag-drop,
-     * and keyboard handlers.  All paths converge here so logging and
-     * error handling are consistent.
-     */
     async enqueueSong(song) {
         if (!song || !song.filepath) {
             console.error('[PyKaraoke] enqueueSong: missing song or filepath');
@@ -513,21 +511,15 @@ class PyKaraokeApp {
         }
         console.debug('[PyKaraoke] enqueueSong:', song.filepath);
         try {
-            var r = await this.sendCommand('add_to_playlist', { filepath: song.filepath });
-            if (r && r.status === 'ok') {
-                this.updateStatus('Added "' + (song.title || song.filename) + '" to queue');
-            } else {
-                var msg = (r && r.message) || 'Unknown error';
-                console.error('[PyKaraoke] enqueue error:', msg);
-                this.updateStatus('Failed to enqueue: ' + msg);
-            }
+            var result = await invoke('queue_enqueue', { filepath: song.filepath });
+            this.updateStatus('Added "' + (song.title || song.filename) + '" to queue');
         } catch (e) {
             console.error('[PyKaraoke] enqueue exception:', e);
             this.updateStatus('Failed to enqueue: ' + this.errorMessage(e));
         }
     }
 
-    _setupSeekButton(btnId, action, stepSeconds) {
+    _setupSeekButton(btnId, stepSeconds) {
         var btn = document.getElementById(btnId);
         if (!btn) return;
         var self = this;
@@ -538,10 +530,15 @@ class PyKaraokeApp {
         }
 
         function doSeek() {
-            self.sendCommand(action, { amount_seconds: stepSeconds }).catch(function(e) {
-                self.updateStatus('Error: ' + self.errorMessage(e));
-                stopSeek();
-            });
+            var s = self.currentState;
+            if (s && s.durationMs > 0 && typeof s.positionMs === 'number') {
+                var newPos = s.positionMs + (stepSeconds * 1000);
+                newPos = Math.max(0, Math.min(newPos, s.durationMs));
+                invoke('playback_seek', { position_ms: newPos }).catch(function(e) {
+                    self.updateStatus('Error: ' + self.errorMessage(e));
+                    stopSeek();
+                });
+            }
         }
 
         btn.addEventListener('mousedown', function() {
@@ -553,7 +550,6 @@ class PyKaraokeApp {
         btn.addEventListener('mouseup', stopSeek);
         btn.addEventListener('mouseleave', stopSeek);
         btn.addEventListener('click', function(e) {
-            // Click is handled by mousedown; prevent double-fire
             e.preventDefault();
         });
     }
@@ -564,7 +560,7 @@ class PyKaraokeApp {
 
     updateBackendStatus(ok) {
         var el = document.getElementById('backend-status');
-        el.textContent = ok ? 'Backend: Connected' : 'Backend: Disconnected';
+        el.textContent = ok ? 'Engine: Connected' : 'Engine: Disconnected';
         el.className = ok ? 'connected' : 'disconnected';
     }
 
@@ -573,7 +569,7 @@ class PyKaraokeApp {
         var secs = s % 60;
         return Math.floor(s / 60) + ':' + (secs < 10 ? '0' : '') + secs;
     }
-    backendRunning = false;
+    engineRunning = false;
     currentState = null;
 }
 

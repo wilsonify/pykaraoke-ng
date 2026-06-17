@@ -1,0 +1,19 @@
+pub mod song_view;
+pub mod playback_view;
+pub mod queue_view;
+pub mod search_view;
+pub mod settings_view;
+pub mod library_view;
+pub mod cdg_frame_view;
+pub mod lyrics_view;
+pub mod error_view;
+
+pub use song_view::*;
+pub use playback_view::*;
+pub use queue_view::*;
+pub use search_view::*;
+pub use settings_view::*;
+pub use library_view::*;
+pub use cdg_frame_view::*;
+pub use lyrics_view::*;
+pub use error_view::*;
