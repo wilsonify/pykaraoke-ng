@@ -284,6 +284,12 @@ describe("Command shapes sent to Rust engine", () => {
     const volume = parseInt(sliderValue) / 100;
     assert.equal(volume, 0.75);
   });
+
+  it("engine_tick command has no parameters", () => {
+    const cmd = { cmd: "engine_tick", args: {} };
+    assert.equal(cmd.cmd, "engine_tick");
+    assert.equal(Object.keys(cmd.args).length, 0);
+  });
 });
 
 describe("UI state management", () => {
@@ -1095,11 +1101,18 @@ describe("New architecture: typed commands", () => {
     );
   });
 
-  it("does NOT use 1-second polling (setInterval for get_state)", () => {
-    const hasPolling = appJsSource.includes("setInterval");
+  it("uses setInterval only for engine_tick (not for state polling)", () => {
+    const tickUsesSetInterval = appJsSource.includes("setInterval(function() {") &&
+      appJsSource.includes("engine_tick");
     assert.ok(
-      !hasPolling,
-      "app.js must not use setInterval polling for state updates" +
+      tickUsesSetInterval,
+      "app.js must use setInterval with engine_tick for decoder advancement"
+    );
+    // Ensure old get_state polling is not used
+    const getStatePolling = appJsSource.includes("get_state");
+    assert.ok(
+      !getStatePolling,
+      "app.js must not poll get_state for state updates" +
         " (replaced by event-driven updates)"
     );
   });

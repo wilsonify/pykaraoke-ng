@@ -33,6 +33,14 @@ pub fn engine_status(state: State<'_, AppEngine>) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn engine_tick(state: State<'_, AppEngine>) -> Result<(), String> {
+    let mut guard = state.engine.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let engine = guard.as_mut().ok_or("Engine not started")?;
+    engine.tick();
+    Ok(())
+}
+
+#[tauri::command]
 pub fn playback_play(
     state: State<'_, AppEngine>,
     song_id: Option<u64>,

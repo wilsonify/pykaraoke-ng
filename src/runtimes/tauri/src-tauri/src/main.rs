@@ -221,6 +221,7 @@ fn main() {
             commands::engine_start,
             commands::engine_stop,
             commands::engine_status,
+            commands::engine_tick,
             commands::playback_play,
             commands::playback_pause,
             commands::playback_stop,

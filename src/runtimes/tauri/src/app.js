@@ -104,7 +104,25 @@ class PyKaraokeApp {
             var playing = s && s.status === 'playing';
             document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
             document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
+            self._updateTickInterval(s);
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+    }
+
+    // ── Playback tick (drives Rust decoders) ───────────────────────────
+
+    _updateTickInterval(s) {
+        var playing = s && s.status === 'playing';
+        if (playing && !this._tickTimer) {
+            var self = this;
+            this._tickTimer = setInterval(function() {
+                invoke('engine_tick', {}).catch(function(err) {
+                    console.warn('Tick failed:', err);
+                });
+            }, 33); // ~30 fps
+        } else if (!playing && this._tickTimer) {
+            clearInterval(this._tickTimer);
+            this._tickTimer = null;
+        }
     }
 
     destroy() {

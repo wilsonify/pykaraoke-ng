@@ -67,6 +67,7 @@ pub trait Engine: Send {
     fn next(&mut self) -> Result<PlaybackState, EngineError>;
     fn previous(&mut self) -> Result<PlaybackState, EngineError>;
     fn seek(&mut self, position_ms: u64) -> Result<PlaybackState, EngineError>;
+    fn tick(&mut self);
     fn set_volume(&mut self, volume: f64) -> Result<PlaybackState, EngineError>;
 
     fn enqueue(&mut self, filepath: &str) -> Result<QueueView, EngineError>;

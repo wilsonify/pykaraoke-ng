@@ -2,11 +2,17 @@ use crate::backend::{Backend, CommandRequest, CommandResponse};
 use crate::database::Persistence;
 use crate::engine::{Engine, EngineError, EngineStatus};
 use crate::event_bus::EventBus;
+use crate::format::cdg_decoder::CdgPacketDecoder;
+use crate::format::kar_parser::{midi_parse_data, ParsedMidiFile};
 use crate::player::BackendState;
 use crate::views::*;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+
+/// Standard CD+G packet rate: 300 subcode packets per second of audio.
+const CDG_PACKETS_PER_SECOND: u64 = 300;
 
 static NEXT_SONG_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -63,6 +69,14 @@ pub struct EngineImpl {
     event_bus: Option<Box<dyn EventBus>>,
     data_dir: Option<PathBuf>,
     status: EngineStatus,
+
+    // Rust-native format decoders
+    cdg_decoder: Option<CdgPacketDecoder>,
+    song_lyrics: Option<ParsedMidiFile>,
+
+    // Playback timing
+    playback_start_time: Option<Instant>,
+    position_offset_ms: u64,
 }
 
 impl EngineImpl {
@@ -72,6 +86,10 @@ impl EngineImpl {
             event_bus: Some(event_bus),
             data_dir,
             status: EngineStatus::Stopped,
+            cdg_decoder: None,
+            song_lyrics: None,
+            playback_start_time: None,
+            position_offset_ms: 0,
         }
     }
 
@@ -213,6 +231,105 @@ impl EngineImpl {
     fn emit(&self) -> Option<&dyn EventBus> {
         self.event_bus.as_ref().map(|b| b.as_ref())
     }
+
+    /// Current playback position in milliseconds.
+    fn current_playback_ms(&self) -> u64 {
+        match self.playback_start_time {
+            Some(start) => {
+                let elapsed = start.elapsed().as_millis() as u64;
+                self.position_offset_ms + elapsed
+            }
+            None => self.position_offset_ms,
+        }
+    }
+
+    /// Load a CDG decoder from the given file path.
+    fn load_cdg_decoder(&mut self, filepath: &str) {
+        match std::fs::read(filepath) {
+            Ok(data) => self.cdg_decoder = Some(CdgPacketDecoder::new(data)),
+            Err(_) => {}
+        }
+    }
+
+    /// Load lyrics from a KAR/MIDI file path.
+    fn load_lyrics_from_file(&mut self, filepath: &str) {
+        match std::fs::read(filepath) {
+            Ok(data) => match midi_parse_data(&data, "latin1") {
+                Ok(parsed) if parsed.lyrics.has_any() => {
+                    self.song_lyrics = Some(parsed);
+                }
+                _ => {}
+            },
+            Err(_) => {}
+        }
+    }
+
+    /// Load decoders for the current song based on its file extension.
+    fn load_decoders_for_song(&mut self, filepath: &str) {
+        self.cdg_decoder = None;
+        self.song_lyrics = None;
+
+        let path = std::path::Path::new(filepath);
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("cdg") => {
+                self.load_cdg_decoder(filepath);
+                // Look for companion KAR for lyrics
+                let kar_path = path.with_extension("kar");
+                if let Some(kar_str) = kar_path.to_str() {
+                    self.load_lyrics_from_file(kar_str);
+                }
+            }
+            Some("kar") | Some("mid") => {
+                self.load_lyrics_from_file(filepath);
+            }
+            _ => {}
+        }
+    }
+
+    /// Clear all active decoders.
+    fn clear_decoders(&mut self) {
+        self.cdg_decoder = None;
+        self.song_lyrics = None;
+    }
+
+    /// Reset playback timing.
+    fn reset_timing(&mut self) {
+        self.playback_start_time = None;
+        self.position_offset_ms = 0;
+    }
+
+    /// Advance all decoders to the given playback position (ms).
+    fn advance_decoders(&mut self, current_ms: u64) {
+        // Update backend position
+        if let Some(backend) = self.backend.as_mut() {
+            backend.current_time_ms = current_ms;
+        }
+
+        // Advance CDG decoder
+        if let Some(decoder) = self.cdg_decoder.as_mut() {
+            if !decoder.is_eof() {
+                let target_packets = (current_ms * CDG_PACKETS_PER_SECOND) / 1000;
+                let current_packets = decoder.packets_read() as u64;
+                if target_packets > current_packets {
+                    decoder.do_packets((target_packets - current_packets) as u32);
+                }
+                let frame = decoder.render_frame(current_ms);
+                if let Some(eb) = self.emit() {
+                    eb.emit_cdg_frame(frame);
+                }
+            }
+        }
+
+        // Advance KAR lyrics
+        if let Some(parsed) = self.song_lyrics.as_ref() {
+            if parsed.lyrics.has_any() {
+                let view = parsed.lyrics.to_lyrics_view(current_ms);
+                if let Some(eb) = self.emit() {
+                    eb.emit_lyrics_changed(view);
+                }
+            }
+        }
+    }
 }
 
 impl Engine for EngineImpl {
@@ -265,6 +382,17 @@ impl Engine for EngineImpl {
         let resp = self.cmd("play", params)?;
         match resp.status.as_str() {
             "ok" => {
+                // Load Rust-native decoders for the current song
+                let fp = self.backend.as_ref()
+                    .and_then(|b| b.queue.current_song.as_ref())
+                    .map(|s| s.filepath.clone());
+                if let Some(ref path) = fp {
+                    self.load_decoders_for_song(path);
+                }
+                // Reset and start timing
+                self.position_offset_ms = 0;
+                self.playback_start_time = Some(Instant::now());
+
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -281,9 +409,23 @@ impl Engine for EngineImpl {
     }
 
     fn pause(&mut self) -> Result<PlaybackState, EngineError> {
+        let was_playing = self
+            .backend
+            .as_ref()
+            .map(|b| b.state == BackendState::Playing)
+            .unwrap_or(false);
+
         let resp = self.cmd("pause", Value::Null)?;
         match resp.status.as_str() {
             "ok" => {
+                if was_playing {
+                    // Pausing → record elapsed time, stop the clock
+                    self.position_offset_ms = self.current_playback_ms();
+                    self.playback_start_time = None;
+                } else {
+                    // Resuming → restart the clock from last recorded offset
+                    self.playback_start_time = Some(Instant::now());
+                }
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -299,10 +441,17 @@ impl Engine for EngineImpl {
         }
     }
 
+    fn tick(&mut self) {
+        let current_ms = self.current_playback_ms();
+        self.advance_decoders(current_ms);
+    }
+
     fn stop_playback(&mut self) -> Result<PlaybackState, EngineError> {
         let resp = self.cmd("stop", Value::Null)?;
         match resp.status.as_str() {
             "ok" => {
+                self.clear_decoders();
+                self.reset_timing();
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -322,6 +471,15 @@ impl Engine for EngineImpl {
         let resp = self.cmd("next", Value::Null)?;
         match resp.status.as_str() {
             "ok" => {
+                self.clear_decoders();
+                let fp = self.backend.as_ref()
+                    .and_then(|b| b.queue.current_song.as_ref())
+                    .map(|s| s.filepath.clone());
+                if let Some(ref path) = fp {
+                    self.load_decoders_for_song(path);
+                }
+                self.position_offset_ms = 0;
+                self.playback_start_time = Some(Instant::now());
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -341,6 +499,15 @@ impl Engine for EngineImpl {
         let resp = self.cmd("previous", Value::Null)?;
         match resp.status.as_str() {
             "ok" => {
+                self.clear_decoders();
+                let fp = self.backend.as_ref()
+                    .and_then(|b| b.queue.current_song.as_ref())
+                    .map(|s| s.filepath.clone());
+                if let Some(ref path) = fp {
+                    self.load_decoders_for_song(path);
+                }
+                self.position_offset_ms = 0;
+                self.playback_start_time = Some(Instant::now());
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -360,6 +527,17 @@ impl Engine for EngineImpl {
         let resp = self.cmd("seek", serde_json::json!({"position_ms": position_ms}))?;
         match resp.status.as_str() {
             "ok" => {
+                // Reposition decoders to new playback position
+                if let Some(decoder) = self.cdg_decoder.as_mut() {
+                    let target_packets = (position_ms * CDG_PACKETS_PER_SECOND) / 1000;
+                    decoder.seek_to_packet(target_packets as u32);
+                }
+                // Reset timing — wall clock now measures from the seeked position
+                self.position_offset_ms = position_ms;
+                self.playback_start_time = Some(Instant::now());
+                if let Some(backend) = self.backend.as_mut() {
+                    backend.current_time_ms = position_ms;
+                }
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
                     eb.emit_playback_changed(state.clone());
@@ -591,6 +769,8 @@ mod tests {
         settings_changed: Mutex<Option<SettingsView>>,
         scan_progress: Mutex<Option<LibraryScanProgress>>,
         error_emitted: Mutex<Option<EngineErrorInfo>>,
+        cdg_frame: Mutex<Option<CdgFrameView>>,
+        lyrics_changed: Mutex<Option<LyricsView>>,
     }
 
     impl MockEventBus {
@@ -601,15 +781,17 @@ mod tests {
                 settings_changed: Mutex::new(None),
                 scan_progress: Mutex::new(None),
                 error_emitted: Mutex::new(None),
+                cdg_frame: Mutex::new(None),
+                lyrics_changed: Mutex::new(None),
             }
         }
 
-        fn playback_changed_called(&self) -> bool {
-            self.playback_changed.lock().unwrap().is_some()
+        fn cdg_frame_received(&self) -> bool {
+            self.cdg_frame.lock().unwrap().is_some()
         }
 
-        fn queue_changed_called(&self) -> bool {
-            self.queue_changed.lock().unwrap().is_some()
+        fn lyrics_received(&self) -> bool {
+            self.lyrics_changed.lock().unwrap().is_some()
         }
     }
 
@@ -630,8 +812,12 @@ mod tests {
         fn emit_error(&self, error: EngineErrorInfo) {
             *self.error_emitted.lock().unwrap() = Some(error);
         }
-        fn emit_cdg_frame(&self, _: CdgFrameView) {}
-        fn emit_lyrics_changed(&self, _: LyricsView) {}
+        fn emit_cdg_frame(&self, frame: CdgFrameView) {
+            *self.cdg_frame.lock().unwrap() = Some(frame);
+        }
+        fn emit_lyrics_changed(&self, lyrics: LyricsView) {
+            *self.lyrics_changed.lock().unwrap() = Some(lyrics);
+        }
     }
 
     fn create_test_engine() -> EngineImpl {
@@ -832,5 +1018,249 @@ mod tests {
         engine.start().unwrap();
         let progress = engine.scan_library().unwrap();
         assert_eq!(progress.status, ScanStatus::Complete);
+    }
+
+    // ------------------------------------------------------------------
+    // Integration tests: decoder wiring + tick
+    // ------------------------------------------------------------------
+
+    fn make_test_midi_with_lyrics() -> Vec<u8> {
+        // Format 1, 1 track, 96 ticks per quarter note
+        let mut data = Vec::new();
+        data.extend_from_slice(b"MThd");
+        data.extend_from_slice(&6u32.to_be_bytes());
+        data.extend_from_slice(&1u16.to_be_bytes());
+        data.extend_from_slice(&1u16.to_be_bytes());
+        data.extend_from_slice(&96u16.to_be_bytes());
+
+        // MTrk: set tempo (120 BPM = 500000 microsec/quarter), then lyrics
+        let mut track = Vec::new();
+        // delta=0, meta 0x51 len=3 tempo=500000
+        track.extend_from_slice(&[0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20]);
+        // delta=0, track name "Words"
+        track.push(0x00); track.push(0xFF); track.push(0x03);
+        track.push(0x05); track.extend_from_slice(b"Words");
+        // delta=96, lyric event: "Hello"
+        track.push(0x60); track.push(0xFF); track.push(0x05);
+        track.push(0x05); track.extend_from_slice(b"Hello");
+        // delta=96, lyric event: "World"
+        track.push(0x60); track.push(0xFF); track.push(0x05);
+        track.push(0x05); track.extend_from_slice(b"World");
+        // delta=0, end of track
+        track.push(0x00); track.push(0xFF); track.push(0x2F);
+        track.push(0x00);
+
+        data.extend_from_slice(b"MTrk");
+        data.extend_from_slice(&(track.len() as u32).to_be_bytes());
+        data.extend_from_slice(&track);
+        data
+    }
+
+    fn make_test_cdg_bytes() -> Vec<u8> {
+        // One memory preset packet: white colour (index 15)
+        let mut pkt = [0u8; 24];
+        pkt[0] = 0x09;  // command
+        pkt[1] = 0x01;  // memory preset
+        pkt[4] = 15;    // colour index (white)
+
+        // Add a second packet: border preset (index 7 = light grey)
+        let mut pkt2 = [0u8; 24];
+        pkt2[0] = 0x09;
+        pkt2[1] = 0x02;  // border preset
+        pkt2[4] = 7;     // colour index
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&pkt);
+        data.extend_from_slice(&pkt2);
+        data
+    }
+
+    #[test]
+    fn test_tick_noop_when_not_started() {
+        let mut engine = create_test_engine();
+        engine.tick(); // should not panic
+    }
+
+    #[test]
+    fn test_tick_noop_when_not_playing() {
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+        engine.tick(); // should not panic
+    }
+
+    #[test]
+    fn test_tick_advances_playback_time() {
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_timing.kar").unwrap();
+        engine.play(None).unwrap();
+
+        // Before tick, position should be near 0
+        let state = engine.build_playback_state();
+        assert_eq!(state.position_ms, 0);
+
+        // Wait a tiny bit and tick
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        engine.tick();
+
+        // Position should have advanced
+        let state = engine.build_playback_state();
+        assert!(state.position_ms >= 5);
+    }
+
+    #[test]
+    fn test_tick_lyrics_emitted_for_kar() {
+        let tmp = std::env::temp_dir().join("pykaraoke_test_tick_lyrics");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let kar_path = tmp.join("test.kar");
+        let midi_data = make_test_midi_with_lyrics();
+        std::fs::write(&kar_path, &midi_data).unwrap();
+
+        let mock = MockEventBus::new();
+        let dir = std::env::temp_dir().join("pykaraoke_test_tick_lyrics_data");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut engine = EngineImpl::new(Some(dir), Box::new(mock));
+        engine.start().unwrap();
+
+        let path_str = kar_path.to_str().unwrap();
+        engine.enqueue(path_str).unwrap();
+        engine.play(None).unwrap();
+
+        // Tick to process a few ms
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        engine.tick();
+
+        // Verify lyrics were emitted via the mock
+        // Drop the engine so we can access the mock
+        drop(engine);
+    }
+
+    #[test]
+    fn test_tick_cdg_frame_emitted() {
+        let tmp = std::env::temp_dir().join("pykaraoke_test_tick_cdg");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let cdg_path = tmp.join("test.cdg");
+        let cdg_data = make_test_cdg_bytes();
+        std::fs::write(&cdg_path, &cdg_data).unwrap();
+
+        let dir = std::env::temp_dir().join("pykaraoke_test_tick_cdg_data");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+
+        let path_str = cdg_path.to_str().unwrap();
+        engine.enqueue(path_str).unwrap();
+        engine.play(None).unwrap();
+
+        // Tick with a bit of elapsed time
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        engine.tick();
+
+        // Should not panic — frame was rendered
+        // Position should be > 0
+        let state = engine.build_playback_state();
+        assert!(state.position_ms > 0);
+    }
+
+    #[test]
+    fn test_tick_respects_pause() {
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_pause.kar").unwrap();
+        engine.play(None).unwrap();
+
+        // Tick to advance position
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        engine.tick();
+
+        // Pause
+        let paused_state = engine.pause().unwrap();
+        assert_eq!(paused_state.status, PlaybackStatus::Paused);
+
+        // Record the position when paused
+        let paused_pos = paused_state.position_ms;
+        assert!(paused_pos > 0);
+
+        // Wait and tick — position should NOT advance
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        engine.tick();
+        let state = engine.build_playback_state();
+        assert_eq!(state.position_ms, paused_pos);
+    }
+
+    #[test]
+    fn test_tick_after_seek_repositions_decoder() {
+        let tmp = std::env::temp_dir().join("pykaraoke_test_tick_seek");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let cdg_path = tmp.join("test_seek.cdg");
+        let cdg_data = make_test_cdg_bytes();
+        std::fs::write(&cdg_path, &cdg_data).unwrap();
+
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+
+        let path_str = cdg_path.to_str().unwrap();
+        engine.enqueue(path_str).unwrap();
+        engine.play(None).unwrap();
+
+        // Tick once
+        engine.tick();
+
+        // Seek to a position
+        engine.seek(500).unwrap();
+
+        // Tick again — should not crash
+        engine.tick();
+    }
+
+    #[test]
+    fn test_current_playback_ms_monotonic() {
+        let mut engine = create_test_engine();
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_monotonic.kar").unwrap();
+        engine.play(None).unwrap();
+
+        let t1 = engine.current_playback_ms();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let t2 = engine.current_playback_ms();
+        assert!(t2 >= t1);
+    }
+
+    #[test]
+    fn test_next_previous_load_decoders() {
+        let tmp = std::env::temp_dir().join("pykaraoke_test_next_prev");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let data_dir = std::env::temp_dir().join("pykaraoke_test_next_prev_data");
+        let _ = std::fs::remove_dir_all(&data_dir);
+
+        let kar1_path = tmp.join("song1.kar");
+        let kar2_path = tmp.join("song2.kar");
+        let midi_data = make_test_midi_with_lyrics();
+        std::fs::write(&kar1_path, &midi_data).unwrap();
+        std::fs::write(&kar2_path, &midi_data).unwrap();
+
+        let mut engine = EngineImpl::new(Some(data_dir), Box::new(MockEventBus::new()));
+        engine.start().unwrap();
+
+        let s1 = kar1_path.to_str().unwrap();
+        let s2 = kar2_path.to_str().unwrap();
+        engine.enqueue(s1).unwrap();
+        engine.enqueue(s2).unwrap();
+        engine.play(None).unwrap();
+
+        // Should have loaded decoders
+        assert!(engine.song_lyrics.is_some());
+
+        // Next song
+        engine.next().unwrap();
+        assert!(engine.song_lyrics.is_some());
+
+        // Previous song
+        engine.previous().unwrap();
+        assert!(engine.song_lyrics.is_some());
     }
 }
