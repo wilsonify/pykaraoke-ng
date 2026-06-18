@@ -4,15 +4,30 @@ use pykaraoke_engine::views::*;
 use std::sync::Mutex;
 use tauri::State;
 
+use crate::tauri_event_bus::TauriEventBus;
+use crate::resolve_data_dir;
+
 pub struct AppEngine {
     pub engine: Mutex<Option<EngineImpl>>,
 }
 
 #[tauri::command]
-pub fn engine_start(state: State<'_, AppEngine>) -> Result<(), String> {
+pub fn engine_start(state: State<'_, AppEngine>, app_handle: tauri::AppHandle) -> Result<(), String> {
     let mut guard = state.engine.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let engine = guard.as_mut().ok_or("Engine not created")?;
-    engine.start().map_err(|e| e.to_string())
+
+    // Check if already running
+    if let Some(engine) = guard.as_ref() {
+        if engine.status() == pykaraoke_engine::EngineStatus::Running {
+            return Ok(());
+        }
+    }
+
+    let data_dir = resolve_data_dir(&app_handle);
+    let event_bus = TauriEventBus::new(app_handle.clone());
+    let mut engine = EngineImpl::new(Some(data_dir), Box::new(event_bus));
+    engine.start().map_err(|e| e.to_string())?;
+    *guard = Some(engine);
+    Ok(())
 }
 
 #[tauri::command]

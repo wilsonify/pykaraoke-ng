@@ -1,7 +1,7 @@
 {
   "build": {
     "beforeDevCommand": "",
-    "beforeBuildCommand": "node scripts/stage-rust-backend.js",
+    "beforeBuildCommand": "",
     "devPath": "../src",
     "distDir": "../src",
     "withGlobalTauri": true

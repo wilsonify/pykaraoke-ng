@@ -24,7 +24,7 @@ struct CommandResponseWrapper {
 }
 
 /// Resolve the data directory for settings/song database.
-fn resolve_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
+pub fn resolve_data_dir(app_handle: &tauri::AppHandle) -> PathBuf {
     app_handle
         .path_resolver()
         .app_data_dir()
