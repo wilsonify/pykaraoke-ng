@@ -330,6 +330,62 @@ impl EngineImpl {
             }
         }
     }
+
+    fn finish_current_song_if_needed(&mut self, current_ms: u64) -> bool {
+        let state = self.build_playback_state();
+        let duration_ms = state.duration_ms;
+        if state.status != PlaybackStatus::Playing || duration_ms == 0 || current_ms < duration_ms
+        {
+            return false;
+        }
+
+        if let Some(eb) = self.emit() {
+            eb.emit_song_finished(SongFinishedEvent {
+                song: state.current_song.clone(),
+                completed_at_ms: duration_ms,
+            });
+        }
+
+        let advanced = match self.backend.as_mut() {
+            Some(backend) if backend.queue.advance().is_some() => {
+                backend.state = BackendState::Playing;
+                backend.current_time_ms = 0;
+                true
+            }
+            Some(backend) => {
+                backend.state = BackendState::Stopped;
+                backend.current_time_ms = 0;
+                false
+            }
+            None => false,
+        };
+
+        self.clear_decoders();
+        if advanced {
+            let fp = self
+                .backend
+                .as_ref()
+                .and_then(|b| b.queue.current_song.as_ref())
+                .map(|s| s.filepath.clone());
+            if let Some(ref path) = fp {
+                self.load_decoders_for_song(path);
+            }
+            self.position_offset_ms = 0;
+            self.playback_start_time = Some(Instant::now());
+            let queue = self.build_queue_view();
+            if let Some(eb) = self.emit() {
+                eb.emit_queue_changed(queue);
+            }
+        } else {
+            self.reset_timing();
+        }
+
+        let state = self.build_playback_state();
+        if let Some(eb) = self.emit() {
+            eb.emit_playback_changed(state);
+        }
+        true
+    }
 }
 
 impl Engine for EngineImpl {
@@ -442,8 +498,25 @@ impl Engine for EngineImpl {
     }
 
     fn tick(&mut self) {
+        let playing = self
+            .backend
+            .as_ref()
+            .map(|b| b.state == BackendState::Playing)
+            .unwrap_or(false);
+        if !playing {
+            return;
+        }
+
         let current_ms = self.current_playback_ms();
         self.advance_decoders(current_ms);
+        if self.finish_current_song_if_needed(current_ms) {
+            return;
+        }
+
+        let state = self.build_playback_state();
+        if let Some(eb) = self.emit() {
+            eb.emit_playback_changed(state);
+        }
     }
 
     fn stop_playback(&mut self) -> Result<PlaybackState, EngineError> {
@@ -602,17 +675,11 @@ impl Engine for EngineImpl {
 
     fn move_in_queue(&mut self, from: usize, to: usize) -> Result<QueueView, EngineError> {
         let backend = self.require_backend_mut()?;
-        if from >= backend.queue.playlist.len() || to >= backend.queue.playlist.len() {
+        if !backend.queue.move_item(from, to) {
             return Err(EngineError::Queue {
                 message: "Index out of range".to_string(),
             });
         }
-        if from == to {
-            return Ok(self.build_queue_view());
-        }
-        let song = backend.queue.playlist.remove(from);
-        let insert_pos = if to > from { to } else { to };
-        backend.queue.playlist.insert(insert_pos, song);
         let view = self.build_queue_view();
         if let Some(eb) = self.emit() {
             eb.emit_queue_changed(view.clone());
@@ -761,10 +828,11 @@ impl Engine for EngineImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     struct MockEventBus {
         playback_changed: Mutex<Option<PlaybackState>>,
+        song_finished: Mutex<Option<SongFinishedEvent>>,
         queue_changed: Mutex<Option<QueueView>>,
         settings_changed: Mutex<Option<SettingsView>>,
         scan_progress: Mutex<Option<LibraryScanProgress>>,
@@ -777,6 +845,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 playback_changed: Mutex::new(None),
+                song_finished: Mutex::new(None),
                 queue_changed: Mutex::new(None),
                 settings_changed: Mutex::new(None),
                 scan_progress: Mutex::new(None),
@@ -799,6 +868,9 @@ mod tests {
         fn emit_playback_changed(&self, state: PlaybackState) {
             *self.playback_changed.lock().unwrap() = Some(state);
         }
+        fn emit_song_finished(&self, event: SongFinishedEvent) {
+            *self.song_finished.lock().unwrap() = Some(event);
+        }
         fn emit_queue_changed(&self, queue: QueueView) {
             *self.queue_changed.lock().unwrap() = Some(queue);
         }
@@ -820,10 +892,56 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordedEngineEvents {
+        playback_changed: Mutex<Option<PlaybackState>>,
+        song_finished: Mutex<Option<SongFinishedEvent>>,
+        queue_changed: Mutex<Option<QueueView>>,
+    }
+
+    struct RecordingEventBus {
+        events: Arc<RecordedEngineEvents>,
+    }
+
+    impl EventBus for RecordingEventBus {
+        fn emit_playback_changed(&self, state: PlaybackState) {
+            *self.events.playback_changed.lock().unwrap() = Some(state);
+        }
+
+        fn emit_song_finished(&self, event: SongFinishedEvent) {
+            *self.events.song_finished.lock().unwrap() = Some(event);
+        }
+
+        fn emit_queue_changed(&self, queue: QueueView) {
+            *self.events.queue_changed.lock().unwrap() = Some(queue);
+        }
+
+        fn emit_library_changed(&self, _: LibraryView) {}
+        fn emit_settings_changed(&self, _: SettingsView) {}
+        fn emit_scan_progress(&self, _: LibraryScanProgress) {}
+        fn emit_error(&self, _: EngineErrorInfo) {}
+        fn emit_cdg_frame(&self, _: CdgFrameView) {}
+        fn emit_lyrics_changed(&self, _: LyricsView) {}
+    }
+
     fn create_test_engine() -> EngineImpl {
         let dir = std::env::temp_dir().join("pykaraoke_test_engine_impl");
         let _ = std::fs::remove_dir_all(&dir);
         EngineImpl::new(Some(dir), Box::new(MockEventBus::new()))
+    }
+
+    fn create_recording_engine(test_name: &str) -> (EngineImpl, Arc<RecordedEngineEvents>) {
+        let dir = std::env::temp_dir().join(format!("pykaraoke_test_{}", test_name));
+        let _ = std::fs::remove_dir_all(&dir);
+        let events = Arc::new(RecordedEngineEvents::default());
+        let bus = RecordingEventBus {
+            events: events.clone(),
+        };
+        (EngineImpl::new(Some(dir), Box::new(bus)), events)
+    }
+
+    fn set_queue_song_length(engine: &mut EngineImpl, index: usize, length: f64) {
+        engine.backend_mut().unwrap().queue.playlist[index].length = length;
     }
 
     #[test]
@@ -1106,6 +1224,100 @@ mod tests {
         // Position should have advanced
         let state = engine.build_playback_state();
         assert!(state.position_ms >= 5);
+    }
+
+    #[test]
+    fn test_tick_emits_playback_progress() {
+        let (mut engine, events) = create_recording_engine("tick_progress_events");
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_timing_events.kar").unwrap();
+        set_queue_song_length(&mut engine, 0, 5.0);
+        engine.play(None).unwrap();
+        *events.playback_changed.lock().unwrap() = None;
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        engine.tick();
+
+        let state = events
+            .playback_changed
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("tick should emit playback progress");
+        assert_eq!(state.status, PlaybackStatus::Playing);
+        assert!(state.position_ms > 0);
+        assert_eq!(state.duration_ms, 5000);
+    }
+
+    #[test]
+    fn test_tick_emits_song_finished_and_stops_last_song() {
+        let (mut engine, events) = create_recording_engine("tick_finish_last");
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_finish_last.kar").unwrap();
+        set_queue_song_length(&mut engine, 0, 0.001);
+        engine.play(None).unwrap();
+        *events.playback_changed.lock().unwrap() = None;
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        engine.tick();
+
+        let finished = events
+            .song_finished
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("song completion should emit an event");
+        assert_eq!(finished.completed_at_ms, 1);
+        assert_eq!(
+            finished.song.as_ref().map(|s| s.filepath.as_str()),
+            Some("/tmp/__test_finish_last.kar")
+        );
+
+        let state = events
+            .playback_changed
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("completion should emit stopped playback state");
+        assert_eq!(state.status, PlaybackStatus::Stopped);
+        assert_eq!(state.position_ms, 0);
+    }
+
+    #[test]
+    fn test_tick_song_completion_advances_to_next_queue_item() {
+        let (mut engine, events) = create_recording_engine("tick_finish_next");
+        engine.start().unwrap();
+        engine.enqueue("/tmp/__test_finish_first.kar").unwrap();
+        engine.enqueue("/tmp/__test_finish_second.kar").unwrap();
+        set_queue_song_length(&mut engine, 0, 0.001);
+        set_queue_song_length(&mut engine, 1, 5.0);
+        engine.play(None).unwrap();
+        *events.playback_changed.lock().unwrap() = None;
+        *events.queue_changed.lock().unwrap() = None;
+
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        engine.tick();
+
+        let queue = events
+            .queue_changed
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("advancing completion should emit queue state");
+        assert_eq!(queue.current_index, Some(1));
+
+        let state = events
+            .playback_changed
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("advancing completion should emit playback state");
+        assert_eq!(state.status, PlaybackStatus::Playing);
+        assert_eq!(
+            state.current_song.as_ref().map(|s| s.filepath.as_str()),
+            Some("/tmp/__test_finish_second.kar")
+        );
+        assert_eq!(state.position_ms, 0);
     }
 
     #[test]
