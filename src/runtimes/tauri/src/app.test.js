@@ -236,6 +236,7 @@ describe("Engine event handling", () => {
   it("recognises all known event types", () => {
     const knownTypes = [
       "engine:playback_changed",
+      "engine:song_finished",
       "engine:queue_changed",
       "engine:library_changed",
       "engine:settings_changed",
@@ -1127,6 +1128,10 @@ describe("New architecture: typed commands", () => {
       "app.js must listen for engine:queue_changed events"
     );
     assert.ok(
+      appJsSource.includes("listenEvent('engine:song_finished'"),
+      "app.js must listen for engine:song_finished events"
+    );
+    assert.ok(
       appJsSource.includes("listenEvent('engine:error'"),
       "app.js must listen for engine:error events"
     );
@@ -1136,6 +1141,28 @@ describe("New architecture: typed commands", () => {
     assert.ok(
       appJsSource.includes("engine_start"),
       "app.js must call engine_start to initialize the engine"
+    );
+  });
+
+  it("applies playback state returned by commands", () => {
+    const playIdx = appJsSource.indexOf("playback_play");
+    const playHandler = appJsSource.slice(playIdx, playIdx + 200);
+    assert.ok(
+      playHandler.includes("self.updateUIFromState(state)"),
+      "playback command handlers must apply returned PlaybackState"
+    );
+  });
+
+  it("plays selected queue entries by song ID", () => {
+    const playFromQueueIdx = appJsSource.indexOf("async playFromQueue");
+    const playFromQueue = appJsSource.slice(playFromQueueIdx, playFromQueueIdx + 700);
+    assert.ok(
+      playFromQueue.includes("song.id"),
+      "playFromQueue must read the selected queue song ID"
+    );
+    assert.ok(
+      playFromQueue.includes("song_id: song.id"),
+      "playFromQueue must pass the selected song ID to playback_play"
     );
   });
 
