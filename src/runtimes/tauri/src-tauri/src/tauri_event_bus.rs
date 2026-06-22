@@ -17,6 +17,10 @@ impl EventBus for TauriEventBus {
         self.app_handle.emit_all("engine:playback_changed", state).ok();
     }
 
+    fn emit_song_finished(&self, event: SongFinishedEvent) {
+        self.app_handle.emit_all("engine:song_finished", event).ok();
+    }
+
     fn emit_queue_changed(&self, queue: QueueView) {
         self.app_handle.emit_all("engine:queue_changed", queue).ok();
     }
@@ -51,6 +55,7 @@ pub struct NoopEventBus;
 
 impl EventBus for NoopEventBus {
     fn emit_playback_changed(&self, _: PlaybackState) {}
+    fn emit_song_finished(&self, _: SongFinishedEvent) {}
     fn emit_queue_changed(&self, _: QueueView) {}
     fn emit_library_changed(&self, _: LibraryView) {}
     fn emit_settings_changed(&self, _: SettingsView) {}
