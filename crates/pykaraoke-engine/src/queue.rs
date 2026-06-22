@@ -64,6 +64,12 @@ impl Queue {
         Self::default()
     }
 
+    fn sync_current_song(&mut self) {
+        self.current_song = self
+            .playlist_index
+            .and_then(|index| self.playlist.get(index).cloned());
+    }
+
     /// Add a song to the end of the playlist.
     pub fn add(&mut self, song: SongStruct) {
         self.playlist.push(song);
@@ -88,10 +94,35 @@ impl Queue {
                     };
                 }
             }
+            self.sync_current_song();
             Some(song)
         } else {
             None
         }
+    }
+
+    /// Move a song within the playlist and keep the current selection stable.
+    /// Returns `false` if either index is out of bounds.
+    pub fn move_item(&mut self, from: usize, to: usize) -> bool {
+        if from >= self.playlist.len() || to >= self.playlist.len() {
+            return false;
+        }
+        if from == to {
+            return true;
+        }
+
+        let selected_song = self.current_song.clone();
+        let song = self.playlist.remove(from);
+        self.playlist.insert(to, song);
+
+        if let Some(selected) = selected_song {
+            self.playlist_index = self
+                .playlist
+                .iter()
+                .position(|song| song.filepath == selected.filepath);
+        }
+        self.sync_current_song();
+        true
     }
 
     /// Clear the entire playlist.
@@ -296,6 +327,46 @@ mod tests {
 
         queue.remove(0); // remove "A"
         assert_eq!(queue.playlist_index, Some(1)); // "C" is now at index 1
+        assert_eq!(queue.current_song.as_ref().unwrap().title, "C");
+    }
+
+    #[test]
+    fn test_remove_current_updates_current_song() {
+        let mut queue = Queue::new();
+        queue.add(make_song("A", "A1", "/tmp/a.kar"));
+        queue.add(make_song("B", "B1", "/tmp/b.kar"));
+        queue.add(make_song("C", "C1", "/tmp/c.kar"));
+        queue.select(1);
+
+        let removed = queue.remove(1).unwrap();
+        assert_eq!(removed.title, "B");
+        assert_eq!(queue.playlist_index, Some(1));
+        assert_eq!(queue.current_song.as_ref().unwrap().title, "C");
+    }
+
+    #[test]
+    fn test_remove_only_current_clears_current_song() {
+        let mut queue = Queue::new();
+        queue.add(make_song("A", "A1", "/tmp/a.kar"));
+        queue.select(0);
+
+        queue.remove(0);
+        assert!(queue.playlist_index.is_none());
+        assert!(queue.current_song.is_none());
+    }
+
+    #[test]
+    fn test_move_item_keeps_current_song_selected() {
+        let mut queue = Queue::new();
+        queue.add(make_song("A", "A1", "/tmp/a.kar"));
+        queue.add(make_song("B", "B1", "/tmp/b.kar"));
+        queue.add(make_song("C", "C1", "/tmp/c.kar"));
+        queue.select(0);
+
+        assert!(queue.move_item(0, 2));
+        assert_eq!(queue.playlist_index, Some(2));
+        assert_eq!(queue.current_song.as_ref().unwrap().title, "A");
+        assert_eq!(queue.playlist[2].title, "A");
     }
 
     #[test]
