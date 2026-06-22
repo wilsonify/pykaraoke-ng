@@ -95,6 +95,12 @@ class PyKaraokeApp {
             self.renderPlaylist(event.payload);
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
 
+        listenEvent('engine:song_finished', function(event) {
+            var song = event.payload && event.payload.song;
+            var name = song && (song.displayName || song.title || song.filename);
+            self.updateStatus(name ? 'Finished "' + name + '"' : 'Song finished');
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
         listenEvent('engine:error', function(event) {
             self.updateStatus('Error: ' + event.payload.message);
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
@@ -138,27 +144,32 @@ class PyKaraokeApp {
 
         $('play-btn').addEventListener('click', async function() {
             try {
-                await invoke('playback_play', {});
+                var state = await invoke('playback_play', {});
+                self.updateUIFromState(state);
             } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
         $('pause-btn').addEventListener('click', async function() {
             try {
-                await invoke('playback_pause', {});
+                var state = await invoke('playback_pause', {});
+                self.updateUIFromState(state);
             } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
         $('stop-btn').addEventListener('click', async function() {
             try {
-                await invoke('playback_stop', {});
+                var state = await invoke('playback_stop', {});
+                self.updateUIFromState(state);
             } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
         $('next-btn').addEventListener('click', async function() {
             try {
-                await invoke('playback_next', {});
+                var state = await invoke('playback_next', {});
+                self.updateUIFromState(state);
             } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
         $('prev-btn').addEventListener('click', async function() {
             try {
-                await invoke('playback_previous', {});
+                var state = await invoke('playback_previous', {});
+                self.updateUIFromState(state);
             } catch (e) { self.updateStatus('Error: ' + self.errorMessage(e)); }
         });
 
@@ -189,7 +200,8 @@ class PyKaraokeApp {
                 var pct = Number.parseInt(e.target.value) / 10;
                 var pos_ms = Math.round((pct / 100) * s.durationMs);
                 try {
-                    await invoke('playback_seek', { position_ms: pos_ms });
+                    var state = await invoke('playback_seek', { position_ms: pos_ms });
+                    self.updateUIFromState(state);
                 } catch (ex) {
                     self.updateStatus('Seek error: ' + self.errorMessage(ex));
                 }
@@ -370,7 +382,8 @@ class PyKaraokeApp {
 
     async handleClearPlaylist() {
         try {
-            await invoke('queue_clear', {});
+            var result = await invoke('queue_clear', {});
+            this.renderPlaylist(result);
             this.updateStatus('Playlist cleared');
         } catch (e) {
             this.updateStatus('Error: ' + this.errorMessage(e));
@@ -395,12 +408,17 @@ class PyKaraokeApp {
         var playing = s.status === 'playing';
         document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
         document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
+        this._updateTickInterval(s);
 
         if (s.durationMs > 0 && typeof s.positionMs === 'number') {
             var pct = Math.min(1000, Math.max(0, (s.positionMs / s.durationMs) * 1000));
             document.getElementById('progress-slider').value = Math.round(pct);
             document.getElementById('time-current').textContent = this.fmtTime(s.positionMs);
             document.getElementById('time-total').textContent = this.fmtTime(s.durationMs);
+        } else {
+            document.getElementById('progress-slider').value = 0;
+            document.getElementById('time-current').textContent = this.fmtTime(s.positionMs || 0);
+            document.getElementById('time-total').textContent = this.fmtTime(0);
         }
     }
 
@@ -439,22 +457,26 @@ class PyKaraokeApp {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
                 var idx = parseInt(btn.dataset.i);
-                invoke('queue_remove', { index: idx }).catch(function(err) {
-                    self.updateStatus('Error: ' + self.errorMessage(err));
-                });
+                invoke('queue_remove', { index: idx })
+                    .then(function(result) { self.renderPlaylist(result); })
+                    .catch(function(err) {
+                        self.updateStatus('Error: ' + self.errorMessage(err));
+                    });
             });
         });
     }
 
     async playFromQueue(index) {
         try {
-            await invoke('queue_list', {});
             var queueResult = await invoke('queue_list', {});
             if (queueResult && queueResult.songs && queueResult.songs[index]) {
                 var song = queueResult.songs[index];
-                // For now, use playback_play with index-based approach
-                // The engine will handle queue index selection
-                await invoke('playback_play', {});
+                if (typeof song.id !== 'number') {
+                    this.updateStatus('Error: queued song has no playable ID');
+                    return;
+                }
+                var state = await invoke('playback_play', { song_id: song.id });
+                this.updateUIFromState(state);
             }
         } catch (e) {
             this.updateStatus('Error: ' + this.errorMessage(e));
@@ -530,6 +552,7 @@ class PyKaraokeApp {
         console.debug('[PyKaraoke] enqueueSong:', song.filepath);
         try {
             var result = await invoke('queue_enqueue', { filepath: song.filepath });
+            this.renderPlaylist(result);
             this.updateStatus('Added "' + (song.title || song.filename) + '" to queue');
         } catch (e) {
             console.error('[PyKaraoke] enqueue exception:', e);
@@ -552,10 +575,12 @@ class PyKaraokeApp {
             if (s && s.durationMs > 0 && typeof s.positionMs === 'number') {
                 var newPos = s.positionMs + (stepSeconds * 1000);
                 newPos = Math.max(0, Math.min(newPos, s.durationMs));
-                invoke('playback_seek', { position_ms: newPos }).catch(function(e) {
-                    self.updateStatus('Error: ' + self.errorMessage(e));
-                    stopSeek();
-                });
+                invoke('playback_seek', { position_ms: newPos })
+                    .then(function(state) { self.updateUIFromState(state); })
+                    .catch(function(e) {
+                        self.updateStatus('Error: ' + self.errorMessage(e));
+                        stopSeek();
+                    });
             }
         }
 
