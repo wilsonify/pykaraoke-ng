@@ -20,3 +20,10 @@ pub struct PlaybackState {
     pub duration_ms: u64,
     pub volume: f64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongFinishedEvent {
+    pub song: Option<SongView>,
+    pub completed_at_ms: u64,
+}
