@@ -2,6 +2,7 @@ use crate::views::*;
 
 pub trait EventBus: Send + Sync {
     fn emit_playback_changed(&self, state: PlaybackState);
+    fn emit_song_finished(&self, event: SongFinishedEvent);
     fn emit_queue_changed(&self, queue: QueueView);
     fn emit_library_changed(&self, library: LibraryView);
     fn emit_settings_changed(&self, settings: SettingsView);
