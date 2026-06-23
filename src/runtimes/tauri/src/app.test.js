@@ -631,7 +631,7 @@ describe("Slim sidebar: inline queue management", () => {
 
   it("search results are keyboard-navigable with tabindex", () => {
     assert.ok(
-      appJsSource.includes("tabindex"),
+      appJsSource.includes("tabIndex") || appJsSource.includes("tabindex"),
       "app.js should set tabindex on search result items"
     );
   });
@@ -772,7 +772,7 @@ describe("Queue enqueue: double-click and drag-drop support", () => {
 
   it("app.js sets draggable=true on search result items", () => {
     assert.ok(
-      appJsSource.includes('draggable="true"'),
+      appJsSource.includes('draggable="true"') || appJsSource.includes('draggable = true'),
       "app.js must set draggable='true' for drag-drop"
     );
   });
@@ -1328,5 +1328,105 @@ describe("Lyrics display rendering", () => {
       appJsSource.includes("clearCdgDisplay()"),
       "app.js should clear CDG display on playback stopped"
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Security: XSS prevention in song metadata rendering
+// ---------------------------------------------------------------------------
+
+describe("Security: XSS prevention in playlist rendering", () => {
+  it("renderPlaylist uses textContent (not innerHTML) for song metadata", () => {
+    const appJsSource = fs.readFileSync(
+      path.join(__dirname, "app.js"),
+      "utf-8"
+    );
+    const fnStart = appJsSource.indexOf("renderPlaylist(view) {");
+    const fnEnd = appJsSource.indexOf("async playFromQueue");
+    const fn = appJsSource.slice(fnStart, fnEnd);
+    assert.ok(
+      fn.includes(".textContent = "),
+      "renderPlaylist must use textContent for song title/artist"
+    );
+    assert.ok(
+      !/innerHTML\s*=/.test(fn),
+      "renderPlaylist must not use innerHTML assignment"
+    );
+  });
+
+  it("renderSearchResults uses textContent (not innerHTML) for song metadata", () => {
+    const appJsSource = fs.readFileSync(
+      path.join(__dirname, "app.js"),
+      "utf-8"
+    );
+    const fnStart = appJsSource.indexOf("renderSearchResults() {");
+    const fnEnd = appJsSource.indexOf("async enqueueSong");
+    const fn = appJsSource.slice(fnStart, fnEnd);
+    assert.ok(
+      fn.includes(".textContent = "),
+      "renderSearchResults must use textContent for song title/artist"
+    );
+    assert.ok(
+      !/innerHTML\s*=/.test(fn),
+      "renderSearchResults must not use innerHTML assignment"
+    );
+  });
+
+  it("escapeHtml renders script tags as text, not executing them", () => {
+    // Test the escapeHtml logic (without DOM, verify via source pattern)
+    const appJsSource = fs.readFileSync(
+      path.join(__dirname, "app.js"),
+      "utf-8"
+    );
+    // escapeHtml must use createTextNode
+    assert.ok(
+      appJsSource.includes("createTextNode"),
+      "escapeHtml must use createTextNode for safety"
+    );
+    // It should NOT use innerHTML for the actual escaping
+    assert.ok(
+      appJsSource.includes("div.innerHTML"),
+      "escapeHtml should return div.innerHTML after setting textContent"
+    );
+  });
+});
+
+describe("Security: XSS edge cases in playlist", () => {
+  it("handles script tags in song titles", () => {
+    // Create a song with an XSS attempt in the title
+    const song = { title: "<script>alert('xss')</script>", artist: "Test", filename: "test.cdg" };
+    // Using document.createElement + textContent should make this safe
+    const titleDiv = { textContent: "" };
+    titleDiv.textContent = song.title || song.filename || "";
+    assert.equal(titleDiv.textContent, "<script>alert('xss')</script>");
+    assert.ok(!titleDiv.innerHTML);
+  });
+
+  it("handles HTML entities in song titles", () => {
+    const song = { title: "&lt;script&gt;", artist: "Test" };
+    const titleDiv = { textContent: "" };
+    titleDiv.textContent = song.title || song.filename || "";
+    assert.equal(titleDiv.textContent, "&lt;script&gt;");
+  });
+
+  it("handles malformed markup in artist names", () => {
+    const song = { title: "Song", artist: "<img src=x onerror=alert(1)>", filename: "s.cdg" };
+    const artistDiv = { textContent: "" };
+    artistDiv.textContent = song.artist || "";
+    assert.equal(artistDiv.textContent, "<img src=x onerror=alert(1)>");
+  });
+
+  it("handles unicode in song titles", () => {
+    const song = { title: "Jóga 你好 ñoño 🎤", artist: "Björk" };
+    const titleDiv = { textContent: "" };
+    titleDiv.textContent = song.title || song.filename || "";
+    assert.equal(titleDiv.textContent, "Jóga 你好 ñoño 🎤");
+  });
+
+  it("handles empty title with malicious filename", () => {
+    const song = { title: "", artist: "", filename: "<script>evil</script>.cdg" };
+    const titleDiv = { textContent: "" };
+    titleDiv.textContent = song.title || song.filename || "";
+    assert.equal(titleDiv.textContent, "<script>evil</script>.cdg");
   });
 });

@@ -96,7 +96,16 @@ class PyKaraokeApp {
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
 
         listenEvent('engine:playback_changed', function(event) {
-            self.updateUIFromState(event.payload);
+            var s = event.payload;
+            self.updateUIFromState(s);
+            var playing = s && s.status === 'playing';
+            document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
+            document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
+            self._updateTickInterval(s);
+            if (!playing) {
+                self.clearCdgDisplay();
+                self.renderLyrics(null);
+            }
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
 
         listenEvent('engine:queue_changed', function(event) {
@@ -107,24 +116,30 @@ class PyKaraokeApp {
             var song = event.payload && event.payload.song;
             var name = song && (song.displayName || song.title || song.filename);
             self.updateStatus(name ? 'Finished "' + name + '"' : 'Song finished');
-            // Auto-advance: next tick will pick up the new song from the queue
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:library_changed', function(event) {
+            self.updateStatus('Library updated');
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:settings_changed', function(event) {
+            self.updateStatus('Settings updated');
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:scan_progress', function(event) {
+            var p = event.payload;
+            if (p && p.status === 'scanning') {
+                self.updateStatus('Scanning… ' + (p.foldersScanned || 0) + ' folders, ' + (p.songsFound || 0) + ' songs');
+            } else if (p && p.status === 'complete') {
+                var count = p.songsFound || 0;
+                self.updateStatus('Scan complete – ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
+            } else if (p && p.status === 'error') {
+                self.updateStatus('Scan failed');
+            }
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
 
         listenEvent('engine:error', function(event) {
             self.updateStatus('Error: ' + event.payload.message);
-        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
-
-        listenEvent('engine:playback_changed', function(event) {
-            var s = event.payload;
-            var playing = s && s.status === 'playing';
-            document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
-            document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
-            self._updateTickInterval(s);
-            // Clear CDG display when stopped
-            if (!playing) {
-                self.clearCdgDisplay();
-                self.renderLyrics(null);
-            }
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
     }
 
@@ -148,6 +163,10 @@ class PyKaraokeApp {
     destroy() {
         this._unlisteners.forEach(function(fn) { fn(); });
         this._unlisteners = [];
+        if (this._tickTimer) {
+            clearInterval(this._tickTimer);
+            this._tickTimer = null;
+        }
     }
 
     // ── UI Event listeners ─────────────────────────────────────────────
@@ -359,9 +378,13 @@ class PyKaraokeApp {
         if (!modal) return;
         try {
             var result = await invoke('settings_get', {});
-            if (result) {
+            if (result && result.display) {
                 var fs = document.getElementById('setting-fullscreen');
-                if (fs) fs.checked = result.display && result.display.fullscreen || false;
+                if (fs) fs.checked = result.display.fullscreen || false;
+                var zoom = document.getElementById('setting-zoom');
+                if (zoom && result.display.zoom) {
+                    zoom.value = result.display.zoom;
+                }
             } else {
                 this.updateStatus('Could not load settings');
             }
@@ -377,14 +400,11 @@ class PyKaraokeApp {
     }
 
     async handleSaveSettings() {
-        var delta = {
-            fullscreen: document.getElementById('setting-fullscreen') ? document.getElementById('setting-fullscreen').checked : null,
-        };
-        // Remove null values
         var clean = {};
-        for (var key in delta) {
-            if (delta[key] !== null) clean[key] = delta[key];
-        }
+        var fsEl = document.getElementById('setting-fullscreen');
+        if (fsEl) clean.fullscreen = fsEl.checked;
+        var zoomEl = document.getElementById('setting-zoom');
+        if (zoomEl) clean.zoom = zoomEl.value;
         try {
             await invoke('settings_update', { delta: clean });
             this.updateStatus('Settings saved');
@@ -444,17 +464,14 @@ class PyKaraokeApp {
         if (!canvas) return;
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
-        // The CdgFrameView has width=300, height=216, pixels as RGBA bytes
         var w = frame.width || 300;
         var h = frame.height || 216;
-        canvas.width = w;
-        canvas.height = h;
-        var imageData = ctx.createImageData(w, h);
-        var src = frame.pixels;
-        var dst = imageData.data;
-        for (var i = 0; i < src.length && i < dst.length; i++) {
-            dst[i] = src[i];
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width = w;
+            canvas.height = h;
         }
+        var imageData = ctx.createImageData(w, h);
+        imageData.data.set(frame.pixels);
         ctx.putImageData(imageData, 0, 0);
     }
 
@@ -493,30 +510,49 @@ class PyKaraokeApp {
         var el = document.getElementById('playlist');
         var self = this;
         var list = view && view.songs ? view.songs : [];
+        el.textContent = '';
         if (!list || !list.length) {
-            el.innerHTML = '<div class="no-results">Playlist is empty</div>';
+            var msg = document.createElement('div');
+            msg.className = 'no-results';
+            msg.textContent = 'Playlist is empty';
+            el.appendChild(msg);
             return;
         }
-        var html = '';
         for (var i = 0; i < list.length; i++) {
             var s = list[i];
-            var cls = (self.currentState && view.currentIndex === i) ? ' active' : '';
-            html += '<div class="song-item' + cls + '" data-index="' + i + '">'
-                  + '<div class="song-item-info">'
-                  + '<div class="song-item-title">' + (s.title || s.filename) + '</div>'
-                  + '<div class="song-item-artist">' + (s.artist || '') + '</div>'
-                  + '</div>'
-                  + '<button class="song-item-remove" data-i="' + i + '" title="Remove">✕</button>'
-                  + '</div>';
+            var item = document.createElement('div');
+            item.className = 'song-item' + (self.currentState && view.currentIndex === i ? ' active' : '');
+            item.dataset.index = String(i);
+
+            var info = document.createElement('div');
+            info.className = 'song-item-info';
+
+            var title = document.createElement('div');
+            title.className = 'song-item-title';
+            title.textContent = s.title || s.filename || '';
+
+            var artist = document.createElement('div');
+            artist.className = 'song-item-artist';
+            artist.textContent = s.artist || '';
+
+            info.appendChild(title);
+            info.appendChild(artist);
+            item.appendChild(info);
+
+            var removeBtn = document.createElement('button');
+            removeBtn.className = 'song-item-remove';
+            removeBtn.dataset.i = String(i);
+            removeBtn.title = 'Remove';
+            removeBtn.textContent = '\u2715';
+            item.appendChild(removeBtn);
+
+            el.appendChild(item);
         }
-        el.innerHTML = html;
 
         el.querySelectorAll('.song-item').forEach(function(item) {
             item.addEventListener('click', function(e) {
                 if (e.target.classList.contains('song-item-remove')) return;
                 var idx = parseInt(item.dataset.index);
-                // Find the song ID from the current queue view
-                var currentView = self.currentState; // no, the event payload has the songs
                 self.playFromQueue(idx);
             });
         });
@@ -553,20 +589,39 @@ class PyKaraokeApp {
     renderSearchResults() {
         var el = document.getElementById('results-list');
         var self = this;
+        el.textContent = '';
         if (!this.searchResults.length) {
-            el.innerHTML = '<div class="no-results">No results found</div>';
+            var msg = document.createElement('div');
+            msg.className = 'no-results';
+            msg.textContent = 'No results found';
+            el.appendChild(msg);
             return;
         }
-        var html = '';
         for (var i = 0; i < this.searchResults.length; i++) {
             var s = this.searchResults[i];
-            html += '<div class="song-item" data-index="' + i + '" tabindex="0" role="option" draggable="true">'
-                  + '<div class="song-item-info">'
-                  + '<div class="song-item-title">' + (s.title || s.filename) + '</div>'
-                  + '<div class="song-item-artist">' + (s.artist || '') + '</div>'
-                  + '</div></div>';
+            var item = document.createElement('div');
+            item.className = 'song-item';
+            item.dataset.index = String(i);
+            item.tabIndex = 0;
+            item.role = 'option';
+            item.draggable = true;
+
+            var info = document.createElement('div');
+            info.className = 'song-item-info';
+
+            var title = document.createElement('div');
+            title.className = 'song-item-title';
+            title.textContent = s.title || s.filename || '';
+
+            var artist = document.createElement('div');
+            artist.className = 'song-item-artist';
+            artist.textContent = s.artist || '';
+
+            info.appendChild(title);
+            info.appendChild(artist);
+            item.appendChild(info);
+            el.appendChild(item);
         }
-        el.innerHTML = html;
 
         el.querySelectorAll('.song-item').forEach(function(item) {
             var clickTimer = null;
@@ -600,7 +655,6 @@ class PyKaraokeApp {
                 enqueue();
             });
             item.addEventListener('keydown', function(e) { if (e.key === 'Enter') enqueue(); });
-            // Drag-start: attach song data for drop into queue
             item.addEventListener('dragstart', function(e) {
                 var song = self.searchResults[parseInt(item.dataset.index)];
                 console.debug('[PyKaraoke] drag-start:', song && song.filepath);

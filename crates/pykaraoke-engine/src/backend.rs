@@ -152,7 +152,10 @@ impl Backend {
     // ── Command handlers ──────────────────────────────────────────
 
     fn handle_get_state(&self) -> CommandResponse {
-        CommandResponse::ok_with_data(serde_json::to_value(self.get_state()).unwrap())
+        match serde_json::to_value(self.get_state()) {
+            Ok(val) => CommandResponse::ok_with_data(val),
+            Err(e) => CommandResponse::error(format!("Serialization error: {}", e)),
+        }
     }
 
     fn handle_play(&mut self, params: Value) -> CommandResponse {
@@ -278,7 +281,7 @@ impl Backend {
 
         let song_values: Vec<Value> = results
             .into_iter()
-            .map(|r| serde_json::to_value(r.song).unwrap())
+            .filter_map(|r| serde_json::to_value(r.song).ok())
             .collect();
 
         CommandResponse::ok_with_data(serde_json::json!({
@@ -292,7 +295,7 @@ impl Backend {
             .library
             .unique_song_list
             .iter()
-            .map(|s| serde_json::to_value(s).unwrap())
+            .filter_map(|s| serde_json::to_value(s).ok())
             .collect();
 
         CommandResponse::ok_with_data(serde_json::json!({
@@ -303,13 +306,7 @@ impl Backend {
 
     fn handle_scan_library(&mut self) -> CommandResponse {
         let results = self.library.scan();
-        let mut messages = Vec::new();
-
-        if !results.errors.is_empty() {
-            for err in &results.errors {
-                messages.push(err.clone());
-            }
-        }
+        let messages: Vec<String> = results.errors.clone();
 
         CommandResponse::ok_with_data(serde_json::json!({
             "songs_found": results.songs.len(),
@@ -327,9 +324,10 @@ impl Backend {
     }
 
     fn handle_get_settings(&self) -> CommandResponse {
-        CommandResponse::ok_with_data(
-            serde_json::to_value(&self.persistence.settings).unwrap(),
-        )
+        match serde_json::to_value(&self.persistence.settings) {
+            Ok(val) => CommandResponse::ok_with_data(val),
+            Err(e) => CommandResponse::error(format!("Serialization error: {}", e)),
+        }
     }
 
     fn handle_update_settings(&mut self, params: Value) -> CommandResponse {

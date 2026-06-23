@@ -8,7 +8,6 @@ use std::time::Instant;
 /// but in practice sending is safe because we only access it via `&mut self` (exclusive
 /// access) and it's never moved while being used. `EngineImpl` holds this behind a `Mutex`
 /// in Tauri, so single-threaded access is guaranteed.
-#[allow(dead_code)]
 struct SendOutputStream(OutputStream);
 unsafe impl Send for SendOutputStream {}
 

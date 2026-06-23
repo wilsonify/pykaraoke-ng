@@ -428,8 +428,12 @@ impl Engine for EngineImpl {
 
     fn stop(&mut self) -> Result<(), EngineError> {
         if let Some(backend) = self.backend.take() {
-            backend.persistence.save_settings().ok();
-            backend.persistence.save_database().ok();
+            if let Err(e) = backend.persistence.save_settings() {
+                eprintln!("Warning: failed to save settings: {}", e);
+            }
+            if let Err(e) = backend.persistence.save_database() {
+                eprintln!("Warning: failed to save database: {}", e);
+            }
         }
         self.status = EngineStatus::Stopped;
         Ok(())
@@ -768,34 +772,60 @@ impl Engine for EngineImpl {
     }
 
     fn scan_library(&mut self) -> Result<LibraryScanProgress, EngineError> {
-        let resp = self.cmd("scan_library", Value::Null)?;
-        match resp.status.as_str() {
-            "ok" => {
-                let songs_found = resp
-                    .data
-                    .as_ref()
-                    .and_then(|d| d.get("songs_found"))
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
-                let progress = LibraryScanProgress {
-                    status: ScanStatus::Complete,
-                    folders_scanned: 0,
-                    songs_found,
-                    errors: Vec::new(),
-                    percent: 100,
-                };
-                if let Some(eb) = self.emit() {
-                    eb.emit_scan_progress(progress.clone());
-                }
-                Ok(progress)
+        // Scan each folder individually and emit progress events
+        let backend = self.require_backend()?;
+        let folders = backend.library.folder_list.clone();
+        let total = folders.len() as u32;
+        let mut total_songs: u32 = 0;
+        let mut errors: Vec<String> = Vec::new();
+
+        for (i, folder) in folders.iter().enumerate() {
+            if let Some(eb) = self.emit() {
+                eb.emit_scan_progress(LibraryScanProgress {
+                    status: ScanStatus::Scanning,
+                    folders_scanned: i as u32,
+                    songs_found: total_songs,
+                    errors: errors.clone(),
+                    percent: if total > 0 { ((i as f64 / total as f64) * 100.0) as u8 } else { 0 },
+                });
             }
-            "error" => Err(EngineError::Internal {
-                message: resp.message.unwrap_or_default(),
-            }),
-            _ => Err(EngineError::Internal {
-                message: "Unexpected response status".to_string(),
-            }),
+            // Perform scan via backend command
+            let resp = self.cmd("scan_library", serde_json::json!({"folder": folder}));
+            match resp {
+                Ok(r) if r.status == "ok" => {
+                    let found = r.data
+                        .as_ref()
+                        .and_then(|d| d.get("songs_found"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32;
+                    total_songs += found;
+                }
+                Ok(r) => {
+                    errors.push(format!("Folder '{}': {}", folder, r.message.unwrap_or_default()));
+                }
+                Err(e) => {
+                    errors.push(format!("Folder '{}': {}", folder, e));
+                }
+            }
         }
+
+        if let Some(eb) = self.emit() {
+            eb.emit_scan_progress(LibraryScanProgress {
+                status: ScanStatus::Complete,
+                folders_scanned: total,
+                songs_found: total_songs,
+                errors: errors.clone(),
+                percent: 100,
+            });
+        }
+
+        Ok(LibraryScanProgress {
+            status: ScanStatus::Complete,
+            folders_scanned: total,
+            songs_found: total_songs,
+            errors,
+            percent: 100,
+        })
     }
 
     fn add_library_folder(&mut self, path: &str) -> Result<(), EngineError> {

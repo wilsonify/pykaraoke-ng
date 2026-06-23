@@ -165,8 +165,12 @@ impl Player {
     pub fn get_pos(&self, current_time_ms: u64) -> u64 {
         match self.state {
             PlayerState::Playing => {
-                current_time_ms.saturating_sub(self.timing.play_start_time)
-                    + self.timing.sync_delay_ms as u64
+                let base = current_time_ms.saturating_sub(self.timing.play_start_time);
+                if self.timing.sync_delay_ms >= 0 {
+                    base.saturating_add(self.timing.sync_delay_ms as u64)
+                } else {
+                    base.saturating_sub((-self.timing.sync_delay_ms) as u64)
+                }
             }
             _ => self.timing.play_time,
         }

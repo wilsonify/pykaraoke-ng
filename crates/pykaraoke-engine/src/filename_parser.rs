@@ -129,9 +129,9 @@ impl FilenameParser {
     pub fn parse_zip_path(&self, zip_stored_name: &str) -> ParsedSong {
         let mut result = self.parse(zip_stored_name);
 
-        if result.artist.is_empty() {
+        if result.artist.is_empty() && !zip_stored_name.is_empty() {
             let normalized = zip_stored_name.replace('\\', "/");
-            let components: Vec<&str> = normalized.split('/').collect();
+            let components: Vec<&str> = normalized.split('/').filter(|s| !s.is_empty()).collect();
             if components.len() >= 2 {
                 let artist = components[components.len() - 2].trim();
                 if !artist.is_empty() {
@@ -566,5 +566,65 @@ mod tests {
         assert!(!is_abbreviation_part("abcd"));
         assert!(!is_abbreviation_part("AbC"));
         assert!(!is_abbreviation_part("123"));
+    }
+
+    // ── ZIP path edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn test_zip_path_empty() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("");
+        assert_eq!(result.artist, "");
+        assert_eq!(result.title, "");
+    }
+
+    #[test]
+    fn test_zip_path_single_component() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("file.kar");
+        assert_eq!(result.artist, "");
+        assert_eq!(result.title, "file");
+    }
+
+    #[test]
+    fn test_zip_path_malformed_backslashes() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("Music\\Artist\\Title.cdg");
+        assert_eq!(result.artist, "Artist");
+        assert_eq!(result.title, "Title");
+    }
+
+    #[test]
+    fn test_zip_path_no_extension() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("Artist/SongTitle");
+        assert_eq!(result.artist, "Artist");
+        assert_eq!(result.title, "SongTitle");
+    }
+
+    #[test]
+    fn test_zip_path_leading_slash() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("/Artist/Song.kar");
+        assert_eq!(result.artist, "Artist");
+        assert_eq!(result.title, "Song");
+    }
+
+    #[test]
+    fn test_zip_path_trailing_slash() {
+        let result = parser(FileNameType::ArtistTitle).parse_zip_path("Artist/");
+        assert_eq!(result.artist, "");
+        assert_eq!(result.title, "Artist");
+    }
+
+    #[test]
+    fn test_zip_path_deep_nested() {
+        let result = parser(FileNameType::ArtistTitle)
+            .parse_zip_path("Language/Genre/Artist Name/Song Title.kar");
+        assert_eq!(result.artist, "Artist Name");
+        assert_eq!(result.title, "Song Title");
+    }
+
+    #[test]
+    fn test_zip_path_artist_already_parsed() {
+        let result = parser(FileNameType::ArtistTitle)
+            .parse_zip_path("SomeDir/Artist - Title.cdg");
+        assert_eq!(result.artist, "Artist");
+        assert_eq!(result.title, "Title");
     }
 }

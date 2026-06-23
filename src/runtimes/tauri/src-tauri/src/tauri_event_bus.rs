@@ -50,4 +50,19 @@ impl EventBus for TauriEventBus {
     }
 }
 
+/// No-op event bus for use in tests and headless contexts.
+pub struct NoopEventBus;
+
+impl EventBus for NoopEventBus {
+    fn emit_playback_changed(&self, _: PlaybackState) {}
+    fn emit_song_finished(&self, _: SongFinishedEvent) {}
+    fn emit_queue_changed(&self, _: QueueView) {}
+    fn emit_library_changed(&self, _: LibraryView) {}
+    fn emit_settings_changed(&self, _: SettingsView) {}
+    fn emit_scan_progress(&self, _: LibraryScanProgress) {}
+    fn emit_error(&self, _: EngineErrorInfo) {}
+    fn emit_cdg_frame(&self, _: CdgFrameView) {}
+    fn emit_lyrics_changed(&self, _: LyricsView) {}
+}
+
 
