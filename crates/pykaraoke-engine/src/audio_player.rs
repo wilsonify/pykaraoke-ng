@@ -1,4 +1,4 @@
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{Decoder, OutputStream, Sink, Source};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -8,6 +8,7 @@ use std::time::Instant;
 /// but in practice sending is safe because we only access it via `&mut self` (exclusive
 /// access) and it's never moved while being used. `EngineImpl` holds this behind a `Mutex`
 /// in Tauri, so single-threaded access is guaranteed.
+#[allow(dead_code)]
 struct SendOutputStream(OutputStream);
 unsafe impl Send for SendOutputStream {}
 
@@ -28,7 +29,6 @@ pub enum AudioError {
 pub struct AudioPlayer {
     sink: Option<Sink>,
     _stream: Option<SendOutputStream>,
-    _stream_handle: Option<OutputStreamHandle>,
     filepath: Option<PathBuf>,
     duration_ms: u64,
     state: AudioState,
@@ -47,7 +47,6 @@ impl AudioPlayer {
         Ok(Self {
             sink: Some(sink),
             _stream: Some(SendOutputStream(stream)),
-            _stream_handle: Some(stream_handle),
             filepath: None,
             duration_ms: 0,
             state: AudioState::Stopped,
@@ -232,4 +231,160 @@ pub fn find_companion_audio(filepath: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    // ── find_companion_audio ──────────────────────────────────────────
+
+    #[test]
+    fn test_companion_none_when_no_audio_file() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_none");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cdg = dir.join("song.cdg");
+        fs::write(&cdg, b"").unwrap();
+        assert!(find_companion_audio(&cdg).is_none());
+    }
+
+    #[test]
+    fn test_companion_finds_mp3() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_mp3");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cdg = dir.join("song.cdg");
+        let mp3 = dir.join("song.mp3");
+        fs::write(&cdg, b"").unwrap();
+        fs::write(&mp3, b"").unwrap();
+        let found = find_companion_audio(&cdg);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), mp3);
+    }
+
+    #[test]
+    fn test_companion_prefers_mp3_over_ogg() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_order");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cdg = dir.join("song.cdg");
+        fs::write(&cdg, b"").unwrap();
+        fs::write(dir.join("song.ogg"), b"").unwrap();
+        fs::write(dir.join("song.mp3"), b"").unwrap();
+        // Should return mp3 (first match)
+        let found = find_companion_audio(&cdg);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().extension().unwrap(), "mp3");
+    }
+
+    #[test]
+    fn test_companion_finds_wav() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_wav");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let cdg = dir.join("song.cdg");
+        let wav = dir.join("song.wav");
+        fs::write(&cdg, b"").unwrap();
+        fs::write(&wav, b"").unwrap();
+        let found = find_companion_audio(&cdg);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), wav);
+    }
+
+    #[test]
+    fn test_companion_works_with_kar() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_kar");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let kar = dir.join("song.kar");
+        let mp3 = dir.join("song.mp3");
+        fs::write(&kar, b"").unwrap();
+        fs::write(&mp3, b"").unwrap();
+        let found = find_companion_audio(&kar);
+        assert_eq!(found, Some(mp3));
+    }
+
+    #[test]
+    fn test_companion_returns_none_for_nonexistent_stem() {
+        let dir = std::env::temp_dir().join("pykaraoke_test_companion_nostem");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        // File with no stem (e.g. just ".cdg")
+        let no_stem = dir.join(".cdg");
+        fs::write(&no_stem, b"").unwrap();
+        assert!(find_companion_audio(&no_stem).is_none());
+    }
+
+    // ── AudioPlayer state machine (no audio device needed) ─────────────
+
+    /// Creates an AudioPlayer wrapped in an Option for tests where
+    /// audio hardware may not be available.
+    fn try_create_player() -> Option<AudioPlayer> {
+        AudioPlayer::new().ok()
+    }
+
+    #[test]
+    fn test_initial_state() {
+        if let Some(player) = try_create_player() {
+            assert!(!player.is_playing());
+            assert!(!player.is_paused());
+            assert!(!player.has_audio());
+            assert_eq!(player.position_ms(), 0);
+            assert_eq!(player.duration_ms(), 0);
+            assert!((player.volume() - 0.8).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_play_pause_resume_state_transitions() {
+        if let Some(mut player) = try_create_player() {
+            // Cannot test load/play with real files, but can verify
+            // the no-op paths don't panic.
+            player.pause();   // no-op when stopped
+            assert!(!player.is_paused());
+            player.resume();  // no-op when stopped
+            assert!(!player.is_playing());
+            player.stop();    // no-op when stopped
+            assert!(!player.is_playing());
+
+            // seek on unloaded player = no-op
+            player.seek(5000);
+            assert_eq!(player.position_ms(), 0);
+        }
+    }
+
+    #[test]
+    fn test_volume_clamping() {
+        if let Some(mut player) = try_create_player() {
+            player.set_volume(1.5);
+            assert!((player.volume() - 1.0).abs() < 0.001);
+            player.set_volume(-0.5);
+            assert!((player.volume() - 0.0).abs() < 0.001);
+            player.set_volume(0.5);
+            assert!((player.volume() - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_load_nonexistent_file_returns_error() {
+        if let Some(mut player) = try_create_player() {
+            let result = player.load(&Path::new("/nonexistent/file.mp3"));
+            assert!(result.is_err());
+            match result.unwrap_err() {
+                AudioError::LoadError(msg) => {
+                    assert!(msg.contains("Cannot open"));
+                }
+                _ => panic!("Expected LoadError"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_finished_returns_false_when_stopped() {
+        if let Some(player) = try_create_player() {
+            assert!(!player.is_finished());
+        }
+    }
 }

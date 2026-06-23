@@ -931,13 +931,6 @@ mod tests {
             }
         }
 
-        fn cdg_frame_received(&self) -> bool {
-            self.cdg_frame.lock().unwrap().is_some()
-        }
-
-        fn lyrics_received(&self) -> bool {
-            self.lyrics_changed.lock().unwrap().is_some()
-        }
     }
 
     impl EventBus for MockEventBus {

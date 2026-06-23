@@ -1238,3 +1238,95 @@ describe("New architecture: response data shapes", () => {
     assert.equal(progress.songsFound, 150);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CDG display & lyrics rendering
+// ---------------------------------------------------------------------------
+
+describe("CDG display rendering", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("registers listener for engine:cdg_frame event", () => {
+    assert.ok(
+      appJsSource.includes("engine:cdg_frame"),
+      "app.js should listen for engine:cdg_frame events"
+    );
+  });
+
+  it("defines a renderCdgFrame method", () => {
+    assert.ok(
+      appJsSource.includes("renderCdgFrame(frame)"),
+      "app.js should define renderCdgFrame method"
+    );
+  });
+
+  it("defines a clearCdgDisplay method", () => {
+    assert.ok(
+      appJsSource.includes("clearCdgDisplay()"),
+      "app.js should define clearCdgDisplay method"
+    );
+  });
+
+  it("uses canvas getContext('2d') for CDG drawing", () => {
+    assert.ok(
+      appJsSource.includes("getContext('2d')"),
+      "renderCdgFrame should use 2d canvas context"
+    );
+  });
+
+  it("uses putImageData to render CDG pixels", () => {
+    assert.ok(
+      appJsSource.includes("putImageData"),
+      "renderCdgFrame should use putImageData"
+    );
+  });
+});
+
+describe("Lyrics display rendering", () => {
+  const appJsSource = fs.readFileSync(
+    path.join(__dirname, "app.js"),
+    "utf-8"
+  );
+
+  it("registers listener for engine:lyrics_changed event", () => {
+    assert.ok(
+      appJsSource.includes("engine:lyrics_changed"),
+      "app.js should listen for engine:lyrics_changed events"
+    );
+  });
+
+  it("defines a renderLyrics method", () => {
+    assert.ok(
+      appJsSource.includes("renderLyrics(lyricsView)"),
+      "app.js should define renderLyrics method"
+    );
+  });
+
+  it("displays currentLine and nextLine", () => {
+    assert.ok(
+      appJsSource.includes("currentLine"),
+      "renderLyrics should reference currentLine"
+    );
+    assert.ok(
+      appJsSource.includes("nextLine"),
+      "renderLyrics should reference nextLine"
+    );
+  });
+
+  it("uses escapeHtml to prevent XSS", () => {
+    assert.ok(
+      appJsSource.includes("escapeHtml"),
+      "app.js should define escapeHtml for safe rendering"
+    );
+  });
+
+  it("defines clearCdgDisplay for stop/playback-changed", () => {
+    assert.ok(
+      appJsSource.includes("clearCdgDisplay()"),
+      "app.js should clear CDG display on playback stopped"
+    );
+  });
+});
