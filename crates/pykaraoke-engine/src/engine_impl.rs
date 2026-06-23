@@ -1,4 +1,5 @@
 use crate::audio_player::{find_companion_audio, AudioPlayer};
+use crate::midi_player::MidiPlayer;
 use crate::backend::{Backend, CommandRequest, CommandResponse};
 use crate::database::Persistence;
 use crate::engine::{Engine, EngineError, EngineStatus};
@@ -77,6 +78,7 @@ pub struct EngineImpl {
 
     // Audio playback
     audio_player: Option<AudioPlayer>,
+    midi_player: Option<MidiPlayer>,
 
     // Playback timing
     playback_start_time: Option<Instant>,
@@ -93,6 +95,7 @@ impl EngineImpl {
             cdg_decoder: None,
             song_lyrics: None,
             audio_player: AudioPlayer::new().ok(),
+            midi_player: Some(MidiPlayer::new()),
             playback_start_time: None,
             position_offset_ms: 0,
         }
@@ -125,8 +128,11 @@ impl EngineImpl {
                     .map(|s| (s.duration_seconds * 1000.0) as u64)
                     .unwrap_or(0);
                 let audio_duration_ms = self.audio_player.as_ref().map(|p| p.duration_ms()).unwrap_or(0);
+                let midi_duration_ms = self.midi_player.as_ref().map(|p| p.duration_ms()).unwrap_or(0);
                 let duration_ms = if audio_duration_ms > 0 {
                     audio_duration_ms
+                } else if midi_duration_ms > 0 {
+                    midi_duration_ms
                 } else {
                     song_duration_ms
                 };
@@ -468,6 +474,7 @@ impl Engine for EngineImpl {
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    let is_midi = path.ends_with(".kar") || path.ends_with(".mid");
                     // Load and start audio player for companion audio
                     let companion = find_companion_audio(Path::new(path));
                     if let Some(audio_path) = companion {
@@ -476,6 +483,15 @@ impl Engine for EngineImpl {
                             player.load(&audio_path).ok();
                             player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
                             player.play();
+                        }
+                    } else if is_midi {
+                        // No companion audio — try built-in MIDI synthesis
+                        if let Some(mp) = self.midi_player.as_mut() {
+                            mp.stop();
+                            mp.load(Path::new(path)).ok();
+                            if mp.has_audio() {
+                                mp.play();
+                            }
                         }
                     }
                 }
@@ -515,11 +531,17 @@ impl Engine for EngineImpl {
                     if let Some(player) = self.audio_player.as_mut() {
                         player.pause();
                     }
+                    if let Some(mp) = self.midi_player.as_mut() {
+                        mp.pause();
+                    }
                 } else {
                     // Resuming → restart the clock from last recorded offset
                     self.playback_start_time = Some(Instant::now());
                     if let Some(player) = self.audio_player.as_mut() {
                         player.resume();
+                    }
+                    if let Some(mp) = self.midi_player.as_mut() {
+                        mp.resume();
                     }
                 }
                 let state = self.build_playback_state();
@@ -547,15 +569,23 @@ impl Engine for EngineImpl {
             return;
         }
 
-        // Check for audio completion first
-        if self.audio_player.as_ref().map(|p| p.is_finished()).unwrap_or(false) {
-            let current_ms = self.resolve_playback_position();
+        let current_ms = self.resolve_playback_position();
+
+        // Drive MIDI playback
+        if let Some(mp) = self.midi_player.as_mut() {
+            mp.tick(current_ms);
+        }
+
+        // Check for audio completion first (includes MIDI)
+        let audio_done = self.audio_player.as_ref().map(|p| p.is_finished()).unwrap_or(false);
+        let midi_has_audio = self.midi_player.as_ref().map(|p| p.has_audio()).unwrap_or(false);
+        let midi_done = midi_has_audio && self.midi_player.as_ref().map(|p| p.is_finished()).unwrap_or(false);
+        if audio_done || midi_done {
             self.advance_decoders(current_ms);
             self.finish_current_song_if_needed(current_ms);
             return;
         }
 
-        let current_ms = self.resolve_playback_position();
         self.advance_decoders(current_ms);
         if self.finish_current_song_if_needed(current_ms) {
             return;
@@ -574,6 +604,9 @@ impl Engine for EngineImpl {
                 self.clear_decoders();
                 if let Some(player) = self.audio_player.as_mut() {
                     player.stop();
+                }
+                if let Some(mp) = self.midi_player.as_mut() {
+                    mp.stop();
                 }
                 self.reset_timing();
                 let state = self.build_playback_state();
@@ -599,17 +632,28 @@ impl Engine for EngineImpl {
                 if let Some(player) = self.audio_player.as_mut() {
                     player.stop();
                 }
+                if let Some(mp) = self.midi_player.as_mut() {
+                    mp.stop();
+                }
                 let fp = self.backend.as_ref()
                     .and_then(|b| b.queue.current_song.as_ref())
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    let is_midi = path.ends_with(".kar") || path.ends_with(".mid");
                     let companion = find_companion_audio(Path::new(path));
                     if let Some(audio_path) = companion {
                         if let Some(player) = self.audio_player.as_mut() {
                             player.load(&audio_path).ok();
                             player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
                             player.play();
+                        }
+                    } else if is_midi {
+                        if let Some(mp) = self.midi_player.as_mut() {
+                            mp.load(Path::new(path)).ok();
+                            if mp.has_audio() {
+                                mp.play();
+                            }
                         }
                     }
                 }
@@ -638,17 +682,28 @@ impl Engine for EngineImpl {
                 if let Some(player) = self.audio_player.as_mut() {
                     player.stop();
                 }
+                if let Some(mp) = self.midi_player.as_mut() {
+                    mp.stop();
+                }
                 let fp = self.backend.as_ref()
                     .and_then(|b| b.queue.current_song.as_ref())
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    let is_midi = path.ends_with(".kar") || path.ends_with(".mid");
                     let companion = find_companion_audio(Path::new(path));
                     if let Some(audio_path) = companion {
                         if let Some(player) = self.audio_player.as_mut() {
                             player.load(&audio_path).ok();
                             player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
                             player.play();
+                        }
+                    } else if is_midi {
+                        if let Some(mp) = self.midi_player.as_mut() {
+                            mp.load(Path::new(path)).ok();
+                            if mp.has_audio() {
+                                mp.play();
+                            }
                         }
                     }
                 }

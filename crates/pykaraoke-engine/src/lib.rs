@@ -9,6 +9,7 @@ pub mod backend;
 pub mod format;
 
 pub mod audio_player;
+pub mod midi_player;
 pub mod views;
 pub mod engine;
 pub mod event_bus;
