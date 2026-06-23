@@ -64,6 +64,10 @@ function Invoke-CleanAll {
 }
 
 function Invoke-Install {
+    if (-not (Test-Path $MSI) -and -not (Test-Path $NSIS)) {
+        Write-Host "No installer found — building first..." -ForegroundColor Yellow
+        Invoke-Build
+    }
     if (Test-Path $MSI) {
         Write-Host "=== Installing via MSI ===" -ForegroundColor Cyan
         Start-Process -Wait -FilePath $MSI
@@ -71,13 +75,13 @@ function Invoke-Install {
         Write-Host "=== Installing via NSIS ===" -ForegroundColor Cyan
         Start-Process -Wait -FilePath $NSIS
     } else {
-        Write-Host "No installer found. Run '.\build.ps1 -Target Build' first." -ForegroundColor Red
+        Write-Host "Build completed but no installer was produced." -ForegroundColor Red
         exit 1
     }
 }
 
 function Invoke-Uninstall {
-    Write-Host "Uninstall via: Settings > Apps > PyKaraoke NG" -ForegroundColor Yellow
+    Write-Host 'Uninstall via: Settings > Apps > PyKaraoke NG' -ForegroundColor Yellow
 }
 
 function Invoke-Test {
@@ -108,13 +112,17 @@ function Invoke-Run {
 }
 
 function Invoke-Dist {
+    if (-not (Test-Path $BINARY)) {
+        Write-Host "No build artifacts found — building first..." -ForegroundColor Yellow
+        Invoke-Build
+    }
     if (Test-Path $BINARY) {
         Write-Host "=== Distribution bundles ===" -ForegroundColor Cyan
         Write-Host "  Binary: $BINARY"
         Write-Host "  MSI:    $MSI"
         Write-Host "  NSIS:   $NSIS"
     } else {
-        Write-Host "No build artifacts found. Run '.\build.ps1 -Target Build' first." -ForegroundColor Yellow
+        Write-Host "Build completed but no binary was produced." -ForegroundColor Yellow
     }
 }
 
