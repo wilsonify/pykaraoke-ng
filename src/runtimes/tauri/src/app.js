@@ -87,6 +87,14 @@ class PyKaraokeApp {
     setupEngineEventListeners() {
         var self = this;
 
+        listenEvent('engine:cdg_frame', function(event) {
+            self.renderCdgFrame(event.payload);
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
+        listenEvent('engine:lyrics_changed', function(event) {
+            self.renderLyrics(event.payload);
+        }).then(function(unlisten) { self._unlisteners.push(unlisten); });
+
         listenEvent('engine:playback_changed', function(event) {
             self.updateUIFromState(event.payload);
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
@@ -99,6 +107,7 @@ class PyKaraokeApp {
             var song = event.payload && event.payload.song;
             var name = song && (song.displayName || song.title || song.filename);
             self.updateStatus(name ? 'Finished "' + name + '"' : 'Song finished');
+            // Auto-advance: next tick will pick up the new song from the queue
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
 
         listenEvent('engine:error', function(event) {
@@ -111,6 +120,11 @@ class PyKaraokeApp {
             document.getElementById('play-btn').style.display = playing ? 'none' : 'inline-block';
             document.getElementById('pause-btn').style.display = playing ? 'inline-block' : 'none';
             self._updateTickInterval(s);
+            // Clear CDG display when stopped
+            if (!playing) {
+                self.clearCdgDisplay();
+                self.renderLyrics(null);
+            }
         }).then(function(unlisten) { self._unlisteners.push(unlisten); });
     }
 
@@ -420,6 +434,59 @@ class PyKaraokeApp {
             document.getElementById('time-current').textContent = this.fmtTime(s.positionMs || 0);
             document.getElementById('time-total').textContent = this.fmtTime(0);
         }
+    }
+
+    // ── CDG / Lyrics rendering ─────────────────────────────────────
+
+    renderCdgFrame(frame) {
+        if (!frame || !frame.pixels || !frame.pixels.length) return;
+        var canvas = document.getElementById('cdg-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        // The CdgFrameView has width=300, height=216, pixels as RGBA bytes
+        var w = frame.width || 300;
+        var h = frame.height || 216;
+        canvas.width = w;
+        canvas.height = h;
+        var imageData = ctx.createImageData(w, h);
+        var src = frame.pixels;
+        var dst = imageData.data;
+        for (var i = 0; i < src.length && i < dst.length; i++) {
+            dst[i] = src[i];
+        }
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    clearCdgDisplay() {
+        var canvas = document.getElementById('cdg-canvas');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    renderLyrics(lyricsView) {
+        var el = document.getElementById('lyrics-overlay');
+        if (!el) return;
+        if (!lyricsView || (!lyricsView.currentLine && !lyricsView.nextLine)) {
+            el.innerHTML = '';
+            return;
+        }
+        var html = '';
+        if (lyricsView.currentLine) {
+            html += '<div class="lyric-line lyric-current">' + this.escapeHtml(lyricsView.currentLine) + '</div>';
+        }
+        if (lyricsView.nextLine) {
+            html += '<div class="lyric-line lyric-future">' + this.escapeHtml(lyricsView.nextLine) + '</div>';
+        }
+        el.innerHTML = html;
+    }
+
+    escapeHtml(text) {
+        var div = document.createElement('div');
+        div.appendChild(document.createTextNode(text));
+        return div.innerHTML;
     }
 
     renderPlaylist(view) {

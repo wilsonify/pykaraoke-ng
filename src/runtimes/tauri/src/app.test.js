@@ -560,11 +560,11 @@ describe("Regression: tauri.conf.json dialog allowlist", () => {
     );
   });
 
-  it("beforeBuildCommand uses the cross-platform node staging script", () => {
+  it("beforeBuildCommand is empty (Rust native, no Python backend to stage)", () => {
     assert.equal(
-      conf.build?.beforeBuildCommand,
-      "node scripts/stage-rust-backend.js",
-      "tauri.conf.json beforeBuildCommand must use 'node scripts/stage-rust-backend.js'"
+      conf.build?.beforeBuildCommand || "",
+      "",
+      "tauri.conf.json beforeBuildCommand should be empty for native Rust app"
     );
   });
 });

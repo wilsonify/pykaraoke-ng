@@ -1,3 +1,4 @@
+use crate::audio_player::{find_companion_audio, AudioPlayer};
 use crate::backend::{Backend, CommandRequest, CommandResponse};
 use crate::database::Persistence;
 use crate::engine::{Engine, EngineError, EngineStatus};
@@ -7,7 +8,7 @@ use crate::format::kar_parser::{midi_parse_data, ParsedMidiFile};
 use crate::player::BackendState;
 use crate::views::*;
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -74,6 +75,9 @@ pub struct EngineImpl {
     cdg_decoder: Option<CdgPacketDecoder>,
     song_lyrics: Option<ParsedMidiFile>,
 
+    // Audio playback
+    audio_player: Option<AudioPlayer>,
+
     // Playback timing
     playback_start_time: Option<Instant>,
     position_offset_ms: u64,
@@ -88,6 +92,7 @@ impl EngineImpl {
             status: EngineStatus::Stopped,
             cdg_decoder: None,
             song_lyrics: None,
+            audio_player: AudioPlayer::new().ok(),
             playback_start_time: None,
             position_offset_ms: 0,
         }
@@ -115,14 +120,21 @@ impl EngineImpl {
                 let current_song = backend.queue.current_song.as_ref().map(|s| {
                     song_struct_to_view(s, song_id_for_song(s))
                 });
-                let duration_ms = current_song
+                let song_duration_ms = current_song
                     .as_ref()
                     .map(|s| (s.duration_seconds * 1000.0) as u64)
                     .unwrap_or(0);
+                let audio_duration_ms = self.audio_player.as_ref().map(|p| p.duration_ms()).unwrap_or(0);
+                let duration_ms = if audio_duration_ms > 0 {
+                    audio_duration_ms
+                } else {
+                    song_duration_ms
+                };
+                let position_ms = self.resolve_playback_position();
                 PlaybackState {
                     status: backend_state_to_playback_status(backend.state),
                     current_song,
-                    position_ms: backend.current_time_ms,
+                    position_ms,
                     duration_ms,
                     volume: backend.volume,
                 }
@@ -135,6 +147,16 @@ impl EngineImpl {
                 volume: 0.8,
             },
         }
+    }
+
+    /// Use audio player position when available, fall back to wall clock.
+    fn resolve_playback_position(&self) -> u64 {
+        if let Some(player) = self.audio_player.as_ref() {
+            if player.is_playing() || player.is_paused() {
+                return player.position_ms();
+            }
+        }
+        self.current_playback_ms()
     }
 
     fn build_queue_view(&self) -> QueueView {
@@ -346,19 +368,17 @@ impl EngineImpl {
             });
         }
 
-        let advanced = match self.backend.as_mut() {
-            Some(backend) if backend.queue.advance().is_some() => {
-                backend.state = BackendState::Playing;
-                backend.current_time_ms = 0;
-                true
+        let advanced = self.backend.as_mut().and_then(|b| {
+            if b.queue.advance().is_some() {
+                b.state = BackendState::Playing;
+                b.current_time_ms = 0;
+                Some(true)
+            } else {
+                b.state = BackendState::Stopped;
+                b.current_time_ms = 0;
+                Some(false)
             }
-            Some(backend) => {
-                backend.state = BackendState::Stopped;
-                backend.current_time_ms = 0;
-                false
-            }
-            None => false,
-        };
+        }).unwrap_or(false);
 
         self.clear_decoders();
         if advanced {
@@ -444,6 +464,16 @@ impl Engine for EngineImpl {
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    // Load and start audio player for companion audio
+                    let companion = find_companion_audio(Path::new(path));
+                    if let Some(audio_path) = companion {
+                        if let Some(player) = self.audio_player.as_mut() {
+                            player.stop();
+                            player.load(&audio_path).ok();
+                            player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
+                            player.play();
+                        }
+                    }
                 }
                 // Reset and start timing
                 self.position_offset_ms = 0;
@@ -478,9 +508,15 @@ impl Engine for EngineImpl {
                     // Pausing → record elapsed time, stop the clock
                     self.position_offset_ms = self.current_playback_ms();
                     self.playback_start_time = None;
+                    if let Some(player) = self.audio_player.as_mut() {
+                        player.pause();
+                    }
                 } else {
                     // Resuming → restart the clock from last recorded offset
                     self.playback_start_time = Some(Instant::now());
+                    if let Some(player) = self.audio_player.as_mut() {
+                        player.resume();
+                    }
                 }
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
@@ -507,7 +543,15 @@ impl Engine for EngineImpl {
             return;
         }
 
-        let current_ms = self.current_playback_ms();
+        // Check for audio completion first
+        if self.audio_player.as_ref().map(|p| p.is_finished()).unwrap_or(false) {
+            let current_ms = self.resolve_playback_position();
+            self.advance_decoders(current_ms);
+            self.finish_current_song_if_needed(current_ms);
+            return;
+        }
+
+        let current_ms = self.resolve_playback_position();
         self.advance_decoders(current_ms);
         if self.finish_current_song_if_needed(current_ms) {
             return;
@@ -524,6 +568,9 @@ impl Engine for EngineImpl {
         match resp.status.as_str() {
             "ok" => {
                 self.clear_decoders();
+                if let Some(player) = self.audio_player.as_mut() {
+                    player.stop();
+                }
                 self.reset_timing();
                 let state = self.build_playback_state();
                 if let Some(eb) = self.emit() {
@@ -545,11 +592,22 @@ impl Engine for EngineImpl {
         match resp.status.as_str() {
             "ok" => {
                 self.clear_decoders();
+                if let Some(player) = self.audio_player.as_mut() {
+                    player.stop();
+                }
                 let fp = self.backend.as_ref()
                     .and_then(|b| b.queue.current_song.as_ref())
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    let companion = find_companion_audio(Path::new(path));
+                    if let Some(audio_path) = companion {
+                        if let Some(player) = self.audio_player.as_mut() {
+                            player.load(&audio_path).ok();
+                            player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
+                            player.play();
+                        }
+                    }
                 }
                 self.position_offset_ms = 0;
                 self.playback_start_time = Some(Instant::now());
@@ -573,11 +631,22 @@ impl Engine for EngineImpl {
         match resp.status.as_str() {
             "ok" => {
                 self.clear_decoders();
+                if let Some(player) = self.audio_player.as_mut() {
+                    player.stop();
+                }
                 let fp = self.backend.as_ref()
                     .and_then(|b| b.queue.current_song.as_ref())
                     .map(|s| s.filepath.clone());
                 if let Some(ref path) = fp {
                     self.load_decoders_for_song(path);
+                    let companion = find_companion_audio(Path::new(path));
+                    if let Some(audio_path) = companion {
+                        if let Some(player) = self.audio_player.as_mut() {
+                            player.load(&audio_path).ok();
+                            player.set_volume(self.backend.as_ref().map(|b| b.volume).unwrap_or(0.8));
+                            player.play();
+                        }
+                    }
                 }
                 self.position_offset_ms = 0;
                 self.playback_start_time = Some(Instant::now());
@@ -605,6 +674,10 @@ impl Engine for EngineImpl {
                     let target_packets = (position_ms * CDG_PACKETS_PER_SECOND) / 1000;
                     decoder.seek_to_packet(target_packets as u32);
                 }
+                // Seek audio player
+                if let Some(player) = self.audio_player.as_mut() {
+                    player.seek(position_ms);
+                }
                 // Reset timing — wall clock now measures from the seeked position
                 self.position_offset_ms = position_ms;
                 self.playback_start_time = Some(Instant::now());
@@ -629,6 +702,9 @@ impl Engine for EngineImpl {
     fn set_volume(&mut self, volume: f64) -> Result<PlaybackState, EngineError> {
         let clamped = volume.clamp(0.0, 1.0);
         let _ = self.cmd("set_volume", serde_json::json!({"volume": clamped}))?;
+        if let Some(player) = self.audio_player.as_mut() {
+            player.set_volume(clamped);
+        }
         let state = self.build_playback_state();
         if let Some(eb) = self.emit() {
             eb.emit_playback_changed(state.clone());

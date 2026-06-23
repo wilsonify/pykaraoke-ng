@@ -302,6 +302,57 @@ body {
     font-size: 11px;
 }
 
+/* CDG Display */
+.cdg-display {
+    background-color: #000;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+    width: 100%;
+    aspect-ratio: 300 / 216;
+    max-height: 216px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+#cdg-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+.lyrics-overlay {
+    position: absolute;
+    bottom: 20px;
+    left: 10%;
+    right: 10%;
+    text-align: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 2px 2px 2px #000, -1px -1px 1px #000, 1px -1px 1px #000, -1px 1px 1px #000;
+    pointer-events: none;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+
+.lyric-line {
+    margin: 4px 0;
+    font-size: 18px;
+}
+
+.lyric-past {
+    color: #ff6b6b;
+}
+
+.lyric-current {
+    color: #ffffff;
+}
+
+.lyric-future {
+    color: #888888;
+}
+
 /* Player Section — compact */
 .player-section {
     padding: var(--spacing-md);
