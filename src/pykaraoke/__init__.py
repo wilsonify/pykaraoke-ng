@@ -1,10 +1,8 @@
 """
-PyKaraoke-NG: A modern karaoke player application.
+PyKaraoke-NG: a karaoke engine that runs in the browser (Pyodide) and on CPython.
 
-This package provides the core functionality for playing various karaoke
-formats including CD+G, MIDI/KAR, and MPEG.
-
-For the GUI, use the Tauri application in src/runtimes/tauri/
+Pure-stdlib modules only — no pygame, no numpy, no mutagen — so the same
+code powers the desktop UI (via PyScript) and the Python test suite.
 """
 
-__version__ = "0.7.5"
+__version__ = "0.8.0"

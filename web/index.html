@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PyKaraoke NG</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="/_assets/pyscript/core.css" />
+  <script type="module" src="/_assets/pyscript/core.js"></script>
+</head>
+<body>
+  <py-config>
+    interpreter = "/_assets/pyodide/pyodide.mjs"
+    packages = ["/_wheel/pykaraoke_ng-0.8.0-py3-none-any.whl"]
+    terminal = false
+  </py-config>
+
+  <div id="app">
+    <!-- Fixed top: search + library -->
+    <header class="app-header">
+      <span class="app-title">🎤 PyKaraoke NG</span>
+      <div class="header-actions">
+        <button id="add-folder-btn" class="btn btn-primary btn-sm" title="Add a songs folder">＋ Folder</button>
+        <button id="settings-btn" class="btn btn-icon" title="Settings">⚙️</button>
+      </div>
+    </header>
+
+    <main class="main-column">
+
+      <!-- Library / scan -->
+      <details id="library-filters" class="filters">
+        <summary>Library</summary>
+        <div class="filter-row">
+          <button id="scan-library-btn" class="btn btn-secondary btn-sm">Rescan folders</button>
+          <span id="library-count" class="muted"></span>
+        </div>
+      </details>
+
+      <!-- Search -->
+      <section class="search-section">
+        <div class="search-box">
+          <input type="text" id="search-input" placeholder="Search songs…  ( / to focus, Esc to clear )" autocomplete="off" />
+        </div>
+        <div class="filter-row">
+          <label class="kind-filter"><input type="checkbox" id="filter-cdg" checked /> CDG</label>
+          <label class="kind-filter"><input type="checkbox" id="filter-kar" checked /> KAR/MID</label>
+          <label class="kind-filter"><input type="checkbox" id="filter-mpg" checked /> MPG</label>
+          <label class="kind-filter"><input type="checkbox" id="filter-lrc" checked /> LRC</label>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="results-section">
+        <div class="section-label">Results</div>
+        <div id="results-list" class="song-list" role="listbox" aria-label="Search results"></div>
+      </section>
+
+      <!-- Now playing / stage -->
+      <section class="player-section">
+        <div class="section-label">Now Playing</div>
+        <div id="stage" class="stage">
+          <canvas id="cdg-canvas" width="576" height="384"></canvas>
+          <div id="lyrics" class="lyrics"></div>
+          <div id="video-slot"></div>
+          <div id="stage-empty" class="stage-empty">No song loaded</div>
+        </div>
+        <div class="now-playing-info">
+          <div id="current-song-title" class="song-title">—</div>
+          <div id="current-song-artist" class="song-artist muted"></div>
+        </div>
+        <div class="player-controls">
+          <button id="prev-btn" class="btn-control" title="Previous (Ctrl+↑)">⏮</button>
+          <button id="rewind-btn" class="btn-control" title="Rewind 5s">⏪</button>
+          <button id="play-btn" class="btn-control btn-play" title="Play / Pause (Space)">▶</button>
+          <button id="stop-btn" class="btn-control" title="Stop">⏹</button>
+          <button id="ff-btn" class="btn-control" title="Forward 5s">⏩</button>
+          <button id="next-btn" class="btn-control" title="Next (Ctrl+→)">⏭</button>
+        </div>
+        <div class="progress-row">
+          <input type="range" id="progress-slider" min="0" max="1000" value="0" step="1" />
+          <span class="time-display"><span id="time-current">0:00</span> / <span id="time-total">0:00</span></span>
+        </div>
+        <div class="volume-row">
+          <span title="Volume">🔊</span>
+          <input type="range" id="volume-slider" min="0" max="100" value="75" />
+          <span id="volume-value" class="muted">75%</span>
+        </div>
+      </section>
+
+      <!-- Queue -->
+      <section class="queue-section">
+        <div class="section-header">
+          <span class="section-label">Queue</span>
+          <button id="clear-queue-btn" class="btn btn-secondary btn-sm">Clear</button>
+        </div>
+        <div id="queue-list" class="song-list" role="list" aria-label="Queue"></div>
+      </section>
+    </main>
+
+    <!-- Fixed bottom: status -->
+    <footer class="status-bar">
+      <span id="status-message">Loading engine…</span>
+      <span id="engine-status" class="muted">PyScript: connecting</span>
+    </footer>
+  </div>
+
+  <!-- Settings (inline collapsible, no modal per UX spec) -->
+  <div id="settings-panel" class="settings-panel" hidden>
+    <div class="settings-row">
+      <label for="setting-sort">Sort library by</label>
+      <select id="setting-sort">
+        <option value="filename">Filename</option>
+        <option value="title">Title</option>
+        <option value="artist">Artist</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <label for="setting-zoom">CDG zoom</label>
+      <select id="setting-zoom">
+        <option value="quick">Quick (0.75×)</option>
+        <option value="int">Normal (1×)</option>
+        <option value="full">Large (1.5×)</option>
+        <option value="soft">Full (2×)</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <label for="setting-zips">Look inside .zip files</label>
+      <input type="checkbox" id="setting-zips" checked />
+    </div>
+    <div class="settings-row">
+      <label for="setting-exclude">Hide songs without artist</label>
+      <input type="checkbox" id="setting-exclude" />
+    </div>
+    <div class="settings-row">
+      <label for="setting-derive">Derive song info from filename</label>
+      <input type="checkbox" id="setting-derive" checked />
+    </div>
+  </div>
+
+  <input type="file" id="folder-picker" webkitdirectory multiple hidden />
+
+  <script type="py" src="bridge.py"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

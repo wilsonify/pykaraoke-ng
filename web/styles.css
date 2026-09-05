@@ -1,0 +1,251 @@
+/* PyKaraoke NG — slim sidebar DJ panel (see specs/ux-design.md). */
+
+:root {
+  --bg: #14151a;
+  --bg-elevated: #1c1e25;
+  --bg-input: #101116;
+  --border: #2c2f3a;
+  --text: #e8e9ed;
+  --text-dim: #9aa0ae;
+  --accent: #e8b64c;
+  --accent-strong: #ffd173;
+  --danger: #e06c75;
+  --ok: #7ec699;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: 450px;
+  margin: 0 auto;
+}
+
+/* ── Fixed top ─────────────────────────────────────────────────────── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.app-title { font-weight: 600; font-size: 14px; }
+.header-actions { display: flex; gap: 6px; align-items: center; }
+
+/* ── Scrollable middle ─────────────────────────────────────────────── */
+.main-column {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  min-height: 0;
+}
+
+.filters {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+}
+.filters summary { cursor: pointer; color: var(--text-dim); font-weight: 600; }
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.kind-filter { display: inline-flex; gap: 4px; align-items: center; color: var(--text-dim); }
+
+.search-box input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  outline: none;
+}
+.search-box input:focus { border-color: var(--accent); }
+
+/* ── Song lists ────────────────────────────────────────────────────── */
+.section-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.section-header { display: flex; justify-content: space-between; align-items: center; }
+
+.song-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.no-results { color: var(--text-dim); padding: 8px 4px; font-style: italic; }
+
+.song-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.song-row:hover { background: var(--bg-elevated); }
+.song-row.selected { background: var(--bg-elevated); border-color: var(--accent); }
+
+.song-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.song-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-row-file { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.results-section, .queue-section, .player-section { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Badges ────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  flex: none;
+}
+.badge-cdg { color: var(--ok); border-color: var(--ok); }
+.badge-kar { color: var(--accent); border-color: var(--accent); }
+.badge-mpg { color: #6cb6ff; border-color: #6cb6ff; }
+
+/* ── Stage ─────────────────────────────────────────────────────────── */
+.stage {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  padding: 8px;
+  position: relative;
+}
+#cdg-canvas {
+  image-rendering: pixelated;
+  max-width: 100%;
+  background: #000;
+}
+.stage-empty { color: var(--text-dim); font-style: italic; }
+#video-slot video { display: block; border-radius: 4px; }
+.lyrics {
+  margin-top: 8px;
+  width: 100%;
+  text-align: center;
+}
+.lyric-line {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dim);
+  min-height: 1.3em;
+}
+.lyric-line.lyric-next { color: #5a5f6e; font-size: 14px; }
+.lyric-syl.lit { color: var(--accent-strong); }
+
+/* ── Player controls ───────────────────────────────────────────────── */
+.now-playing-info { margin-top: 6px; }
+.song-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-artist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.player-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+.btn-control {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.btn-control:hover { border-color: var(--accent); }
+.btn-play { background: var(--accent); color: #1a1408; border-color: var(--accent); }
+
+.progress-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+#progress-slider, #volume-slider { flex: 1; accent-color: var(--accent); }
+.time-display { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.volume-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.btn {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: #1a1408; border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: var(--accent-strong); }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.btn-icon { padding: 2px 6px; font-size: 12px; background: transparent; }
+
+/* ── Status bar ────────────────────────────────────────────────────── */
+.status-bar {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ── Settings panel (inline, no modal) ─────────────────────────────── */
+.settings-panel {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.settings-row select {
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+}
+
+.muted { color: var(--text-dim); }

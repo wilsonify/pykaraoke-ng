@@ -1,0 +1,14 @@
+{
+  "name": "pykaraoke-web-tests",
+  "private": true,
+  "version": "0.8.0",
+  "description": "Unit tests for the PyKaraoke NG web UI logic (vitest)",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}
