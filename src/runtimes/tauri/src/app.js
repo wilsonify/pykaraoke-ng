@@ -1,16 +1,11 @@
 // PyKaraoke NG – Tauri Frontend
 // Talks to Rust commands via Tauri invoke().
 
-// Keep a defensive fallback for environments where Tauri globals are absent.
 let invoke = async function(command, payload) {
     return { command: command, payload: payload || {} };
 };
-let listen = async function() {
-    return function() {};
-};
-let dialogOpen = async function() {
-    return null;
-};
+let listen = async function() { return function() {}; };
+let dialogOpen = async function() { return null; };
 
 try {
     if (globalThis.__TAURI__?.tauri?.invoke) {
@@ -23,8 +18,8 @@ try {
         dialogOpen = globalThis.__TAURI__.dialog.open;
     }
 } catch (err) {
-    // Browser mode: keep fallback functions.
     console.warn('Tauri API not available, using fallback mode:', err);
+    listen = async function() { return function() {}; };
     dialogOpen = async function() { return null; };
 }
 
@@ -34,6 +29,8 @@ class PyKaraokeApp {
         this.lastBackendCheckAt = 0;
         this.backendStartRetries = 0;
         this.maxBackendRetries = 3;
+        this.backendRunning = false;
+        this.currentState = null;
     }
 
     async init() {
@@ -42,43 +39,28 @@ class PyKaraokeApp {
         this.startStatePolling();
     }
 
-    // ── Backend communication ────────────────────────────────────────────
-
     errorMessage(err) {
         if (!err) return 'Unknown error';
         if (typeof err === 'string') return err;
         if (typeof err.message === 'string' && err.message.length > 0) return err.message;
-        try {
-            return JSON.stringify(err);
-        } catch (e) {
-            console.error('Failed to stringify error:', e);
-            return String(err);
-        }
+        try { return JSON.stringify(err); } catch (e) { return String(err); }
     }
 
     async sendCommand(action, params) {
         if (!globalThis.__TAURI__?.tauri?.invoke) {
             throw new Error('Tauri bridge unavailable');
         }
-
-        return invoke('send_command', {
-            action: action,
-            params: params || {},
-        });
+        return invoke('send_command', { action: action, params: params || {} });
     }
 
     async ensureBackendStarted() {
         try {
             this.updateStatus('Starting backend...');
             await invoke('start_backend');
-
-            // Validate round-trip so we know command pipe is alive.
             const r = await this.sendCommand('get_state');
             if (r?.status !== 'ok') {
-                const msg = (r?.message) ? r.message : 'Unknown backend error';
-                throw new Error(msg);
+                throw new Error(r?.message || 'Unknown backend error');
             }
-
             this.backendRunning = true;
             this.backendStartRetries = 0;
             this.updateBackendStatus(true);
@@ -87,10 +69,8 @@ class PyKaraokeApp {
             console.error('Backend startup failed:', e);
             this.backendStartRetries++;
             if (this.backendStartRetries >= this.maxBackendRetries) {
-                this.updateStatus(
-                    'Backend failed after ' + this.maxBackendRetries + ' attempts. '
-                    + 'Please check your installation and restart the application.'
-                );
+                this.updateStatus('Backend failed after ' + this.maxBackendRetries
+                    + ' attempts. Please check your installation and restart.');
                 this.backendRunning = false;
                 this.updateBackendStatus(false);
                 return;
@@ -105,9 +85,7 @@ class PyKaraokeApp {
     startStatePolling() {
         setInterval(async () => {
             if (!this.backendRunning) {
-                if (this.backendStartRetries >= this.maxBackendRetries) {
-                    return; // stop retrying after max attempts
-                }
+                if (this.backendStartRetries >= this.maxBackendRetries) return;
                 const now = Date.now();
                 if (now - this.lastBackendCheckAt > 3000) {
                     this.lastBackendCheckAt = now;
@@ -115,7 +93,6 @@ class PyKaraokeApp {
                 }
                 return;
             }
-
             try {
                 let r = await this.sendCommand('get_state');
                 if (r.status === 'ok' && r.data) {
@@ -131,8 +108,6 @@ class PyKaraokeApp {
             }
         }, 1000);
     }
-
-    // ── Event listeners ──────────────────────────────────────────────────
 
     setupEventListeners() {
         function $(id) { return document.getElementById(id); }
@@ -169,7 +144,6 @@ class PyKaraokeApp {
             } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
         });
 
-        // Fast-forward / Rewind: single-click step + hold for continuous seeking
         this._setupSeekButton('ff-btn', 'fast_forward', 10);
         this._setupSeekButton('rewind-btn', 'rewind', 10);
 
@@ -241,7 +215,6 @@ class PyKaraokeApp {
 
         $('clear-playlist-btn').addEventListener('click', function() { self.sendCommand('clear_playlist'); });
 
-        // ── Queue drop-target: accept songs dragged from search results ──
         var playlist = $('playlist');
         playlist.addEventListener('dragover', function(e) {
             e.preventDefault();
@@ -256,22 +229,17 @@ class PyKaraokeApp {
             playlist.classList.remove('drag-over');
             var raw = e.dataTransfer.getData('application/x-pykaraoke-song');
             if (!raw) {
-                console.error('[PyKaraoke] drop: no song data in transfer');
                 self.updateStatus('Drop failed: no song data');
                 return;
             }
             try {
                 var song = JSON.parse(raw);
-                console.debug('[PyKaraoke] drop: received', song.filepath);
                 self.enqueueSong(song);
             } catch (err) {
-                console.error('[PyKaraoke] drop: invalid song data', err);
                 self.updateStatus('Drop failed: invalid data');
             }
         });
     }
-
-    // ── Command handlers ─────────────────────────────────────────────────
 
     async handleSearch() {
         var query = document.getElementById('search-input').value;
@@ -281,7 +249,7 @@ class PyKaraokeApp {
             this.updateStatus('');
             return;
         }
-        this.updateStatus('Searching…');
+        this.updateStatus('Searching...');
         try {
             var r = await this.sendCommand('search_songs', { query: query });
             if (r.status === 'ok' && r.data) {
@@ -297,7 +265,6 @@ class PyKaraokeApp {
     async handleAddFolder() {
         var input = document.getElementById('folder-input');
         var folder = '';
-
         try {
             var selected = await dialogOpen({
                 directory: true,
@@ -307,10 +274,7 @@ class PyKaraokeApp {
             if (typeof selected === 'string') {
                 folder = selected;
             }
-        } catch (_) {
-            // Ignore picker failures and fall back to manual input.
-        }
-
+        } catch (_) {}
         if (!folder && input) {
             folder = input.value.trim();
         }
@@ -328,17 +292,16 @@ class PyKaraokeApp {
     }
 
     async handleScanLibrary() {
-        this.updateStatus('Scanning library…');
+        this.updateStatus('Scanning library...');
         try {
             var r = await this.sendCommand('scan_library');
             if (r.status === 'ok') {
                 var count = (r.data && r.data.song_count) || 0;
-                this.updateStatus('Scan complete – ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
+                this.updateStatus('Scan complete - ' + count + ' song' + (count !== 1 ? 's' : '') + ' found');
             } else {
                 this.updateStatus('Scan finished: ' + (r.message || 'no songs found'));
             }
-        }
-        catch (e) { this.updateStatus('Scan failed: ' + this.errorMessage(e)); }
+        } catch (e) { this.updateStatus('Scan failed: ' + this.errorMessage(e)); }
     }
 
     async handleShowSettings() {
@@ -377,11 +340,8 @@ class PyKaraokeApp {
         } catch (e) { this.updateStatus('Error: ' + this.errorMessage(e)); }
     }
 
-    // ── UI updates ───────────────────────────────────────────────────────
-
     updateUIFromState(s) {
         this.currentState = s;
-
         var title = 'No song loaded';
         var artist = '';
         if (s.current_song) {
@@ -401,7 +361,6 @@ class PyKaraokeApp {
             document.getElementById('time-current').textContent = this.fmtTime(s.position_ms);
             document.getElementById('time-total').textContent = this.fmtTime(s.duration_ms);
         }
-
         if (s.playlist) this.renderPlaylist(s.playlist);
     }
 
@@ -421,7 +380,7 @@ class PyKaraokeApp {
                   + '<div class="song-item-title">' + (s.title || s.filename) + '</div>'
                   + '<div class="song-item-artist">' + (s.artist || '') + '</div>'
                   + '</div>'
-                  + '<button class="song-item-remove" data-i="' + i + '" title="Remove">✕</button>'
+                  + '<button class="song-item-remove" data-i="' + i + '" title="Remove">&#10005;</button>'
                   + '</div>';
         }
         el.innerHTML = html;
@@ -463,11 +422,9 @@ class PyKaraokeApp {
             var enqueue = function() {
                 var song = self.searchResults[parseInt(item.dataset.index)];
                 if (!song || !song.filepath) {
-                    console.error('[PyKaraoke] enqueue failed: no filepath for index', item.dataset.index);
                     self.updateStatus('Error: song has no file path');
                     return;
                 }
-                console.debug('[PyKaraoke] enqueue: click/enter on', song.filepath);
                 self.enqueueSong(song);
             };
             item.addEventListener('click', function(e) {
@@ -490,39 +447,27 @@ class PyKaraokeApp {
                 enqueue();
             });
             item.addEventListener('keydown', function(e) { if (e.key === 'Enter') enqueue(); });
-            // Drag-start: attach song data for drop into queue
             item.addEventListener('dragstart', function(e) {
                 var song = self.searchResults[parseInt(item.dataset.index)];
-                console.debug('[PyKaraoke] drag-start:', song && song.filepath);
                 e.dataTransfer.setData('application/x-pykaraoke-song', JSON.stringify(song));
                 e.dataTransfer.effectAllowed = 'copy';
             });
         });
     }
 
-    /**
-     * Central enqueue function used by click, double-click, drag-drop,
-     * and keyboard handlers.  All paths converge here so logging and
-     * error handling are consistent.
-     */
     async enqueueSong(song) {
         if (!song || !song.filepath) {
-            console.error('[PyKaraoke] enqueueSong: missing song or filepath');
-            this.updateStatus('Error: cannot enqueue – no file path');
+            this.updateStatus('Error: cannot enqueue - no file path');
             return;
         }
-        console.debug('[PyKaraoke] enqueueSong:', song.filepath);
         try {
             var r = await this.sendCommand('add_to_playlist', { filepath: song.filepath });
             if (r && r.status === 'ok') {
                 this.updateStatus('Added "' + (song.title || song.filename) + '" to queue');
             } else {
-                var msg = (r && r.message) || 'Unknown error';
-                console.error('[PyKaraoke] enqueue error:', msg);
-                this.updateStatus('Failed to enqueue: ' + msg);
+                this.updateStatus('Failed to enqueue: ' + ((r && r.message) || 'Unknown error'));
             }
         } catch (e) {
-            console.error('[PyKaraoke] enqueue exception:', e);
             this.updateStatus('Failed to enqueue: ' + this.errorMessage(e));
         }
     }
@@ -553,7 +498,6 @@ class PyKaraokeApp {
         btn.addEventListener('mouseup', stopSeek);
         btn.addEventListener('mouseleave', stopSeek);
         btn.addEventListener('click', function(e) {
-            // Click is handled by mousedown; prevent double-fire
             e.preventDefault();
         });
     }
@@ -573,11 +517,8 @@ class PyKaraokeApp {
         var secs = s % 60;
         return Math.floor(s / 60) + ':' + (secs < 10 ? '0' : '') + secs;
     }
-    backendRunning = false;
-    currentState = null;
 }
 
-// Boot
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() { new PyKaraokeApp().init(); });
 } else {

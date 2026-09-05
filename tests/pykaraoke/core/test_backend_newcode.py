@@ -273,50 +273,29 @@ class TestLazyLogging:
             assert "%s" in call_args[0][0]
 
 
-# ---------- main() port parsing error path (line 769) ----------
+# ---------- main() runs in stdio mode ----------
 
 class TestMainPortParsing:
-    """Covers the invalid PYKARAOKE_API_PORT env var path in main()."""
+    """main() always runs in stdio mode for the Tauri Rust bridge."""
 
-    def test_invalid_port_env_var(self):
-        """PYKARAOKE_API_PORT='abc' → ValueError caught, uses default 8080."""
+    def test_main_starts_stdio_server(self):
+        """main() calls create_stdio_server."""
         from pykaraoke.core import backend as backend_module
 
-        with patch.dict(os.environ, {"PYKARAOKE_API_PORT": "abc"}):
-            with patch("pykaraoke.core.backend.logger") as mock_logger:
-                with patch("sys.argv", ["backend", "--mode", "stdio"]):
-                    with patch.object(backend_module, "create_stdio_server"):
-                        backend_module.main()
-                        # The warning about invalid port should have been logged
-                        mock_logger.warning.assert_any_call(
-                            "Invalid PYKARAOKE_API_PORT value, using default: %d", 8080
-                        )
+        with patch("sys.argv", ["backend"]):
+            with patch.object(backend_module, "create_stdio_server") as mock_stdio:
+                backend_module.main()
+                mock_stdio.assert_called_once()
 
     def test_valid_port_env_var(self):
-        """PYKARAOKE_API_PORT='9090' → uses 9090."""
+        """PYKARAOKE_API_PORT='9090' is accepted (ignored in stdio mode)."""
         from pykaraoke.core import backend as backend_module
 
         with patch.dict(os.environ, {"PYKARAOKE_API_PORT": "9090"}):
-            with patch("sys.argv", ["backend", "--mode", "stdio"]):
+            with patch("sys.argv", ["backend"]):
                 with patch.object(backend_module, "create_stdio_server") as mock_stdio:
                     backend_module.main()
                     mock_stdio.assert_called_once()
-
-
-class TestMainHostDefault:
-    """Covers default HTTP host hardening behavior in main()."""
-
-    def test_http_mode_default_host_localhost(self):
-        from pykaraoke.core import backend as backend_module
-
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("PYKARAOKE_API_HOST", None)
-            with patch("sys.argv", ["backend", "--http"]):
-                with patch.object(backend_module, "create_http_server") as mock_http:
-                    backend_module.main()
-                    mock_http.assert_called_once()
-                    _, kwargs = mock_http.call_args
-                    assert kwargs["host"] == "127.0.0.1"
 
 
 # ---------- _handle_update_settings persistence (Defect 6) ----------

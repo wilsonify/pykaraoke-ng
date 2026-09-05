@@ -480,11 +480,6 @@ class TestBackendMain:
 
         assert callable(create_stdio_server)
 
-    def test_create_http_server_exists(self):
-        from pykaraoke.core.backend import create_http_server
-
-        assert callable(create_http_server)
-
     def test_imports_available_flag(self):
         from pykaraoke.core import backend
 
