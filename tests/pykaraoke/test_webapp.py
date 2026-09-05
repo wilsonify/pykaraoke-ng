@@ -147,6 +147,12 @@ class TestLrc:
         assert res["meta"]["ti"] == "Inside Out"
         assert res["lyrics"][0] == {"ms": 12340, "text": "Hello world", "type": 0, "line": 0}
 
+    def test_parse_lrc_enhanced(self):
+        # Word-level timestamps pass through the bridge unchanged.
+        app = KaraokeApp()
+        res = app.parse_lrc("[00:12.00]Word <00:12.50> by\n")
+        assert [s["ms"] for s in res["lyrics"]] == [12000, 12500]
+
     def test_parse_lrc_invalid(self):
         app = KaraokeApp()
         assert "error" in app.parse_lrc("no timestamps here")

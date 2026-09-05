@@ -59,3 +59,47 @@ class TestParseLrc:
         # A second [mm:ss] tag before the text is stripped.
         parsed = parse_lrc("[00:01.00][00:02.00]  word  \n")
         assert parsed["lyrics"][0]["text"] == "word"
+
+    # ------------------------------------------------------------------
+    # Enhanced LRC: word-level <mm:ss.xx> tags
+    # ------------------------------------------------------------------
+
+    def test_word_level_timestamps(self):
+        parsed = parse_lrc("[00:12.00]Word <00:12.50> by <00:12.80> word\n")
+        assert parsed["lyrics"] == [
+            {"ms": 12000, "text": "Word", "type": 0, "line": 0},
+            {"ms": 12500, "text": "by", "type": 0, "line": 0},
+            {"ms": 12800, "text": "word", "type": 0, "line": 0},
+        ]
+
+    def test_word_tags_use_millisecond_fraction(self):
+        parsed = parse_lrc("[00:01.000]a <00:01.250> b\n")
+        assert [s["ms"] for s in parsed["lyrics"]] == [1000, 1250]
+
+    def test_consecutive_word_tags_skip_empty_text(self):
+        parsed = parse_lrc("[00:01.00]<00:01.50><00:02.00>only here\n")
+        assert parsed["lyrics"] == [
+            {"ms": 2000, "text": "only here", "type": 0, "line": 0}
+        ]
+
+    def test_repeated_line_timestamps_expand_words(self):
+        # A repeated line is emitted once per line timestamp; word tags
+        # keep their absolute times.
+        parsed = parse_lrc("[00:01.00][00:10.00]a <00:01.50> b\n")
+        assert [(s["ms"], s["text"]) for s in parsed["lyrics"]] == [
+            (1000, "a"),
+            (1500, "b"),
+            (10000, "a"),
+            (1500, "b"),
+        ]
+
+    def test_duration_includes_word_times(self):
+        parsed = parse_lrc("[00:10.00]a <00:12.00> b <00:14.00> c\n")
+        assert parsed["duration_ms"] == 14000
+
+    def test_malformed_tag_stays_literal(self):
+        # <foo> is not a valid word tag; the line falls back to line timing.
+        parsed = parse_lrc("[00:01.00]hi <foo> there\n")
+        assert parsed["lyrics"] == [
+            {"ms": 1000, "text": "hi <foo> there", "type": 0, "line": 0}
+        ]

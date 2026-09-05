@@ -4,9 +4,13 @@ Parses the LRC timed-lyrics format (also seen with the ``.lcr``
 extension): lines of ``[mm:ss.xx]text`` plus metadata tags such as
 ``[ar:artist]``, ``[ti:title]``, ``[al:album]`` and ``[length:mm:ss]``.
 
+Also supports *extended/enhanced LRC*: word-level timestamps inside a
+line, e.g. ``[00:12.00]Word <00:12.50> by <00:12.80> word`` — text before
+the first tag takes the line time, each tag times the word that follows.
+
 The output uses the same lyric shape as :mod:`pykaraoke.midi` (``ms``,
 ``text``, ``type``, ``line``) so the web UI can reuse its existing
-karaoke-style lyric renderer.
+karaoke-style lyric renderer (which highlights per-syllable).
 """
 
 from __future__ import annotations
@@ -16,8 +20,40 @@ import re
 # [mm:ss.xx] or [mm:ss.xxx] — fraction is hundredths or milliseconds.
 _LINE_RE = re.compile(r"^\[(\d{1,2}):(\d{2})\.(\d{2,3})\](.*)$")
 _META_RE = re.compile(r"^\[(ar|ti|al|length):([^\]]*)\]$", re.IGNORECASE)
+# Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
+_WORD_RE = re.compile(r"<(\d{1,2}):(\d{2})\.(\d{2,3})>")
 
 TEXT_LYRIC = 0
+
+
+def _tag_ms(minutes: str, seconds: str, frac: str) -> int:
+    """'12', '00', '50' -> 720050 ms (12:00.50)."""
+    return int(minutes) * 60_000 + int(seconds) * 1000 + _fraction_ms(frac)
+
+
+def _split_word_segments(text: str) -> list[tuple[int | None, str]]:
+    """Split *text* on ``<mm:ss.xx>`` tags into (ms, segment) pairs.
+
+    ``ms`` is None for the segment before the first tag (it inherits the
+    line time); each tag times the text that follows it.
+    """
+    segments: list[tuple[int | None, str]] = []
+    current_ms: int | None = None
+    buffer: list[str] = []
+    pos = 0
+    for match in _WORD_RE.finditer(text):
+        if text[pos : match.start()]:
+            buffer.append(text[pos : match.start()])
+        pos = match.end()
+        if buffer:
+            segments.append((current_ms, "".join(buffer)))
+            buffer = []
+        current_ms = _tag_ms(match.group(1), match.group(2), match.group(3))
+    if text[pos:]:
+        buffer.append(text[pos:])
+    if buffer:
+        segments.append((current_ms, "".join(buffer)))
+    return segments
 
 
 def _strip_bracket_tags(text: str) -> str:
@@ -95,9 +131,23 @@ def parse_lrc(text: str) -> dict | None:
 
         current_line = line_number
         line_number += 1
-        for ms in timestamps:
-            syllables.append((ms, lyric_text, current_line))
-            max_ms = max(max_ms, ms)
+
+        # Enhanced LRC: word-level <mm:ss.xx> tags inside the line text.
+        segments = _split_word_segments(lyric_text)
+        if any(seg_ms is not None for seg_ms, _seg in segments):
+            for line_ms in timestamps:
+                for seg_ms, seg_text in segments:
+                    text = seg_text.strip()
+                    if not text:
+                        continue
+                    ms = seg_ms if seg_ms is not None else line_ms
+                    syllables.append((ms, text, current_line))
+                    max_ms = max(max_ms, ms)
+        else:
+            # Simple LRC: one syllable per line timestamp.
+            for ms in timestamps:
+                syllables.append((ms, lyric_text, current_line))
+                max_ms = max(max_ms, ms)
 
     if not syllables:
         return None
