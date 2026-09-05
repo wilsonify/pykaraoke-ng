@@ -95,9 +95,33 @@ export function buildLyricLines(lyrics) {
     .map(([line, syllables]) => ({
       line,
       ms: syllables[0].ms,
-      syllables: syllables.map((s) => ({ ms: s.ms, text: s.text })),
+      // Deterministic per-line order by time so the renderer can highlight
+      // by index even when the source timestamps are out of order.
+      syllables: syllables
+        .map((s) => ({ ms: s.ms, text: s.text }))
+        .sort((a, b) => a.ms - b.ms),
     }));
   return lines;
+}
+
+/**
+ * Pure highlight state for a lyric timeline at *ms*.
+ *
+ * Returns the active line index and how many of its syllables have been
+ * sung.  Deterministic and order-independent — safe to call every frame
+ * from the playback loop and from tests with a fake clock.
+ */
+export function highlightState(lines, ms) {
+  if (!lines || !lines.length) return { lineIdx: -1, litCount: 0 };
+  let lineIdx = 0;
+  while (lineIdx < lines.length - 1 && lines[lineIdx + 1].ms <= ms) lineIdx++;
+  const line = lines[lineIdx];
+  let litCount = 0;
+  for (const syl of line.syllables) {
+    if (syl.ms <= ms) litCount++;
+    else break;
+  }
+  return { lineIdx, litCount };
 }
 
 /** MIDI note number → frequency in Hz (A4 = 69 = 440 Hz). */
@@ -572,8 +596,7 @@ if (isBrowser) {
   function updateLyrics(ms) {
     const lines = state.lyricLines;
     if (!lines || !lines.length) return;
-    let lineIdx = 0;
-    while (lineIdx < lines.length - 1 && lines[lineIdx + 1].ms <= ms) lineIdx++;
+    const { lineIdx, litCount } = highlightState(lines, ms);
     if (lineIdx !== state.lastLyricLine) {
       state.lastLyricLine = lineIdx;
       const box = $('lyrics');
@@ -592,18 +615,10 @@ if (isBrowser) {
         box.appendChild(div);
       }
     }
-    const current = lines[lineIdx];
-    for (const syl of current.syllables) {
-      if (syl.ms <= ms) {
-        const els = $('lyrics').querySelectorAll('.lyric-syl');
-        // Mark all syllables up to this one as sung.
-        let done = false;
-        for (const el of els) {
-          if (!done && Number(el.dataset.ms) <= ms) el.classList.add('lit');
-          else if (Number(el.dataset.ms) > ms) done = true;
-        }
-      }
-    }
+    // Toggle lit state per syllable, order-independent.  Syllables with
+    // ms > current are unlit, so a backward seek clears stale highlights.
+    const els = $('lyrics').querySelectorAll('.lyric-syl');
+    els.forEach((el, i) => el.classList.toggle('lit', i < litCount));
   }
 
   // ── Transport ──────────────────────────────────────────────────────
@@ -624,9 +639,13 @@ if (isBrowser) {
       }
     } catch (err) {
       console.error(err);
-      setStatus(`Playback error: ${err.message}`);
-      state.playing = false;
-      setPlaying(song);
+      // Only tear down if this song is still the current one — a rapid
+      // play-next can supersede it before its (async) setup settles.
+      if (state.current === song) {
+        setStatus(`Playback error: ${err.message}`);
+        state.playing = false;
+        setPlaying(song);
+      }
     }
   }
 
@@ -824,16 +843,17 @@ if (isBrowser) {
 
   function seekTo(ms) {
     ms = Math.max(0, ms);
-    if (state.audioEl) {
-      state.audioEl.currentTime = ms / 1000;
+    if (state.audioEl) state.audioEl.currentTime = ms / 1000;
+    if (state.cdgKey) {
       callApi('cdg_seek', state.cdgKey, ms);
       drawCdgUpdate(callApi('cdg_update', state.cdgKey, ms));
-    } else if (state.synth) {
-      state.synth.seek(ms);
-    } else if (state.videoEl) {
-      state.videoEl.currentTime = ms / 1000;
     }
+    if (state.synth) state.synth.seek(ms);
+    if (state.videoEl) state.videoEl.currentTime = ms / 1000;
     updateTransport(ms);
+    // Refresh the displayed lyric immediately (also while paused, when the
+    // animation loop is not running).
+    updateLyrics(ms);
   }
 
   function enqueue(song) {

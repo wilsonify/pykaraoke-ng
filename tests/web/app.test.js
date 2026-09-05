@@ -9,6 +9,7 @@ import {
   escapeHtml,
   findSyllableAt,
   formatTime,
+  highlightState,
   noteToFrequency,
   SongQueue,
   songLabel,
@@ -104,6 +105,17 @@ describe('buildLyricLines', () => {
     expect(lines[1].syllables.map((s) => s.text)).toEqual(['Some']);
   });
 
+  it('sorts out-of-order word timestamps within a line', () => {
+    // Enhanced-LRC word times in file order: a, c, b.
+    const lines = buildLyricLines([
+      { ms: 12000, text: 'c', type: 0, line: 0 },
+      { ms: 10000, text: 'a', type: 0, line: 0 },
+      { ms: 11000, text: 'b', type: 0, line: 0 },
+    ]);
+    expect(lines[0].syllables.map((s) => s.text)).toEqual(['a', 'b', 'c']);
+    expect(lines[0].syllables.map((s) => s.ms)).toEqual([10000, 11000, 12000]);
+  });
+
   it('handles empty input', () => {
     expect(buildLyricLines([])).toEqual([]);
     expect(buildLyricLines(null)).toEqual([]);
@@ -181,6 +193,91 @@ describe('writeTileRgba', () => {
     expect(rgba[idx + 3]).toBe(255); // alpha
     // Pixels outside the tile stay untouched.
     expect(rgba[0]).toBe(0);
+  });
+});
+
+describe('highlightState', () => {
+  const lines = buildLyricLines([
+    { ms: 1000, text: 'a', type: 0, line: 0 },
+    { ms: 1500, text: 'b', type: 0, line: 0 },
+    { ms: 2000, text: 'c', type: 0, line: 0 },
+    { ms: 5000, text: 'd', type: 0, line: 1 },
+  ]);
+
+  it('selects the active line and lit syllable count', () => {
+    expect(highlightState(lines, 0)).toEqual({ lineIdx: 0, litCount: 0 });
+    expect(highlightState(lines, 1000)).toEqual({ lineIdx: 0, litCount: 1 });
+    expect(highlightState(lines, 1499)).toEqual({ lineIdx: 0, litCount: 1 });
+    expect(highlightState(lines, 1500)).toEqual({ lineIdx: 0, litCount: 2 });
+    expect(highlightState(lines, 2000)).toEqual({ lineIdx: 0, litCount: 3 });
+    expect(highlightState(lines, 4999)).toEqual({ lineIdx: 0, litCount: 3 });
+    expect(highlightState(lines, 5000)).toEqual({ lineIdx: 1, litCount: 1 });
+  });
+
+  it('clears highlights when seeking backward', () => {
+    expect(highlightState(lines, 2000).litCount).toBe(3);
+    expect(highlightState(lines, 1000).litCount).toBe(1);
+    expect(highlightState(lines, 0).litCount).toBe(0);
+    // Backward across a line boundary.
+    expect(highlightState(lines, 5000).lineIdx).toBe(1);
+    expect(highlightState(lines, 2500).lineIdx).toBe(0);
+    expect(highlightState(lines, 2500).litCount).toBe(3);
+  });
+
+  it('handles empty input', () => {
+    expect(highlightState([], 0)).toEqual({ lineIdx: -1, litCount: 0 });
+    expect(highlightState(null, 0)).toEqual({ lineIdx: -1, litCount: 0 });
+  });
+});
+
+describe('lyric sync timeline (deterministic fake clock)', () => {
+  // A realistic enhanced-LRC timeline: three lines, words every ~250 ms.
+  const timeline = buildLyricLines([
+    { ms: 0, text: 'a', type: 0, line: 0 },
+    { ms: 250, text: 'b', type: 0, line: 0 },
+    { ms: 500, text: 'c', type: 0, line: 0 },
+    { ms: 1000, text: 'd', type: 0, line: 1 },
+    { ms: 1250, text: 'e', type: 0, line: 1 },
+    { ms: 2000, text: 'f', type: 0, line: 2 },
+  ]);
+
+  it('highlights monotonically during forward playback without drift', () => {
+    let last = { lineIdx: -1, litCount: -1 };
+    for (let ms = 0; ms <= 2500; ms += 50) {
+      const state = highlightState(timeline, ms);
+      // No backward movement in (lineIdx, litCount) while playing forward.
+      const progress = state.lineIdx * 1000 + state.litCount;
+      const lastProgress = last.lineIdx * 1000 + last.litCount;
+      expect(progress).toBeGreaterThanOrEqual(lastProgress);
+      last = state;
+    }
+  });
+
+  it('lights words exactly at their timestamp', () => {
+    expect(highlightState(timeline, 249).litCount).toBe(1); // 'a' only
+    expect(highlightState(timeline, 250).litCount).toBe(2); // 'b' starts
+  });
+
+  it('responds instantly to seeks on a fake audio clock', () => {
+    // Simulate the app reading audio.currentTime: seek 2000 -> 400 -> 1600.
+    const clock = { ms: 0 };
+    const read = () => highlightState(timeline, clock.ms);
+    clock.ms = 2000;
+    expect(read().litCount).toBe(1); // line 2, one word lit
+    clock.ms = 400;
+    expect(read().lineIdx).toBe(0);
+    expect(read().litCount).toBe(2); // 'a' + 'b' lit (b starts at 250)
+    clock.ms = 1600;
+    expect(read().lineIdx).toBe(1);
+    expect(read().litCount).toBe(2); // 'd' + 'e' lit
+  });
+
+  it('keeps state stable across pause (frozen clock)', () => {
+    const frozen = highlightState(timeline, 1300);
+    for (let i = 0; i < 10; i++) {
+      // Paused: the clock does not advance, the highlight must not either.
+      expect(highlightState(timeline, 1300)).toEqual(frozen);
+    }
   });
 });
 
