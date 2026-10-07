@@ -41,3 +41,5 @@ tauri-app/node_modules/
 *.pdf
 
 .freebuff/
+# Extracted from web/index.html by tests/web/load-app.mjs
+tests/web/.extracted/
