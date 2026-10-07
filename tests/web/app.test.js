@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
+import { loadApp } from './load-app.mjs';
+
+const {
   buildLyricLines,
   CDG_HEIGHT,
   CDG_WIDTH,
@@ -15,7 +17,7 @@ import {
   songLabel,
   writeTileRgba,
   ZOOM_SCALES,
-} from '../../web/app.js';
+} = await loadApp();
 
 describe('formatTime', () => {
   it('formats minutes and seconds', () => {
