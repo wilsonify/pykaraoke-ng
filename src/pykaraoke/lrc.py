@@ -10,6 +10,10 @@ timestamps inside a line, e.g. ``[00:12.00]Word <00:12.50> by <00:12.80>
 word`` — text before the first tag takes the line time, each tag times
 the word that follows it.
 
+Word timing can also arrive in a *companion* ``.elrc`` file next to the
+``.lrc``: entries of ``[mm:ss.xx] word`` that must be aligned with the
+lines of the LRC (see :func:`parse_elrc`).
+
 Timestamps accept ``[m:ss.xx]``/``[mm:ss.x]`` (1-2 digit minutes and
 seconds, 1-3 digit fraction).  ``[offset:]`` is a global millisecond
 adjustment applied to every timestamp: per the LRC spec a positive value
@@ -32,6 +36,8 @@ _LINE_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\](.*)$")
 _META_RE = re.compile(r"^\[([a-zA-Z][a-zA-Z0-9_-]*):([^\]]*)\]$")
 # Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
 _WORD_RE = re.compile(r"<(\d{1,2}):(\d{1,2})\.(\d{1,3})>")
+# .elrc word entry: [mm:ss.xx] text (same timestamp shape as a line tag).
+_ELRC_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\]\s*(.+)$")
 
 TEXT_LYRIC = 0
 
@@ -95,7 +101,7 @@ def _split_word_segments(text: str) -> list[tuple[int | None, str]]:
     return segments
 
 
-def _parse_offset(meta: dict[str, str]) -> int:
+def parse_offset(meta: dict[str, str]) -> int:
     """Millisecond offset from ``[offset:±ms]``; malformed values are 0."""
     raw = meta.get("offset", "")
     try:
@@ -144,7 +150,9 @@ def parse_lrc(text: str) -> dict | None:
             line_match = _LINE_RE.match(rest)
             if not line_match:
                 break
-            timestamps.append(_tag_ms(line_match.group(1), line_match.group(2), line_match.group(3)))
+            timestamps.append(
+                _tag_ms(line_match.group(1), line_match.group(2), line_match.group(3))
+            )
             rest = line_match.group(4)
 
         if not timestamps:
@@ -180,12 +188,10 @@ def parse_lrc(text: str) -> dict | None:
 
     # [offset:] shifts every timestamp; positive makes lyrics appear
     # sooner (per the LRC spec), so subtract the offset.  Never negative.
-    offset_ms = _parse_offset(meta)
+    offset_ms = parse_offset(meta)
     adjusted = syllables
     if offset_ms:
-        adjusted = [
-            (max(0, ms - offset_ms), text, line) for ms, text, line in syllables
-        ]
+        adjusted = [(max(0, ms - offset_ms), text, line) for ms, text, line in syllables]
         max_ms = max(ms for ms, _text, _line in adjusted)
 
     # [length:] is "mm:ss" or "mm:ss.xx"; fall back to the last timestamp.
@@ -211,3 +217,169 @@ def parse_lrc(text: str) -> dict | None:
         "meta": meta,
         "duration_ms": duration_ms,
     }
+
+
+# ---------------------------------------------------------------------------
+# .elrc — companion file with word-level timing
+# ---------------------------------------------------------------------------
+
+
+def _normalize_letters(text: str) -> str:
+    """Lowercase *text* keeping only alphanumerics (unicode-aware).
+
+    Matching on letters alone makes punctuation, spacing and case
+    differences between the ``.lrc`` and the ``.elrc`` irrelevant.
+    """
+    return "".join(ch.lower() for ch in text if ch.isalnum())
+
+
+def _line_groups(lyrics: list[dict]) -> list[dict]:
+    """Group *lyrics* into display lines ordered by their start time.
+
+    Each group is ``{"line", "ms", "text", "syllables"}`` where *text* is
+    the line rebuilt from its own syllables (a line stamped at several
+    times collapses to one copy, so its letters are not counted twice).
+    """
+    order: list[int] = []
+    by_line: dict[int, list[dict]] = {}
+    for syllable in lyrics:
+        key = int(syllable.get("line") or 0)
+        if key not in by_line:
+            by_line[key] = []
+            order.append(key)
+        by_line[key].append(syllable)
+
+    groups = []
+    for key in order:
+        syllables = sorted(by_line[key], key=lambda s: int(s.get("ms") or 0))
+        texts = dict.fromkeys(str(s.get("text") or "") for s in syllables)
+        groups.append(
+            {
+                "line": key,
+                "ms": int(syllables[0].get("ms") or 0),
+                "text": " ".join(t for t in texts if t),
+                "syllables": syllables,
+            }
+        )
+    groups.sort(key=lambda group: group["ms"])
+    return groups
+
+
+def _read_elrc_entries(elrc_text: str, offset_ms: int) -> list[tuple[int, str]]:
+    """All ``[mm:ss.xx] word`` entries, shifted by *offset_ms*, by time."""
+    entries: list[tuple[int, str]] = []
+    for line in str(elrc_text).lstrip("\ufeff").splitlines():
+        match = _ELRC_RE.match(line.strip())
+        if not match:
+            continue  # metadata, comments, blanks and bare timestamps
+        ms = _tag_ms(match.group(1), match.group(2), match.group(3))
+        if offset_ms:
+            ms = max(0, ms - offset_ms)
+        text = match.group(4).strip()
+        if text:
+            entries.append((ms, text))
+    entries.sort(key=lambda entry: entry[0])
+    return entries
+
+
+def _assign_entries(groups: list[dict], entries: list[tuple[int, str]]) -> dict:
+    """Bucket *entries* under the line whose start time precedes them."""
+    assigned: dict[int, list[tuple[int, str]]] = {}
+    index = 0
+    for ms, text in entries:
+        while index < len(groups) - 1 and groups[index + 1]["ms"] <= ms:
+            index += 1
+        assigned.setdefault(index, []).append((ms, text))
+    return assigned
+
+
+def _fill_missing_times(group: dict, tokens: list[str], times: list) -> list[dict]:
+    """Every token as a syllable; unmatched ones inherit a neighbour's time.
+
+    Times are forced non-decreasing so the renderer's "lit so far" walk
+    never stops early on a word stamped earlier than its predecessor.
+    """
+    words = []
+    previous = int(group["ms"])
+    for token, ms in zip(tokens, times, strict=False):
+        current = previous if ms is None else max(int(ms), previous)
+        words.append({"ms": current, "text": token, "type": TEXT_LYRIC, "line": group["line"]})
+        previous = current
+    return words
+
+
+def _match_line_words(group: dict, entries: list[tuple[int, str]]) -> tuple[list[dict], int]:
+    """Time *group*'s tokens against the .elrc *entries* assigned to it.
+
+    Walks a cursor over the line's letters: an entry counts only when its
+    letters really are the next letters of the line, which skips the line
+    header and stray entries without shifting timings onto the wrong word.
+
+    Returns ``(words, timed)``: every token of the line (so no word is
+    ever dropped from the display) and how many carry an .elrc time.
+    """
+    tokens = group["text"].split()
+    if not tokens:
+        return [], 0
+    bounds = []
+    flat = ""
+    for token in tokens:
+        letters = _normalize_letters(token)
+        bounds.append((len(flat), len(flat) + len(letters)))
+        flat += letters
+    if not flat:
+        return [], 0
+
+    times: list[int | None] = [None] * len(tokens)
+    cursor = 0
+    header_skipped = False
+    timed = 0
+    for ms, text in entries:
+        word = _normalize_letters(text)
+        if not word:
+            continue
+        if word == flat and not header_skipped:
+            header_skipped = True  # the first whole-line entry is the header
+            continue
+        if not flat.startswith(word, cursor):
+            continue  # not the letters the cursor expects: skip, don't shift
+        for idx, (start, end) in enumerate(bounds):
+            if times[idx] is None and end > cursor and start < cursor + len(word):
+                times[idx] = ms
+                timed += 1
+        cursor += len(word)
+        if cursor >= len(flat):
+            break
+
+    return _fill_missing_times(group, tokens, times), timed
+
+
+def parse_elrc(elrc_text: str, lyrics: list[dict], offset_ms: int = 0) -> list[dict] | None:
+    """Merge word-level timings from a companion ``.elrc`` into *lyrics*.
+
+    *lyrics* is the ``lyrics`` list returned by :func:`parse_lrc` and
+    *offset_ms* the ``[offset:]`` already applied to it, so .elrc
+    timestamps are shifted identically before matching.
+
+    Returns the merged syllable list — lines the .elrc could not time keep
+    their original syllables — or None when no word could be matched, in
+    which case callers keep the plain line timings.
+    """
+    if not elrc_text or not lyrics:
+        return None
+    entries = _read_elrc_entries(elrc_text, offset_ms)
+    groups = _line_groups(lyrics)
+    if not entries or not groups:
+        return None
+
+    assigned = _assign_entries(groups, entries)
+    merged: list[dict] = []
+    timed_total = 0
+    for index, group in enumerate(groups):
+        words, timed = _match_line_words(group, assigned.get(index, []))
+        if timed:
+            timed_total += timed
+            merged.extend(words)
+        else:
+            merged.extend(group["syllables"])
+    return merged if timed_total else None
