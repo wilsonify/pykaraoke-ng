@@ -38,7 +38,7 @@ src/pykaraoke/            pure-stdlib engine (runs on CPython and Pyodide)
   webapp.py               JSON-friendly API exposed to the page
   cdg.py                  CD+G packet decoding
   midi.py                 MIDI/KAR parsing
-  lrc.py                  LRC / enhanced-LRC parsing
+  lrc.py                  LRC / .elrc word-timing parsing
   database.py             library scan, search, settings
   filename_parser.py      "Artist - Title" extraction
 
