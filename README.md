@@ -18,7 +18,7 @@ WebAssembly.
 |---------------|--------------------------------|--------------------------------|
 | CD+G          | `.cdg` + `.mp3`/`.ogg`/`.wav`  | `<audio>` + canvas rendering  |
 | MIDI Karaoke  | `.kar`, `.mid`                 | WebAudio synthesizer + lyrics  |
-| LRC lyrics    | `.lrc`, `.lcr` + audio         | `<audio>` + timed lyrics; optional `.elrc` word timing |
+| LRC lyrics    | `.lrc`, `.lcr` + audio         | `<audio>` + timed lyrics; optional `.elrc` word timing, duet parts |
 | MPEG Video    | `.mpg`, `.mpeg`, `.avi`        | `<video>`                      |
 
 ## Architecture
