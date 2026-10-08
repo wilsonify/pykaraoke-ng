@@ -32,6 +32,7 @@ page — there is no backend process, service, or API server.
 |--------|-----------|-------|
 | CD+G | `.cdg` + `.mp3`/`.wav`/`.ogg` | Separate audio file required |
 | MIDI Karaoke | `.kar`, `.mid` | Built-in MIDI synthesis |
+| LRC lyrics | `.lrc`, `.lcr` + audio | Separate audio file; optional `.elrc` word timing |
 | MPEG Video | `.mpg`, `.mpeg`, `.avi` | Embedded audio track |
 
 ## Quick Start
