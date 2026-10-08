@@ -479,6 +479,31 @@ export function songLabel(song) {
 
 export const KIND_BADGE = { cdg: 'CDG', kar: 'KAR', mpg: 'MPG', lrc: 'LRC' };
 
+/** Extension of the companion file carrying word-level lyric timing. */
+export const ELRC_EXT = '.elrc';
+
+/**
+ * Lowercased basename key for a loose-file companion of *song*
+ * (e.g. `song.elrc` next to `song.lrc`), or null when unusable.
+ * Looks the key up in `state.pathByBase`.
+ */
+export function companionBaseName(song, ext) {
+  const filename = String((song && song.filename) || '');
+  const stem = filename.replace(/\.[^.]+$/, '').toLowerCase();
+  return stem ? `${stem}${ext}` : null;
+}
+
+/**
+ * Zip member name of a companion file for a song inside a zip, or null.
+ * Mirrors the `zip!member` id that readSongBytes() splits apart.
+ */
+export function companionMember(song, ext) {
+  if (!song || !song.zip_name) return null;
+  const member = String(song.id || '').split('!').slice(1).join('!');
+  if (!member) return null;
+  return member.replace(/\.[^./\\]+$/, ext);
+}
+
 /** A FIFO queue of songs with indexed removal / moves. */
 export class SongQueue {
   constructor(items = []) {
@@ -747,6 +772,47 @@ if (isBrowser) {
     return readBytes(resolveSongPath(song));
   }
 
+  /**
+   * Text of a companion file (e.g. ``.elrc``) for *song*, or null when it
+   * is missing or unreadable — a companion file is always optional.
+   */
+  async function readCompanionText(song, ext) {
+    try {
+      if (song.zip_name) {
+        const member = companionMember(song, ext);
+        if (!member) return null;
+        const bytes = callApi('read_zip_member', song.zip_name, member);
+        if (!bytes || !bytes.length) return null;
+        return decodeText(bytes);
+      }
+      const base = companionBaseName(song, ext);
+      const path = base && state.pathByBase.get(base);
+      if (!path) return null;
+      return decodeText(await readBytes(path));
+    } catch (err) {
+      console.warn(`companion ${ext} read failed`, err);
+      return null;
+    }
+  }
+
+  /** Whether a companion .elrc (word timing) file exists for *song*. */
+  function hasElrc(song) {
+    if (!song || song.kind !== 'lrc') return false;
+    if (song.zip_name) {
+      const member = companionMember(song, ELRC_EXT);
+      if (!member) return false;
+      try {
+        const names = callApi('zip_members', song.zip_name);
+        return Array.isArray(names) &&
+          names.some((name) => String(name).toLowerCase() === member.toLowerCase());
+      } catch {
+        return false; // engine not ready (or zip not loaded yet)
+      }
+    }
+    const base = companionBaseName(song, ELRC_EXT);
+    return !!(base && state.pathByBase.has(base));
+  }
+
   // ── Engine / boot ──────────────────────────────────────────────────
   function waitFor(cond, timeoutMs) {
     return new Promise((resolve) => {
@@ -903,6 +969,10 @@ if (isBrowser) {
       const badge = document.createElement('span');
       badge.className = `badge badge-${song.kind}`;
       badge.textContent = KIND_BADGE[song.kind] || song.kind;
+      if (hasElrc(song)) {
+        badge.textContent = 'ELRC';
+        badge.title = 'Word-level timing (.elrc)';
+      }
 
       const play = document.createElement('button');
       play.className = 'btn btn-icon btn-row-play';
@@ -1152,7 +1222,9 @@ if (isBrowser) {
 
   async function playLrc(song) {
     const bytes = await readSongBytes(song);
-    const parsed = callApi('parse_lrc', decodeText(bytes));
+    // Word-level timing lives in a companion .elrc next to the .lrc.
+    const elrcText = await readCompanionText(song, ELRC_EXT);
+    const parsed = callApi('parse_lrc', decodeText(bytes), elrcText);
     if (!parsed || parsed.error) throw new Error(parsed?.error || 'could not parse LRC lyrics');
     const audioPath = resolveAudioPath(song);
     if (!audioPath) throw new Error('no audio file found for this LRC');
