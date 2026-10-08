@@ -1,5 +1,7 @@
 """Tests for pykaraoke.lrc — the pure LRC lyrics parser."""
 
+import pytest
+
 from pykaraoke.lrc import parse_elrc, parse_lrc, parse_offset
 
 
@@ -208,3 +210,105 @@ class TestParseElrc:
             (0, 10100, "chorus"),
             (0, 10600, "line"),
         ]
+
+
+class TestParseDuet:
+    """Duet part tags ([00:01.00][a]…) and [pa:]/[pb:] singer names."""
+
+    @pytest.mark.parametrize(
+        ("tag", "expected"),
+        [
+            ("[a]", "a"),
+            ("[A]", "a"),
+            ("[b]", "b"),
+            ("[ab]", "ab"),
+            ("[ba]", "ab"),   # the mirror of a shared line
+            ("[AB]", "ab"),
+        ],
+    )
+    def test_part_tag_variants(self, tag, expected):
+        parsed = parse_lrc(f"[00:01.00]{tag}line text\n")
+        assert parsed["lyrics"][0]["part"] == expected
+        assert parsed["lyrics"][0]["text"] == "line text"
+
+    def test_part_per_line(self):
+        parsed = parse_lrc(
+            "[00:01.00][a]first\n"
+            "[00:05.00][b]second\n"
+            "[00:09.00][ab]shared\n"
+            "[00:13.00]solo\n"
+        )
+        assert [(s["line"], s.get("part")) for s in parsed["lyrics"]] == [
+            (0, "a"),
+            (1, "b"),
+            (2, "ab"),
+            (3, None),
+        ]
+
+    def test_solo_song_payload_has_no_duet_keys(self):
+        parsed = parse_lrc("[00:01.00]hello\n[00:05.00]world\n")
+        assert parsed["lyrics"] == [
+            {"ms": 1000, "text": "hello", "type": 0, "line": 0},
+            {"ms": 5000, "text": "world", "type": 0, "line": 1},
+        ]
+        assert "parts" not in parsed
+
+    def test_unknown_bracket_tag_is_not_a_part(self):
+        # [abc] is not a duet id: stripped like any other bracket group.
+        parsed = parse_lrc("[00:01.00][abc]hi\n")
+        assert parsed["lyrics"][0]["text"] == "hi"
+        assert "part" not in parsed["lyrics"][0]
+
+    def test_part_tag_must_follow_the_timestamps(self):
+        # A tag before the timestamps leaves no time to parse: unusable.
+        assert parse_lrc("[a][00:01.00]hello\n") is None
+
+    def test_part_applies_to_every_word_of_an_enhanced_line(self):
+        parsed = parse_lrc("[00:01.00][b]one <00:01.50>two <00:02.00>three\n")
+        assert [s["part"] for s in parsed["lyrics"]] == ["b", "b", "b"]
+
+    def test_part_applies_to_every_repeated_timestamp(self):
+        parsed = parse_lrc("[00:01.00][00:10.00][ab]chorus\n")
+        assert [s["part"] for s in parsed["lyrics"]] == ["ab", "ab"]
+
+    def test_offset_shifts_duet_lines_too(self):
+        parsed = parse_lrc("[offset:+500]\n[00:10.00][a]line\n")
+        assert parsed["lyrics"][0] == {
+            "ms": 9500,
+            "text": "line",
+            "type": 0,
+            "line": 0,
+            "part": "a",
+        }
+
+    def test_singer_names_from_meta(self):
+        parsed = parse_lrc("[pa:Alice]\n[pb:Bob]\n[00:01.00][a]hi\n")
+        assert parsed["parts"] == {"a": "Alice", "b": "Bob"}
+        assert parsed["meta"]["pa"] == "Alice"
+
+    def test_only_one_singer_named(self):
+        parsed = parse_lrc("[pb:Bob]\n[00:01.00]hi\n")
+        assert parsed["parts"] == {"b": "Bob"}
+
+    def test_empty_or_missing_names_are_not_exposed(self):
+        assert "parts" not in parse_lrc("[pa:]\n[pb:]\n[00:01.00]hi\n")
+        assert "parts" not in parse_lrc("[00:01.00][b]hi\n")
+
+    def test_elrc_merge_keeps_part_tags(self):
+        parsed = parse_lrc(
+            "[pa:Alice]\n"
+            "[00:01.00][a]Hello world\n"
+            "[00:05.00][b]Second line\n"
+        )
+        merged = parse_elrc(
+            "[00:01.00]Hello world\n[00:01.20]Hello\n[00:01.70]world\n"
+            "[00:05.00]Second line\n[00:05.30]Second\n[00:05.80]line\n",
+            parsed["lyrics"],
+        )
+        assert [(s["line"], s["text"], s.get("part")) for s in merged] == [
+            (0, "Hello", "a"),
+            (0, "world", "a"),
+            (1, "Second", "b"),
+            (1, "line", "b"),
+        ]
+        assert parsed["parts"] == {"a": "Alice"}
