@@ -24,32 +24,35 @@ WebAssembly.
 ## Architecture
 
 ```
-web/                      the entire app (no build step, no framework)
-  index.html              UI structure + <py-config>
-  app.js                  UI, file access, playback (vanilla ES module)
-  bridge.py               PyScript bridge → window.pykaraoke_api
-  styles.css
+web/
+  index.html              the entire app: UI + CSS + JS + PyScript bridge
   _assets/                vendored Pyodide + PyScript (generated)
   _wheel/                 pykaraoke engine wheel (generated)
 src/pykaraoke/            pure-stdlib Python engine (CPython + Pyodide)
-  webapp.py               the API the bridge exposes
+  webapp.py               the API the in-page bridge exposes
   cdg.py                  CD+G decoder (dirty tiles → canvas)
   midi.py                 MIDI/KAR parser (lyrics + notes → WebAudio)
   database.py             song library, search, settings
   filename_parser.py      "Artist - Title" name parsing
 src/runtimes/tauri/       thin desktop shell (3 native commands)
-tests/                    pytest (engine) + vitest (web logic)
+tests/                    pytest (engine) + vitest (JS extracted from index.html)
 ```
+
+`web/index.html` is one self-contained file: markup, `<style>`, the
+vanilla-JS module (UI, file access, playback), and the inline
+`<script type="py">` bridge — no framework, no bundler, no build step.
 
 The engine is pure stdlib (no pygame, numpy, or mutagen) so the same
 modules run under CPython for tests and under Pyodide in the browser.
+It ships as a single `.whl` that PyScript installs at page load; there is
+no second Python process, service, or backend.
 
 ## Quick Start
 
 ```bash
 # 1. Python engine + tests
 ./scripts/setup-dev-env.sh          # create .venv, install dev deps
-./scripts/run-tests.sh              # pytest + vitest + UI smoke test
+./scripts/run-tests.sh              # pytest + vitest
 
 # 2. Run in a browser (dev / preview)
 bash scripts/build-web.py           # wheel + vendored Pyodide/PyScript
@@ -59,6 +62,7 @@ python -m http.server 18000 --directory web
 # 3. Desktop app (Tauri)
 cd src/runtimes/tauri
 npm install
+npm run tauri dev                   # serves web/ + opens the window
 npm run tauri build                 # produces the installer
 ```
 
