@@ -19,6 +19,13 @@
   --danger: #e06c75;
   --ok: #7ec699;
   --radius: 6px;
+  /* Duet parts (generic singer ids): blue = A, green = B, violet = shared. */
+  --part-a: #6cb6ff;
+  --part-a-lit: #a9d4ff;
+  --part-b: #7ec699;
+  --part-b-lit: #a9e3c0;
+  --part-ab: #c39bff;
+  --part-ab-lit: #ddc8ff;
 }
 
 * { box-sizing: border-box; }
@@ -166,8 +173,29 @@ html, body {
   color: var(--text-dim);
   min-height: 1.3em;
 }
+/* Duet lines: colour by singer/part; untagged lines keep the dim default. */
+.lyric-line.part-a { color: var(--part-a); }
+.lyric-line.part-b { color: var(--part-b); }
+.lyric-line.part-ab { color: var(--part-ab); }
+/* Declared after the part colours so the upcoming line always dims. */
 .lyric-line.lyric-next { color: #5a5f6e; font-size: 14px; }
+/* Part chip: "A", "B", "A+B", or the song's [pa:]/[pb:] display names. */
+.lyric-part {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-right: 5px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  vertical-align: 1px;
+}
 .lyric-syl.lit { color: var(--accent-strong); }
+/* Sung syllables light up in the line's own (brighter) part colour. */
+.lyric-line.part-a .lyric-syl.lit { color: var(--part-a-lit); }
+.lyric-line.part-b .lyric-syl.lit { color: var(--part-b-lit); }
+.lyric-line.part-ab .lyric-syl.lit { color: var(--part-ab-lit); }
 
 /* ── Player controls ───────────────────────────────────────────────── */
 .now-playing-info { margin-top: 6px; }
@@ -534,10 +562,38 @@ export class SongQueue {
   }
 }
 
+/** Generic duet part ids (never gendered); 'ab' is a shared A+B line. */
+export const PART_IDS = ['a', 'b', 'ab'];
+
+/**
+ * CSS modifier class for a lyric line's part: 'part-a' | 'part-b' |
+ * 'part-ab', or '' when the line has no (recognised) part.
+ */
+export function partClass(part) {
+  const id = String(part || '').toLowerCase();
+  return PART_IDS.includes(id) ? `part-${id}` : '';
+}
+
+/**
+ * Human label for a lyric line's part, for the in-line part chip.
+ * `parts` is the song's optional {a, b} display-name map; the generic
+ * "A", "B" or "A+B" id is the fallback when no singer is named.
+ */
+export function partLabel(parts, part) {
+  const id = String(part || '').toLowerCase();
+  if (!PART_IDS.includes(id)) return '';
+  const names = parts || {};
+  if (id === 'ab') {
+    return names.a && names.b ? `${names.a} + ${names.b}` : 'A+B';
+  }
+  return names[id] || id.toUpperCase();
+}
+
 /**
  * Group timed lyric syllables into display lines.
- * Input: [{ms, text, type, line}] — type 0 is a sung syllable.
- * Output: [{line, ms, syllables: [{ms, text}]}] sorted by time.
+ * Input: [{ms, text, type, line, part?}] — type 0 is a sung syllable,
+ * part ('a'|'b'|'ab') marks a duet line.
+ * Output: [{line, ms, part, syllables: [{ms, text}]}] sorted by time.
  */
 export function buildLyricLines(lyrics) {
   const sung = (lyrics || []).filter((s) => Number(s.type || 0) === 0);
@@ -552,6 +608,8 @@ export function buildLyricLines(lyrics) {
     .map(([line, syllables]) => ({
       line,
       ms: syllables[0].ms,
+      // Duet part shared by every syllable of the line, if tagged.
+      part: syllables.find((s) => s.part && partClass(s.part))?.part || null,
       // Deterministic per-line order by time so the renderer can highlight
       // by index even when the source timestamps are out of order.
       syllables: syllables
@@ -700,6 +758,7 @@ if (isBrowser) {
     playing: false,
     durationMs: 0,
     lyricLines: null,
+    parts: null,           // song-level duet names {a, b} (or null)
     lastLyricLine: -1,
     cdgKey: null,
     audioEl: null,
@@ -1106,6 +1165,16 @@ if (isBrowser) {
       for (const line of lines.slice(lineIdx, lineIdx + 2)) {
         const div = document.createElement('div');
         div.className = 'lyric-line';
+        const cls = partClass(line.part);
+        if (cls) {
+          div.classList.add(cls);
+          div.dataset.part = line.part;
+          // The part chip labels who sings this line (A, B or shared).
+          const chip = document.createElement('span');
+          chip.className = 'lyric-part';
+          chip.textContent = partLabel(state.parts, line.part);
+          div.appendChild(chip);
+        }
         if (line !== lines[lineIdx]) div.classList.add('lyric-next');
         line.syllables.forEach((syl) => {
           const span = document.createElement('span');
@@ -1201,6 +1270,8 @@ if (isBrowser) {
     if (!parsed || parsed.error) throw new Error(parsed?.error || 'could not parse MIDI');
     state.durationMs = parsed.duration_ms || 0;
     $('time-total').textContent = formatTime(state.durationMs);
+    // MIDI/KAR lyrics carry no duet parts, so nothing to label.
+    state.parts = null;
     state.lyricLines = buildLyricLines(parsed.lyrics || []);
     renderLyricLines();
     state.synth = new MidiSynth(parsed);
@@ -1228,6 +1299,8 @@ if (isBrowser) {
     if (!parsed || parsed.error) throw new Error(parsed?.error || 'could not parse LRC lyrics');
     const audioPath = resolveAudioPath(song);
     if (!audioPath) throw new Error('no audio file found for this LRC');
+    // Song-level duet singers ([pa:]/[pb:]) label the per-line part chips.
+    state.parts = parsed.parts || null;
     state.lyricLines = buildLyricLines(parsed.lyrics || []);
     renderLyricLines();
     const audio = new Audio(mediaUrl(audioPath));
@@ -1324,6 +1397,7 @@ if (isBrowser) {
       state.cdgKey = null;
     }
     state.lyricLines = null;
+    state.parts = null;
     $('lyrics').innerHTML = '';
     $('lyrics').style.display = 'none';
     state.durationMs = 0;
