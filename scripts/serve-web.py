@@ -3,21 +3,25 @@
 
 Same as ``python -m http.server`` but with ``Cache-Control: no-store`` on
 every response, so the webview never shows a stale (pre-rewrite) page.
+``tauri.conf.json`` runs this as ``beforeDevCommand``; it can also be run
+by hand from anywhere in the repo:
 
-Usage: python scripts/serve-web.py [port]   (default 18000)
+    python scripts/serve-web.py [port]   (default 18000)
 """
 
 from __future__ import annotations
 
 import http.server
+import pathlib
 import sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18000
+WEB_DIR = pathlib.Path(__file__).resolve().parent.parent / "web"
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory="web", **kwargs)
+        super().__init__(*args, directory=str(WEB_DIR), **kwargs)
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
