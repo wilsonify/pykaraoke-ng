@@ -66,7 +66,7 @@ Pure stdlib, so it runs unchanged under CPython and Pyodide:
 | `webapp.py` | JSON-friendly API the bridge dispatches to |
 | `cdg.py` | CD+G packet decode → dirty-tile updates for the canvas |
 | `midi.py` | MIDI/KAR parse → lyrics + note events for the synth |
- | `lrc.py` | LRC + `.elrc` parse → timed lyric events |
+| `lrc.py` | LRC + `.elrc` parse + duet part tags → timed lyric events |
 | `database.py` | Song library, scanning, search, settings |
 | `filename_parser.py` | "Artist - Title" extraction from filenames |
 
