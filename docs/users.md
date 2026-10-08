@@ -87,7 +87,10 @@ Organize your files so CDG tracks have a matching audio file in the same folder:
 │   ├── Song Title.mp3          ← audio companion for the .cdg
 │   └── Another Song.kar
 └── Another Artist/
-    └── Great Song.mpg
+    ├── Great Song.mpg
+    ├── Great Song.lrc
+    ├── Great Song.elrc         ← optional word timing for the .lrc
+    └── Great Song.mp3          ← audio companion for the .lrc
 ```
 
 **Supported formats:**
@@ -96,6 +99,7 @@ Organize your files so CDG tracks have a matching audio file in the same folder:
 |--------|-----------|-------------|
 | CD+G | `.cdg` + `.mp3`/`.wav`/`.ogg` | Required separate audio file |
 | MIDI Karaoke | `.kar`, `.mid` | Built-in MIDI synthesis |
+| LRC lyrics | `.lrc`, `.lcr` + audio | Required separate audio file; optional `.elrc` word timing |
 | MPEG Video | `.mpg`, `.mpeg`, `.avi` | Embedded audio track |
 
 ---
