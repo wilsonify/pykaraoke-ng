@@ -277,3 +277,54 @@ class TestElrc:
         # No word lines up: the caller keeps the plain LRC timing.
         parsed = parse_lrc(_read("word-timing.lrc"))
         assert parse_elrc("[00:01.00]something else\n", parsed["lyrics"]) is None
+
+
+# ---------------------------------------------------------------------------
+# Duet songs (singer/part tags)
+# ---------------------------------------------------------------------------
+
+
+class TestDuetFixture:
+    def test_singer_names_and_line_parts(self):
+        parsed = parse_lrc(_read("duet.lrc"))
+        assert parsed["parts"] == {"a": "Alice", "b": "Bob"}
+        assert parsed["duration_ms"] == 30_000
+        first_syllable = {s["line"]: s for s in parsed["lyrics"]}
+        assert first_syllable[0]["part"] == "a"
+        assert first_syllable[1]["part"] == "b"
+        assert first_syllable[2]["part"] == "ab"
+        assert "part" not in first_syllable[3]  # untagged line stays solo
+        assert first_syllable[4]["part"] == "a"  # [A]: tags are case-insensitive
+        assert first_syllable[0]["text"] == "I will sing the first line"
+        assert first_syllable[4]["text"] == "Uppercase tags work too"
+
+    def test_enhanced_line_words_all_keep_the_tag(self):
+        parsed = parse_lrc(_read("duet.lrc"))
+        words = [s for s in parsed["lyrics"] if s["line"] == 5]
+        assert [s["text"] for s in words] == ["I", "sing", "with", "words"]
+        assert [s["ms"] for s in words] == [21000, 21500, 22000, 22500]
+        assert [s["part"] for s in words] == ["a", "a", "a", "a"]
+
+    def test_solo_fixture_has_no_duet_keys(self):
+        parsed = parse_lrc(_read("standard.lrc"))
+        assert "parts" not in parsed
+        assert all("part" not in s for s in parsed["lyrics"])
+
+    def test_elrc_merge_keeps_line_parts(self):
+        parsed = parse_lrc(_read("duet.lrc"))
+        merged = parse_elrc(
+            _read("duet.elrc"),
+            parsed["lyrics"],
+            offset_ms=parse_offset(parsed["meta"]),
+        )
+        line0 = [s for s in merged if s["line"] == 0]
+        assert [s["text"] for s in line0] == ["I", "will", "sing", "the", "first", "line"]
+        assert [s["ms"] for s in line0] == [1200, 1700, 2200, 2700, 3200, 3700]
+        assert [s["part"] for s in line0] == ["a"] * 6
+        line1 = [s for s in merged if s["line"] == 1]
+        assert [s["part"] for s in line1] == ["b"] * 5
+        # Lines the .elrc could not time keep their own syllables and tag.
+        line3 = [s for s in merged if s["line"] == 3]
+        assert len(line3) == 1 and "part" not in line3[0]
+        line5 = [s for s in merged if s["line"] == 5]
+        assert len(line5) == 4 and [s["part"] for s in line5] == ["a"] * 4
