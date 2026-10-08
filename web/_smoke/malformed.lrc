@@ -1,8 +1,0 @@
-this line has no timestamp at all
-[00:12.00 missing closing bracket
-[00:6x.00]Non-digit seconds (ignored)
-[00:12:34]Double colon (ignored)
-[no-colon-bracket]
-[00:01.00]Valid line after garbage
-[00:02.00]
-[00:03.00]   [00:04.00]extra bracket group stripped
