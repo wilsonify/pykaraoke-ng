@@ -115,6 +115,18 @@ class TestParseMidi:
         # Lyrics carry timing, text, type and line number for the UI.
         assert all("ms" in s and "text" in s and "type" in s and "line" in s for s in d["lyrics"])
 
+    def test_no_duet_parts_in_midi(self):
+        # Singer/part tagging is an LRC feature; MIDI/KAR lyrics never
+        # carry it, so the payload exposes no duet information.
+        with open(ELVIS_KAR, "rb") as f:
+            real_kar = f.read()
+        for midi in (_make_midi(), real_kar):
+            mf = parse_midi(midi)
+            assert mf is not None
+            d = mf.to_dict()
+            assert "parts" not in d
+            assert all("part" not in s for s in d["lyrics"])
+
 
 class TestMidiTimestamp:
     def test_single_tempo(self):
