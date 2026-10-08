@@ -14,9 +14,6 @@ pytest-junit.xml
 # Tauri build artifacts
 dist/
 target/
-tauri-app/src-tauri/Cargo.lock
-src/runtimes/tauri/build/
-src/runtimes/tauri/src-tauri/backend/
 src/runtimes/tauri/node_modules/
 
 # Generated web assets (recreated by scripts/build-web.py)
@@ -25,10 +22,6 @@ web/_wheel/
 
 # Frontend unit tests
 tests/web/node_modules/
-
-
-# Node modules (if using npm for frontend)
-tauri-app/node_modules/
 
 # IDE specific files
 .idea/
