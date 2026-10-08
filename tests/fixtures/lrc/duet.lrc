@@ -1,0 +1,12 @@
+[ti:Duet Demo]
+[ar:PyKaraoke Fixtures]
+[pa:Alice]
+[pb:Bob]
+[length:00:30.00]
+
+[00:01.00][a]I will sing the first line
+[00:05.00][b]Then I will answer back
+[00:09.00][ab]Together we hold the note
+[00:13.00]An untagged line stays solo
+[00:17.00][A]Uppercase tags work too
+[00:21.00][a]I <00:21.50>sing <00:22.00>with <00:22.50>words
