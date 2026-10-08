@@ -51,10 +51,11 @@ window with a slim sidebar UI.
 | Platform | Format | File |
 |----------|--------|------|
 | Windows | NSIS installer | `PyKaraoke NG_<version>_x64-setup.exe` |
-| Windows | MSI installer | `PyKaraoke NG_<version>_x64_en-US.msi` |
 | macOS | DMG | `PyKaraoke NG_<version>_x64.dmg` |
-| Linux | AppImage | `PyKaraoke NG_<version>_x64.AppImage` |
 | Linux | deb | `pykaraoke-ng_<version>_amd64.deb` |
+
+Alternatively serve `web/` and use the app in a browser — same page, same
+engine, with folder picking via the directory file input.
 
 ### Requirements
 
@@ -134,11 +135,12 @@ Drag the volume slider (0–100%). The percentage is displayed beside it.
 
 ### Settings
 
-Click the gear icon (⚙) to open settings:
+Click the gear icon (⚙) to open the inline settings panel:
 
-- **Fullscreen** — Toggle full-screen karaoke display
-- **Zoom** — CDG zoom mode: `none` (pixel-accurate), `int` (integer scale),
-  `soft` (smooth scaling), `full` (fill window)
+- **Sort library by** — `filename`, `title`, or `artist`
+- **CDG zoom** — `quick` (0.75×), `int` (1×), `full` (1.5×), `soft` (2×)
+- **Look inside .zip files** — scan archives for karaoke files
+- **Hide songs without artist** — drop entries with no artist metadata
 
 ---
 
@@ -194,85 +196,10 @@ starts automatically.
 
 The bottom of the window shows:
 
-- **Backend: Connected** — The Python audio engine is running.
-- **Backend: Disconnected** — Something went wrong; try restarting the app.
-- **Status messages** — Brief feedback about actions (scan complete, errors).
-
----
-
-## Headless Backend (for advanced users)
-
-The Python backend can run independently of the desktop app — useful for
-scripting, automation, or Docker deployments.
-
-### From source
-
-```bash
-git clone https://github.com/wilsonify/pykaraoke-ng.git
-cd pykaraoke-ng
-uv sync                              # or: pip install -e .
-```
-
-### Run in stdio mode
-
-```bash
-uv run python -m pykaraoke.core.backend
-```
-
-Send a command:
-
-```bash
-echo '{"action":"get_state","params":{}}' | uv run python -m pykaraoke.core.backend
-```
-
-### Run in HTTP mode
-
-```bash
-uv run python -m pykaraoke.core.backend --http
-curl http://localhost:8080/health
-```
-
-### Production artifact (standalone backend.exe)
-
-The built `backend.exe` requires no Python on the target machine:
-
-```bash
-./backend.exe
-echo '{"action":"get_state","params":{}}' | ./backend.exe
-```
-
-Set the `PYKARAOKE_BACKEND_EXE` environment variable to use a custom
-backend with the desktop app:
-
-```bash
-set PYKARAOKE_BACKEND_EXE=C:\path\to\backend.exe    # Windows
-export PYKARAOKE_BACKEND_EXE=/path/to/backend.exe    # macOS / Linux
-```
-
-### Commands
-
-| Action | Params | Effect |
-|--------|--------|--------|
-| `play` | `playlist_index?` | Start or resume playback |
-| `pause` | — | Pause / unpause |
-| `stop` | — | Stop and reset position |
-| `next` | — | Skip to next queue item |
-| `previous` | — | Go to previous queue item |
-| `seek` | `position_ms` | Seek to millisecond position |
-| `fast_forward` | `amount_seconds` | Skip forward (default 10 s) |
-| `rewind` | `amount_seconds` | Skip backward (default 10 s) |
-| `set_volume` | `volume` (0–1) | Adjust volume |
-| `search_songs` | `query` | Search the song library |
-| `add_to_playlist` | `filepath` | Add a song to the queue |
-| `remove_from_playlist` | `index` | Remove a queued song |
-| `clear_playlist` | — | Empty the queue |
-| `get_state` | — | Get full playback state |
-| `scan_library` | — | Re-scan library folders |
-| `add_folder` | `folder` | Add a library folder |
-| `get_settings` | — | Get current settings |
-| `update_settings` | `fullscreen?`, `zoom_mode?` | Update display settings |
-
-See [Backend Modes](backend-modes.md) for the full protocol reference.
+- **Engine status** — `PyScript: ready` once the WebAssembly engine and
+  its wheel have loaded; otherwise a connecting/error message.
+- **Status messages** — brief feedback about actions (scan complete,
+  errors).
 
 ---
 
@@ -280,16 +207,15 @@ See [Backend Modes](backend-modes.md) for the full protocol reference.
 
 | Problem | Fix |
 |---------|------|
-| Blank window (Linux) | `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set automatically |
-| No sound | Check system volume; verify `.mp3` sits next to `.cdg` |
+| Engine never finishes loading | The first launch downloads/builds `_assets/` and `_wheel/` — run `scripts/build-web.py` once, or wait for network |
+| No sound | Check system volume and OS output device; verify `.mp3` sits next to `.cdg` |
 | Video stuttering | Close other apps; use a smaller window |
 | Songs missing after scan | Check extensions (`.cdg`, `.kar`, `.mpg`) and re-scan |
-| `mixer not initialized` | Connect a speaker/headphones before playing |
 | Stop button restarts same song | This is by design — Stop keeps the song loaded |
-| Play after Stop plays wrong song | Press Stop then Play — restarts the same song from 0:00 |
-| FF/Rewind doesn't change audio | `pygame.mixer.music.play(start=X)` is limited on some platforms for MIDI/MP3; position display still updates |
-| Backend won't start | Check `PYKARAOKE_BACKEND_EXE` points to a valid `backend.exe` |
-| Installer fails | Try the `.msi` instead of `.exe`, or build from source |
+| FF/Rewind doesn't change audio | Some codecs don't honour seek in the middle of a decode; position display still updates |
+| Folder picker doesn't appear | Only the desktop app has it — in a browser, use **Add Folder** with the directory file input |
+| Settings don't persist | Library and settings live in browser storage; clearing site data resets them |
+| Installer fails | Build from source, or try the other installer format from Releases |
 
 ---
 

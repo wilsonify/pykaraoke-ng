@@ -6,157 +6,120 @@
 
 ## Design
 
-PyKaraoke-NG uses a decoupled frontend/backend architecture. The Python
-backend owns all business logic; the Tauri desktop shell provides a slim
-sidebar UI.
+PyKaraoke-NG is three thin layers and nothing else:
 
 ```
-┌──────────────────────────────────────────┐
-│          Tauri Desktop App               │
-│                                          │
-│  ┌────────────┐    ┌─────────────────┐   │
-│  │ Web UI     │◄──►│ Tauri Shell     │   │
-│  │ (HTML/JS)  │IPC │ (Rust)          │   │
-│  └────────────┘    └─────────────────┘   │
-│                          │               │
-│                   stdin / stdout         │
-│                    (JSON lines)          │
-│                          ▼               │
-│              ┌─────────────────────┐     │
-│              │  Python Backend     │     │
-│              │  • Playback engine  │     │
-│              │  • Song database    │     │
-│              │  • Queue manager    │     │
-│              │  • Event emitter    │     │
-│              └─────────────────────┘     │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Tauri desktop shell (Rust)                                  │
+│    pick_folder · list_folder · read_file                     │
+│    (everything a browser cannot do)                          │
+└───────────────┬──────────────────────────────────────────────┘
+                │ window.__TAURI__.core.invoke / convertFileSrc
+┌───────────────▼──────────────────────────────────────────────┐
+│  web/index.html — the whole application                      │
+│    <style>            all CSS                                │
+│    <script type=module>  UI, state, file access, playback    │
+│    <script type=py>      bridge → window.pykaraoke_api       │
+│    PyScript/Pyodide (vendored) + one engine .whl             │
+└───────────────┬──────────────────────────────────────────────┘
+                │ window.pykaraoke_api(name, ...args)
+┌───────────────▼──────────────────────────────────────────────┐
+│  src/pykaraoke — pure-stdlib Python engine                   │
+│    cdg · midi · lrc · database · filename_parser · webapp    │
+└──────────────────────────────────────────────────────────────┘
 ```
+
+There is **no backend process, no server, no IPC protocol, and no
+sidecar**. Python runs as WebAssembly *inside the page* (Pyodide), loaded
+from a single wheel. The same engine modules run under CPython for the
+test suite.
 
 ## Components
 
-### Python Backend (`src/pykaraoke/core/backend.py`)
+### Web application (`web/index.html`)
 
-Headless service managing all karaoke logic. Supports two transport modes:
+One self-contained file — UI, CSS, state, interaction, playback, and the
+inline PyScript bridge. Vanilla JS, no framework, no bundler, no build
+step. It owns:
 
-| Mode | Flag | Use Case |
-|------|------|----------|
-| **stdio** (default) | `--stdio` | Desktop apps — reads JSON from stdin, writes to stdout |
-| **HTTP** | `--http` | Docker / Kubernetes — FastAPI + Uvicorn REST server |
+| Concern | Implementation |
+|---------|----------------|
+| Layout / styling | Inline `<style>` |
+| State (queue, settings, playback) | Plain JS object + `localStorage` |
+| Folder access (browser fallback) | `<input webkitdirectory>` |
+| Audio / video playback | `<audio>`, `<video>` |
+| MIDI karaoke synthesis | Web Audio API (`MidiSynth`) |
+| CD+G rendering | `<canvas>` from engine tile updates |
+| Lyric highlighting | DOM + `requestAnimationFrame` |
+| Persistence | `localStorage` (library JSON + queue ids) |
 
-See [Backend Modes](../backend-modes.md) for the full API reference.
+Everything pure in that script (queue, lyric grouping/highlighting,
+note timeline, time formatting) is unit-tested: the vitest suite extracts
+the inline module from `index.html` and imports it.
 
-### Tauri Shell (`src/runtimes/tauri/src-tauri/src/main.rs`)
+### Python engine (`src/pykaraoke`)
 
-Rust-based native desktop wrapper:
-- Manages the backend subprocess lifecycle
-- Routes IPC messages between the web frontend and the backend
-- Emits events to the frontend on state changes
-- Launches the bundled `backend.exe` in production, or finds a Python
-  interpreter in dev mode
+Pure stdlib, so it runs unchanged under CPython and Pyodide:
 
-### Web Frontend (`src/runtimes/tauri/src/`)
+| Module | Purpose |
+|--------|---------|
+| `webapp.py` | JSON-friendly API the bridge dispatches to |
+| `cdg.py` | CD+G packet decode → dirty-tile updates for the canvas |
+| `midi.py` | MIDI/KAR parse → lyrics + note events for the synth |
+| `lrc.py` | LRC / enhanced-LRC parse → timed lyric events |
+| `database.py` | Song library, scanning, search, settings |
+| `filename_parser.py` | "Artist - Title" extraction from filenames |
 
-Vanilla HTML/CSS/JS interface:
-- Search bar and song results
-- Queue manager
-- Playback controls (play, pause, stop, seek, volume)
+It is packaged as one wheel (`web/_wheel/*.whl`) that PyScript installs
+at page load — no pip on the target machine, no Python interpreter
+required.
 
-Designed as a slim sidebar (300–450 px). See [UX Design Spec](../../specs/ux-design.md).
+### Tauri shell (`src/runtimes/tauri/src-tauri`)
 
-## Communication Protocol
+Rust exists only for what the web platform cannot do:
 
-All messages are newline-delimited JSON over stdin/stdout.
+| Command | Purpose |
+|---------|---------|
+| `pick_folder` | Native folder dialog (`rfd`) |
+| `list_folder` | Recursively list a folder as flat entries |
+| `read_file` | Read file bytes by absolute path (raw IPC → `ArrayBuffer`) |
 
-### Command (Frontend → Backend)
+That is the entire native surface: three commands, one file
+(`src/lib.rs`). Playback, decoding, search and rendering all happen in
+the webview. The same code runs in a plain browser using the
+`webkitdirectory` file picker when `window.__TAURI__` is absent.
 
-```json
-{"action": "play", "params": {"playlist_index": 0}}
+## JS ↔ Python boundary
+
+Exactly one function crosses it:
+
+```js
+window.pykaraoke_api(name, ...args)   // defined by the inline <script type="py">
 ```
 
-### Response (Backend → Frontend)
+* Arguments are converted to plain Python with `to_py()`.
+* Returns are Python objects; JS converts PyProxies with `toJs()`.
+* `None` becomes `undefined`.
 
-```json
-{"type": "response", "response": {"status": "ok"}}
-```
+The dispatcher is intentionally untyped and total: the UI treats every
+call as `try`/`catch`, so an engine error surfaces as a status message
+rather than a dead window.
 
-### Event (Backend → Frontend)
+## Why these boundaries stay
 
-```json
-{"type": "event", "event": {"type": "state_changed", "timestamp": 1706745678.1, "data": {...}}}
-```
-
-### Command Reference
-
-| Action | Parameters | Description |
-|--------|-----------|-------------|
-| `play` | `playlist_index?` | Start / resume playback |
-| `pause` | — | Pause |
-| `stop` | — | Stop and reset |
-| `next` / `previous` | — | Navigate playlist |
-| `seek` | `position_ms` | Seek to position |
-| `set_volume` | `volume` (0–1) | Adjust volume |
-| `add_to_playlist` | `filepath` | Queue a song |
-| `remove_from_playlist` | `index` | Remove from queue |
-| `clear_playlist` | — | Empty the playlist |
-| `search_songs` | `query` | Search the library |
-| `get_library` | — | List all songs |
-| `scan_library` | — | Re-scan library folders |
-| `add_folder` | `folder` | Add a folder to scan |
-| `get_state` | — | Current state snapshot |
-
-### Event Types
-
-| Event | Description |
-|-------|-------------|
-| `state_changed` | Playback state updated |
-| `song_finished` | Current track completed |
-| `playback_error` | Error during playback |
-| `playlist_updated` | Queue modified |
-| `library_scan_complete` | Folder scan finished |
-| `volume_changed` | Volume adjusted |
-
-## State Model
-
-The backend maintains the authoritative state:
-
-```json
-{
-  "playback_state": "idle | playing | paused | stopped | loading | error",
-  "current_song": {"title": "", "artist": "", "filepath": ""},
-  "playlist": [],
-  "playlist_index": 0,
-  "volume": 0.75,
-  "position_ms": 0,
-  "duration_ms": 0
-}
-```
-
-The frontend polls `get_state` to stay in sync.
-
-### State lifecycle invariants
-
-- `position_ms` and `duration_ms` are **reset on every new playback** in
-  `_start_playback()`.  Stale values from a previous song must not
-  persist.
-- `poll()` is called from `get_state()` before assembling the state
-  dict.  It must **never raise** — `manager.poll()` is wrapped in
-  `try/except` so that player errors do not corrupt the state snapshot.
-- The `seek` command sets `position_ms` directly in `_handle_seek()` and
-  forwards the position to `player.seek()`.  Subsequent `poll()` calls
-  updated the position via `player.get_pos()`.
-- When no player is active, `poll()` is a no-op and state reflects the
-  last known values (or defaults).
-
-See [Playback Controls Fix](../issues/playback-controls-fixes.md) for
-the detailed postmortem of the state-related defects.
+| Boundary | Why it is necessary |
+|----------|---------------------|
+| Tauri ↔ webview | Native folder dialog and reading arbitrary files by path. `File System Access` / `webkitdirectory` cannot re-open a saved folder on restart. |
+| JS ↔ Python | CD+G packet decoding, MIDI parsing and the library/search engine already exist as tested, pure-Python code. Porting them to JS would duplicate the logic; running Pyodide keeps one implementation and one test suite. |
+| Everything else | None — there are no other processes, protocols, or layers. |
 
 ## Key Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
-| **Tauri** | ~17 MB bundle (incl. backend); native webview; low memory |
-| **stdio IPC** | No exposed ports; no network config; easy to secure |
-| **JSON lines** | Human-readable; easy to debug; sufficient performance |
-| **Vanilla JS** | No build step; zero frontend dependencies |
-| **Python backend** | Reuses mature player code (pygame, CDG parser) |
+| **One HTML file** | No build step, no module graph, no framework; the file *is* the app |
+| **Tauri only for native gaps** | The webview already does audio, video, canvas, workers, storage |
+| **Pyodide instead of a backend process** | Same code path in dev, tests, and the shipped app; nothing to spawn or supervise |
+| **Single engine wheel** | One artifact, one version, no service split |
+| **Vanilla JS + stdlib Python** | Zero frontend deps; zero Python deps |
 | **Slim sidebar UI** | DJs need screen space for primary software (see [constitution §2](../../specs/constitution.md)) |

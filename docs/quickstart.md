@@ -11,90 +11,67 @@ Get running in under a minute after cloning.
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-uv sync                       # or: pip install -e ".[dev]"
+./scripts/setup-dev-env.sh       # .venv + editable install + dev deps
+# or: uv sync                     # plain uv
 ```
 
-## 2. Run unit tests
+## 2. Run the tests
 
 ```bash
-uv run pytest tests/pykaraoke/ -v       # Python unit tests
+./scripts/run-tests.sh            # pytest + vitest
 ```
 
-Run the full suite (including validation tests against the built artifact):
+Individually:
 
 ```bash
-uv run pytest tests/ -v                 # all tests
-uv run pytest tests/ --cov --cov-report=html  # with coverage
+uv run pytest tests/pykaraoke/ -v # Python engine tests
+cd tests/web && npm ci && npm test # JS extracted from web/index.html
 ```
 
-## 3. Play a file
+## 3. Run in a browser
 
 ```bash
-uv run python -m pykaraoke.players.cdg song.cdg   # CD+G
-uv run python -m pykaraoke.players.kar song.kar    # MIDI / KAR
-uv run python -m pykaraoke.players.mpg song.mpg    # video
+bash scripts/build-web.py         # build the wheel + vendor Pyodide/PyScript
+python -m http.server 18000 --directory web
 ```
 
-## 4. Start the backend (stdio mode)
+Open <http://localhost:18000>.
 
-```bash
-uv run python -m pykaraoke.core.backend
-```
+The page loads Pyodide in a Web Worker, installs the `pykaraoke` wheel,
+and runs the app from `web/index.html`. Folder picking falls back to
+`<input webkitdirectory>` when there is no Tauri window.
 
-Send commands via stdin:
+## 4. Desktop app (Tauri)
 
-```bash
-echo '{"action":"get_state","params":{}}' | uv run python -m pykaraoke.core.backend
-```
-
-Or start the HTTP API:
-
-```bash
-uv run python -m pykaraoke.core.backend --http
-curl http://localhost:8080/health
-curl http://localhost:8080/api/state
-```
-
-## 5. Build the production backend artifact
+### Dev mode
 
 ```bash
 cd src/runtimes/tauri
-python -m PyInstaller backend.spec --distpath src-tauri --workpath build/pyinstaller-work --clean -y
-```
-
-The resulting `src-tauri/backend/backend.exe` (~12 MB) runs standalone
-with no Python dependency.
-
-## 6. Validation tests
-
-Test the real built artifact (no mocking):
-
-```bash
-export PYKARAOKE_BACKEND_EXE=src/runtimes/tauri/src-tauri/backend/backend.exe
-uv run pytest tests/validation/ -v -m artifact
-```
-
-## 7. Tauri desktop app
-
-### Dev mode (uses local Python)
-
-```bash
-cd src/runtimes/tauri
+npm ci
 npx tauri dev
 ```
 
-### Production build (standalone installer)
+`beforeDevCommand` serves `web/` on port 18000; the window loads that
+URL. Reload the window after editing `web/index.html`.
+
+### Production build
 
 ```bash
 cd src/runtimes/tauri
-python -m pip install pyinstaller
-npm install -g @tauri-apps/cli@1
-npx tauri build --bundles nsis     # Windows
-npx tauri build --bundles dmg      # macOS
-npx tauri build --bundles deb      # Linux
+npx tauri build --bundles nsis    # Windows
+npx tauri build --bundles dmg     # macOS
+npx tauri build --bundles deb     # Linux
 ```
 
-Installer at `src-tauri/target/release/bundle/`.
+Installers land in `src/runtimes/tauri/src-tauri/target/release/bundle/`.
+Python must be on `PATH` so `beforeBuildCommand` can rebuild the wheel.
+
+## 5. Code quality
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
 
 ## Common Issues
 
@@ -102,6 +79,8 @@ Installer at `src-tauri/target/release/bundle/`.
 |---------|------|
 | `ModuleNotFoundError: pykaraoke` | Run `uv sync` or `pip install -e .` |
 | Tests fail with import errors | Use `uv run pytest` or set `PYTHONPATH=src` |
-| `backend.exe` not found for validation | Build it first (step 5) or set `PYKARAOKE_BACKEND_EXE` |
-| Tauri linker errors (Windows) | Run `vcvars64.bat` first |
-| `cargo tauri` not found | Install CLI: `npm install -g @tauri-apps/cli@1` |
+| `npm ci` fails in `tests/web` | Node 20+ required |
+| Blank page, engine never starts | Run `scripts/build-web.py` first — `_wheel/` and `_assets/` are generated |
+| Tauri linker errors (Windows) | Install VS Build Tools, then run `vcvars64.bat` |
+| `npx tauri` not found | `cd src/runtimes/tauri && npm ci` |
+| Port 18000 already in use | `python -m http.server 18001 --directory web` and load that port |

@@ -5,7 +5,7 @@ Linux, Windows, macOS.
 
 ---
 
-**[User Guide](users.md)** · **[Developer Guide](developers.md)** · **[Admin Guide](administrators.md)** · **[Quick Start](quickstart.md)** · **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
+**[User Guide](users.md)** · **[Developer Guide](developers.md)** · **[Quick Start](quickstart.md)** · **[GitHub](https://github.com/wilsonify/pykaraoke-ng)**
 
 ---
 
@@ -17,11 +17,14 @@ and queues songs via keyboard, and stays out of the way during a live set.
 
 **A professional utility panel — not a full-screen media player.**
 
-Two deployment options:
-- **Desktop app** — Tauri native window with a bundled Python backend.
-  Pre-built installers for Windows (NSIS + MSI), macOS (DMG), Linux (AppImage/deb).
-- **Headless backend** — Python service over stdio or HTTP. Run it directly,
-  in Docker, or in Kubernetes. Drive it with any frontend.
+Two ways to run it:
+- **Desktop app** — Tauri native window embedding `web/index.html`.
+  Pre-built installers for Windows (NSIS), macOS (DMG), Linux (deb).
+- **Browser** — serve `web/` and open it; folder picking uses the
+  directory file input. Same page, same engine.
+
+Both execute the pure-Python engine as WebAssembly (Pyodide) inside the
+page — there is no backend process, service, or API server.
 
 ## Supported Formats
 
@@ -38,9 +41,8 @@ Two deployment options:
 # Or build from source:
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-uv sync
-uv run pytest tests/ -v                     # run tests
-uv run python -m pykaraoke.core.backend --http  # HTTP API on :8080
+./scripts/setup-dev-env.sh
+./scripts/run-tests.sh
 ```
 
 Full setup instructions: [Quick Start](quickstart.md).
@@ -53,15 +55,12 @@ Full setup instructions: [Quick Start](quickstart.md).
 |-------|-----|
 | **[User Guide](users.md)** | Installing the desktop app, setting up a song library, running a show |
 | **[Developer Guide](developers.md)** | Cloning, testing, building, contributing |
-| **[Admin Guide](administrators.md)** | Docker, Kubernetes, CI/CD, production Tauri builds |
 
 ### Architecture
 
 | Document | What it covers |
 |----------|---------------|
-| [Architecture Overview](architecture/overview.md) | System design, IPC protocol, state model |
-| [Repository Structure](architecture/structure.md) | Project layout, module responsibilities |
-| [Backend Modes](backend-modes.md) | stdio and HTTP API reference |
+| [Architecture Overview](architecture/overview.md) | Layers, JS↔Python boundary, Tauri surface |
 | [UX Design Spec](../specs/ux-design.md) | Slim sidebar design rationale |
 
 ### Development
@@ -69,15 +68,10 @@ Full setup instructions: [Quick Start](quickstart.md).
 | Document | What it covers |
 |----------|---------------|
 | [Quick Start](quickstart.md) | Running from a clone in under a minute |
-| [Integration Testing](development/integration-testing.md) | Docker-based test orchestration |
-| [SonarQube Setup](development/sonarqube-setup.md) | CI quality scanning |
-| [Code Quality History](development/quality-improvements.md) | Python 3 migration log |
 
 ### Reference
 
 - [Project Constitution](../specs/constitution.md) — Engineering invariants
-- [Open Work](architecture/next-steps.md) — Backlog and future features
-- [Legacy Issues](issues/README.md) — Issues from the original PyKaraoke
 
 ## License
 
