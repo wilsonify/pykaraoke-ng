@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from pykaraoke.lrc import parse_lrc
+from pykaraoke.lrc import parse_elrc, parse_lrc, parse_offset
 
 FIXTURES = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "lrc"
@@ -244,3 +244,36 @@ class TestScale:
         assert parsed is not None
         assert len(parsed["lyrics"]) == 2000
         assert elapsed < 1.0  # generous bound; typically < 20 ms
+
+
+# ---------------------------------------------------------------------------
+# .elrc companion word timing
+# ---------------------------------------------------------------------------
+
+
+class TestElrc:
+    def test_fixture_pair(self):
+        # word-timing.elrc: line headers, one stray entry, repeated chorus.
+        parsed = parse_lrc(_read("word-timing.lrc"))
+        merged = parse_elrc(
+            _read("word-timing.elrc"),
+            parsed["lyrics"],
+            offset_ms=parse_offset(parsed["meta"]),
+        )
+        assert [(s["line"], s["ms"], s["text"]) for s in merged] == [
+            (0, 1200, "Hello"),
+            (0, 1700, "brave"),
+            (0, 2200, "new"),
+            (0, 2900, "world"),
+            (1, 5300, "Second"),
+            (1, 5800, "line"),
+            (1, 6400, "here"),
+            (2, 9400, "Repeat"),
+            (2, 10100, "chorus"),
+            (2, 10600, "line"),
+        ]
+
+    def test_unrelated_companion_returns_none(self):
+        # No word lines up: the caller keeps the plain LRC timing.
+        parsed = parse_lrc(_read("word-timing.lrc"))
+        assert parse_elrc("[00:01.00]something else\n", parsed["lyrics"]) is None
