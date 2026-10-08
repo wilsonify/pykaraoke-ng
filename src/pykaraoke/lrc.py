@@ -14,6 +14,14 @@ Word timing can also arrive in a *companion* ``.elrc`` file next to the
 ``.lrc``: entries of ``[mm:ss.xx] word`` that must be aligned with the
 lines of the LRC (see :func:`parse_elrc`).
 
+Duet songs tag each lyric line with the singer/part that performs it,
+immediately after the timestamps: ``[00:12.00][a]first line``,
+``[00:16.00][b]answer``, ``[00:20.00][ab]shared line``.  The ids are
+generic (never gendered): ``a`` and ``b`` for the two singers, ``ab``
+for a line they sing together (``ba`` is normalised to ``ab``).  Lines
+without a tag are solo/untagged.  The song may optionally name the two
+singers with ``[pa:Name]``/``[pb:Name]`` metadata.
+
 Timestamps accept ``[m:ss.xx]``/``[mm:ss.x]`` (1-2 digit minutes and
 seconds, 1-3 digit fraction).  ``[offset:]`` is a global millisecond
 adjustment applied to every timestamp: per the LRC spec a positive value
@@ -38,8 +46,49 @@ _META_RE = re.compile(r"^\[([a-zA-Z][a-zA-Z0-9_-]*):([^\]]*)\]$")
 _WORD_RE = re.compile(r"<(\d{1,2}):(\d{1,2})\.(\d{1,3})>")
 # .elrc word entry: [mm:ss.xx] text (same timestamp shape as a line tag).
 _ELRC_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\]\s*(.+)$")
+# Duet part tag sitting right after the timestamps: [00:12.00][a]line.
+# Longer alternatives first so [ab]/[ba] are never read as a bare part.
+_PART_RE = re.compile(r"^\[(ab|ba|a|b)\]", re.IGNORECASE)
 
 TEXT_LYRIC = 0
+
+# Generic singer/part ids (never gendered); "ab" is a shared line.
+PART_IDS = ("a", "b", "ab")
+
+
+def normalize_part(tag: str) -> str | None:
+    """Map a raw part tag to a :data:`PART_IDS` id, else None.
+
+    ``"ba"`` is the mirror of ``"ab"``, so both normalise to ``"ab"``.
+    """
+    part = str(tag or "").strip().lower()
+    if part in ("a", "b"):
+        return part
+    if part in ("ab", "ba"):
+        return "ab"
+    return None
+
+
+def parse_parts(meta: dict[str, str]) -> dict[str, str] | None:
+    """Song-level singer names from ``[pa:Name]``/``[pb:Name]`` metadata.
+
+    Returns ``{"a": name, "b": name}`` with only the names actually
+    defined, or None when the song names no singers.
+    """
+    parts = {}
+    for tag, part in (("pa", "a"), ("pb", "b")):
+        name = str(meta.get(tag, "") or "").strip()
+        if name:
+            parts[part] = name
+    return parts or None
+
+
+def _event(ms: int, text: str, line: int, part: str | None = None) -> dict:
+    """One lyric event in the UI's shape, carrying *part* when tagged."""
+    event = {"ms": ms, "text": text, "type": TEXT_LYRIC, "line": line}
+    if part:
+        event["part"] = part
+    return event
 
 
 def _strip_bracket_tags(text: str) -> str:
@@ -116,10 +165,15 @@ def parse_lrc(text: str) -> dict | None:
     Returns::
 
         {
-          "lyrics": [{"ms": int, "text": str, "type": 0, "line": int}, ...],
+          "lyrics": [{"ms": int, "text": str, "type": 0, "line": int,
+                      "part": "a"|"b"|"ab"}, ...],
           "meta": {"ar": str, "ti": str, "al": str, "length": str, ...},
           "duration_ms": int,   # from [length:] meta or the last timestamp
+          "parts": {"a": str, "b": str},   # only when [pa:]/[pb:] given
         }
+
+    ``part`` is present only on tagged duet lines and ``parts`` only when
+    the song names its singers, so solo songs keep their exact payload.
 
     Timestamps are sorted deterministically: lines in file order, words
     within a line in file order (the UI sorts per line for rendering).
@@ -131,7 +185,7 @@ def parse_lrc(text: str) -> dict | None:
     text = text.lstrip("\ufeff")
 
     meta: dict[str, str] = {}
-    syllables: list[tuple[int, str, int]] = []  # (ms, text, line)
+    syllables: list[tuple[int, str, int, str | None]] = []  # (ms, text, line, part)
     max_ms = 0
     line_number = 0
 
@@ -159,6 +213,14 @@ def parse_lrc(text: str) -> dict | None:
             # Untimed, blank, malformed and comment lines are ignored.
             continue
 
+        # Optional duet tag after the timestamps: [00:12.00][a]lyric.
+        # Consumed before bracket stripping so the tag never reaches text.
+        part: str | None = None
+        part_match = _PART_RE.match(rest)
+        if part_match:
+            part = normalize_part(part_match.group(1))
+            rest = rest[part_match.end() :]
+
         lyric_text = _strip_bracket_tags(rest).strip()
         if not lyric_text:
             continue
@@ -175,12 +237,12 @@ def parse_lrc(text: str) -> dict | None:
                     if not text:
                         continue
                     ms = seg_ms if seg_ms is not None else line_ms
-                    syllables.append((ms, text, current_line))
+                    syllables.append((ms, text, current_line, part))
                     max_ms = max(max_ms, ms)
         else:
             # Simple LRC: one syllable per line timestamp.
             for ms in timestamps:
-                syllables.append((ms, lyric_text, current_line))
+                syllables.append((ms, lyric_text, current_line, part))
                 max_ms = max(max_ms, ms)
 
     if not syllables:
@@ -191,8 +253,10 @@ def parse_lrc(text: str) -> dict | None:
     offset_ms = parse_offset(meta)
     adjusted = syllables
     if offset_ms:
-        adjusted = [(max(0, ms - offset_ms), text, line) for ms, text, line in syllables]
-        max_ms = max(ms for ms, _text, _line in adjusted)
+        adjusted = [
+            (max(0, ms - offset_ms), text, line, part) for ms, text, line, part in syllables
+        ]
+        max_ms = max(ms for ms, _text, _line, _part in adjusted)
 
     # [length:] is "mm:ss" or "mm:ss.xx"; fall back to the last timestamp.
     duration_ms = max_ms
@@ -209,14 +273,15 @@ def parse_lrc(text: str) -> dict | None:
                 if frac:
                     duration_ms += _fraction_ms(frac)
 
-    return {
-        "lyrics": [
-            {"ms": ms, "text": text, "type": TEXT_LYRIC, "line": line}
-            for ms, text, line in adjusted
-        ],
+    result = {
+        "lyrics": [_event(ms, text, line, part) for ms, text, line, part in adjusted],
         "meta": meta,
         "duration_ms": duration_ms,
     }
+    parts = parse_parts(meta)
+    if parts:
+        result["parts"] = parts
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -236,9 +301,11 @@ def _normalize_letters(text: str) -> str:
 def _line_groups(lyrics: list[dict]) -> list[dict]:
     """Group *lyrics* into display lines ordered by their start time.
 
-    Each group is ``{"line", "ms", "text", "syllables"}`` where *text* is
-    the line rebuilt from its own syllables (a line stamped at several
-    times collapses to one copy, so its letters are not counted twice).
+    Each group is ``{"line", "ms", "text", "part", "syllables"}`` where
+    *text* is the line rebuilt from its own syllables (a line stamped at
+    several times collapses to one copy, so its letters are not counted
+    twice) and *part* is the duet part tag shared by its syllables (or
+    None for a solo line).
     """
     order: list[int] = []
     by_line: dict[int, list[dict]] = {}
@@ -253,11 +320,13 @@ def _line_groups(lyrics: list[dict]) -> list[dict]:
     for key in order:
         syllables = sorted(by_line[key], key=lambda s: int(s.get("ms") or 0))
         texts = dict.fromkeys(str(s.get("text") or "") for s in syllables)
+        part = next((s.get("part") for s in syllables if s.get("part")), None)
         groups.append(
             {
                 "line": key,
                 "ms": int(syllables[0].get("ms") or 0),
                 "text": " ".join(t for t in texts if t),
+                "part": part,
                 "syllables": syllables,
             }
         )
@@ -298,12 +367,13 @@ def _fill_missing_times(group: dict, tokens: list[str], times: list) -> list[dic
 
     Times are forced non-decreasing so the renderer's "lit so far" walk
     never stops early on a word stamped earlier than its predecessor.
+    The line's duet part tag is carried onto every rebuilt syllable.
     """
     words = []
     previous = int(group["ms"])
     for token, ms in zip(tokens, times, strict=False):
         current = previous if ms is None else max(int(ms), previous)
-        words.append({"ms": current, "text": token, "type": TEXT_LYRIC, "line": group["line"]})
+        words.append(_event(current, token, group["line"], group.get("part")))
         previous = current
     return words
 
