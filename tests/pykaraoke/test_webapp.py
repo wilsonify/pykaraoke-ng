@@ -210,6 +210,34 @@ class TestLrc:
             assert res["lyrics"] == line_timing
 
 
+class TestDuet:
+    def test_parse_lrc_exposes_singers_and_line_parts(self):
+        # The API passes duet information straight through to the UI.
+        app = KaraokeApp()
+        res = app.parse_lrc(
+            "[pa:Alice]\n[pb:Bob]\n"
+            "[00:01.00][a]first\n[00:05.00][b]second\n[00:09.00][ab]shared\n"
+        )
+        assert res["parts"] == {"a": "Alice", "b": "Bob"}
+        assert [s.get("part") for s in res["lyrics"]] == ["a", "b", "ab"]
+
+    def test_parse_lrc_solo_payload_is_unchanged(self):
+        app = KaraokeApp()
+        res = app.parse_lrc("[00:01.00]Hello world\n")
+        assert "parts" not in res
+        assert res["lyrics"][0] == {"ms": 1000, "text": "Hello world", "type": 0, "line": 0}
+
+    def test_parse_lrc_duet_survives_an_elrc_merge(self):
+        app = KaraokeApp()
+        res = app.parse_lrc(
+            "[00:01.00][a]Hello world\n",
+            "[00:01.20]Hello\n[00:01.70]world\n",
+        )
+        assert res["elrc"] is True
+        assert [s["text"] for s in res["lyrics"]] == ["Hello", "world"]
+        assert [s.get("part") for s in res["lyrics"]] == ["a", "a"]
+
+
 class TestInvalidData:
     def test_scan_zip_invalid_bytes(self):
         app = KaraokeApp()
