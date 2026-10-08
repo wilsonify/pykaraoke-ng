@@ -16,6 +16,9 @@ const {
   formatTime,
   highlightState,
   noteToFrequency,
+  PART_IDS,
+  partClass,
+  partLabel,
   SongQueue,
   songLabel,
   writeTileRgba,
@@ -152,6 +155,62 @@ describe('buildLyricLines', () => {
   it('handles empty input', () => {
     expect(buildLyricLines([])).toEqual([]);
     expect(buildLyricLines(null)).toEqual([]);
+  });
+
+  it('carries a duet part onto each grouped line', () => {
+    const lines = buildLyricLines([
+      { ms: 0, text: 'Hel', type: 0, line: 0, part: 'a' },
+      { ms: 100, text: 'lo', type: 0, line: 0, part: 'a' },
+      { ms: 2000, text: 'Yes', type: 0, line: 1, part: 'b' },
+      { ms: 4000, text: 'Us', type: 0, line: 2, part: 'ab' },
+      { ms: 6000, text: 'Solo', type: 0, line: 3 },
+    ]);
+    expect(lines.map((l) => l.part)).toEqual(['a', 'b', 'ab', null]);
+    expect(lines[0].syllables.map((s) => s.text)).toEqual(['Hel', 'lo']);
+  });
+
+  it('treats unknown and missing parts as solo', () => {
+    const unknown = buildLyricLines([{ ms: 0, text: 'x', type: 0, line: 0, part: 'zzz' }]);
+    expect(unknown[0].part).toBeNull();
+    const solo = buildLyricLines([{ ms: 0, text: 'x', type: 0, line: 0 }]);
+    expect(solo[0].part).toBeNull();
+  });
+});
+
+describe('partClass', () => {
+  it('maps the generic part ids to CSS modifiers', () => {
+    expect(PART_IDS).toEqual(['a', 'b', 'ab']);
+    expect(partClass('a')).toBe('part-a');
+    expect(partClass('B')).toBe('part-b');
+    expect(partClass('ab')).toBe('part-ab');
+  });
+
+  it('returns an empty class for solo or unknown parts', () => {
+    expect(partClass(null)).toBe('');
+    expect(partClass(undefined)).toBe('');
+    expect(partClass('')).toBe('');
+    expect(partClass('c')).toBe('');
+  });
+});
+
+describe('partLabel', () => {
+  it('falls back to generic A / B / A+B labels', () => {
+    expect(partLabel(null, 'a')).toBe('A');
+    expect(partLabel(undefined, 'b')).toBe('B');
+    expect(partLabel({}, 'ab')).toBe('A+B');
+  });
+
+  it('uses the song singer names when defined', () => {
+    expect(partLabel({ a: 'Alice', b: 'Bob' }, 'a')).toBe('Alice');
+    expect(partLabel({ a: 'Alice', b: 'Bob' }, 'b')).toBe('Bob');
+    expect(partLabel({ a: 'Alice', b: 'Bob' }, 'ab')).toBe('Alice + Bob');
+    // Only one singer named: the shared line falls back to A+B.
+    expect(partLabel({ a: 'Alice' }, 'ab')).toBe('A+B');
+  });
+
+  it('returns an empty label for solo and unknown parts', () => {
+    expect(partLabel({ a: 'Alice' }, null)).toBe('');
+    expect(partLabel({ a: 'Alice' }, 'zzz')).toBe('');
   });
 });
 
