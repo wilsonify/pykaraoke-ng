@@ -18,16 +18,23 @@ back to a browser folder picker (`webkitdirectory`) when running plain.
 ```bash
 # From the repo root: install the CLI and build the wheel/runtime assets
 cd src/runtimes/tauri
-npm install
+npm ci
 npm run tauri build        # or: npx tauri build
 ```
 
-`tauri.conf.json` runs `npm --prefix .. run build` (→ `scripts/build-web.py`)
+`tauri.conf.json` runs `npm run build` (→ `python ../../../scripts/build-web.py`)
 before building, so the wheel and vendored Pyodide/PyScript assets are
 recreated automatically. Output lands in `src-tauri/target/release/`.
 
 ## Developing
 
-Serve `web/` on port 18000 (`python -m http.server 18000 --directory web`)
-and open `http://localhost:18000` — the same code runs in a plain browser
-with the browser file picker. `tauri dev` points at that same URL.
+```bash
+cd src/runtimes/tauri
+npm ci
+npx tauri dev
+```
+
+`beforeDevCommand` runs `python ../../../scripts/serve-web.py 18000`, so the
+window loads `http://localhost:18000` — the same URL you can open in a plain
+browser with the browser folder picker. Reload the window after editing
+`web/index.html`.
