@@ -67,6 +67,31 @@ class TestScan:
         app.scan_zip("junk.zip", b"not a zip")
         assert app.read_zip_member("junk.zip", "x.kar") is None
 
+    def test_zip_members(self):
+        app = KaraokeApp()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("Artist/Title.kar", b"x")
+            zf.writestr("Artist/Title.elrc", b"[00:01.00]hello\n")
+        app.scan_zip("songs.zip", buf.getvalue())
+        assert app.zip_members("songs.zip") == ["Artist/Title.kar", "Artist/Title.elrc"]
+        assert app.zip_members("never-scanned.zip") == []
+
+    def test_zip_members_after_rescan(self):
+        # Re-scanning a zip invalidates the cached member list.
+        app = KaraokeApp()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("a.kar", b"x")
+        app.scan_zip("songs.zip", buf.getvalue())
+        assert app.zip_members("songs.zip") == ["a.kar"]
+        buf2 = io.BytesIO()
+        with zipfile.ZipFile(buf2, "w") as zf:
+            zf.writestr("a.kar", b"x")
+            zf.writestr("b.kar", b"y")
+        app.scan_zip("songs.zip", buf2.getvalue())
+        assert app.zip_members("songs.zip") == ["a.kar", "b.kar"]
+
 
 class TestSearch:
     def test_search(self):
@@ -158,6 +183,31 @@ class TestLrc:
         assert "error" in app.parse_lrc("no timestamps here")
         assert "error" in app.parse_lrc("")
         assert "error" in app.parse_lrc(None)
+
+    def test_parse_lrc_with_elrc(self):
+        # A companion .elrc upgrades the line to word-level timing.
+        app = KaraokeApp()
+        res = app.parse_lrc(
+            "[00:01.00]Hello brave new world\n",
+            "[00:01.20]Hello\n[00:01.70]brave\n[00:02.20]new\n[00:02.90]world\n",
+        )
+        assert res["elrc"] is True
+        assert [(s["ms"], s["text"]) for s in res["lyrics"]] == [
+            (1200, "Hello"),
+            (1700, "brave"),
+            (2200, "new"),
+            (2900, "world"),
+        ]
+
+    def test_parse_lrc_with_useless_elrc_keeps_line_timing(self):
+        # Missing/garbage companion files are never an error.
+        app = KaraokeApp()
+        line_timing = [{"ms": 1000, "text": "Hello world", "type": 0, "line": 0}]
+        for elrc in (None, "", "no timestamps here", "[00:01.00]zzz\n"):
+            res = app.parse_lrc("[00:01.00]Hello world\n", elrc)
+            assert "error" not in res
+            assert "elrc" not in res
+            assert res["lyrics"] == line_timing
 
 
 class TestInvalidData:
