@@ -6,8 +6,11 @@ const {
   buildLyricLines,
   CDG_HEIGHT,
   CDG_WIDTH,
+  companionBaseName,
+  companionMember,
   computeNoteTimeline,
   debounce,
+  ELRC_EXT,
   escapeHtml,
   findSyllableAt,
   formatTime,
@@ -45,6 +48,34 @@ describe('songLabel', () => {
 
   it('falls back to the filename stem', () => {
     expect(songLabel({ title: '', artist: '', filename: 'Some Song.kar' })).toBe('Some Song');
+  });
+});
+
+describe('companion files (.elrc)', () => {
+  it('derives the loose-file companion key from the filename', () => {
+    expect(companionBaseName({ filename: 'Song.lrc' }, ELRC_EXT)).toBe('song.elrc');
+    expect(companionBaseName({ filename: 'Artist - Song.lcr' }, ELRC_EXT)).toBe(
+      'artist - song.elrc',
+    );
+    expect(companionBaseName({ filename: 'No Extension' }, ELRC_EXT)).toBe(
+      'no extension.elrc',
+    );
+  });
+
+  it('returns null when there is no filename', () => {
+    expect(companionBaseName({ filename: '' }, ELRC_EXT)).toBeNull();
+    expect(companionBaseName(null, ELRC_EXT)).toBeNull();
+  });
+
+  it('derives the zip member companion name', () => {
+    const song = { zip_name: 'pack.zip', id: 'pack.zip!Artist/Song.lrc', filename: 'Song.lrc' };
+    expect(companionMember(song, ELRC_EXT)).toBe('Artist/Song.elrc');
+    expect(companionMember({ zip_name: 'pack.zip', id: 'pack.zip!' }, ELRC_EXT)).toBeNull();
+  });
+
+  it('is null for songs that are not inside a zip', () => {
+    expect(companionMember({ id: 'Folder/Song.lrc', filename: 'Song.lrc' }, ELRC_EXT)).toBeNull();
+    expect(companionMember(undefined, ELRC_EXT)).toBeNull();
   });
 });
 
