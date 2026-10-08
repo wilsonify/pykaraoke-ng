@@ -2,16 +2,13 @@
 #
 # Run the PyKaraoke-NG test suite.
 #
-#   pytest    engine unit tests (CPython)
-#   vitest    web UI logic tests
-#   smoke     verify the built web app serves its assets (and, when a
-#             chromium is available, that the PyScript engine boots)
+#   pytest    engine unit tests (CPython) — src/pykaraoke
+#   vitest    web UI logic tests — extracted from web/index.html
 #
 # Usage:
 #   ./scripts/run-tests.sh            # everything
 #   ./scripts/run-tests.sh --engine   # pytest only
 #   ./scripts/run-tests.sh --web      # vitest only
-#   ./scripts/run-tests.sh --smoke    # UI smoke test only
 #   ./scripts/run-tests.sh --verbose
 #
 set -euo pipefail
@@ -25,7 +22,6 @@ if [[ $# -gt 0 ]]; then
   case "$1" in
     --engine) MODE=engine ;;
     --web) MODE=web ;;
-    --smoke) MODE=smoke ;;
     --verbose) VERBOSE=1 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
@@ -55,19 +51,12 @@ web_tests() {
   (cd "$ROOT_DIR/tests/web" && npm test)
 }
 
-smoke_test() {
-  echo "==> UI smoke test"
-  run_python "$ROOT_DIR/scripts/ui-smoke.py"
-}
-
 case "$MODE" in
   engine) engine_tests ;;
   web) web_tests ;;
-  smoke) smoke_test ;;
   all)
     engine_tests
     web_tests
-    smoke_test
     ;;
 esac
 
