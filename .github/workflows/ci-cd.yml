@@ -1,9 +1,16 @@
-# Production-grade CI/CD Pipeline for PyKaraoke NG
+# CI/CD Pipeline for PyKaraoke NG
 #
 # Job graph (stage order):
 #   unit-tests-python ─┐
-#   unit-tests-rust   ─┼─► sonarqube ─► integration-tests ─► build (matrix) ─► e2e-tests (matrix) ─► release
+#   unit-tests-rust   ─┼─► sonarqube ─► build (matrix) ─► release
 #   unit-tests-frontend┘
+#
+# The app is one HTML file (web/index.html) + a pure-Python engine wheel +
+# a thin Tauri shell, so the pipeline only needs those three test/build legs:
+#   * pytest   → src/pykaraoke (runs under CPython and under Pyodide)
+#   * vitest   → the JS extracted from web/index.html
+#   * cargo    → src/runtimes/tauri/src-tauri (folder dialog + file reads)
+#   * tauri build → bundles the wheel + vendored Pyodide/PyScript + web/
 #
 # Pull requests: run full CI, but do NOT trigger the release stage.
 # Main branch pushes: run full CI + release stage.
@@ -11,8 +18,6 @@
 # Required secrets:
 #   SONAR_TOKEN          – SonarQube/SonarCloud authentication token
 #   SONARQUBE_HOST_URL   – SonarQube server URL (e.g. https://sonarcloud.io)
-#   TAURI_PRIVATE_KEY    – (optional) Tauri updater signing key
-#   TAURI_KEY_PASSWORD   – (optional) Tauri updater key password
 name: CI/CD Pipeline
 
 on:
@@ -34,9 +39,8 @@ env:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 0: Change Detection — determine which jobs are needed.
-  #          Skips the heavy Rust job when no Tauri/Rust files changed,
-  #          saving ~40s of apt installs + Rust toolchain setup per run.
+  # STAGE 0: Change Detection — skips the heavy Rust job when no Tauri/Rust
+  #          files changed, saving apt installs + toolchain setup per run.
   # ═══════════════════════════════════════════════════════════════════════════
 
   changes:
@@ -64,7 +68,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 1: Unit Tests — Python, Rust, and Frontend run in parallel.
-  #          Coverage is collected for the SonarQube stage.
   # ═══════════════════════════════════════════════════════════════════════════
 
   unit-tests-python:
@@ -115,54 +118,6 @@ jobs:
             htmlcov/
           retention-days: 7
 
-  unit-tests-rust:
-    name: Unit Tests / Rust
-    runs-on: ubuntu-22.04      # Tauri v1 requires webkit2gtk-4.0, only on 22.04
-    # Only run when Tauri/Rust files actually changed (or on workflow_dispatch).
-    # This avoids ~40s of apt installs + Rust toolchain setup on Python/frontend PRs.
-    needs: [changes]
-    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # Cache downloaded .deb files across runs using actions/cache.
-      # apt-get install uses the cached archives on cache hit, skipping the download.
-      # Trade-off: cached tarballs add ~5 MB to cache storage but save ~31s of
-      # network downloads on every Rust job run.
-      # Increment the cache key suffix ('tauri-deps-v1') when the package list changes.
-      - name: Cache apt package archives (Tauri system dependencies)
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-tauri-deps-v1
-
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q \
-            libwebkit2gtk-4.0-dev \
-            libssl-dev \
-            libgtk-3-dev \
-            librsvg2-dev
-
-      - name: Install Rust toolchain (stable)
-        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-
-      # Swatinem/rust-cache caches ~/.cargo/registry, ~/.cargo/git, and target/
-      # with a key derived from Cargo.lock + OS + Rust toolchain version.
-      # It also prunes stale build artifacts to prevent unbounded cache growth.
-      - name: Cache Rust build artifacts
-        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
-        with:
-          workspaces: src/runtimes/tauri/src-tauri
-
-      - name: Run Rust unit tests
-        working-directory: src/runtimes/tauri/src-tauri
-        run: cargo test
-
   unit-tests-frontend:
     name: Unit Tests / Frontend
     runs-on: ubuntu-latest
@@ -177,14 +132,58 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # Extracts the inline <script type="module"> from web/index.html and
+      # runs the UI logic tests against it (vitest, no browser needed).
       - name: Run frontend unit tests
-        working-directory: src/runtimes/tauri/src
-        run: node --test app.test.js index.test.js
+        working-directory: tests/web
+        run: |
+          npm ci
+          npm test
+
+  unit-tests-rust:
+    name: Unit Tests / Rust
+    runs-on: ubuntu-latest
+    # Only run when Tauri/Rust files actually changed (or on workflow_dispatch).
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Tauri v2 needs webkit2gtk-4.1 (ubuntu-latest ships it).
+      # Increment the cache key suffix when the package list changes.
+      - name: Cache apt package archives (Tauri system dependencies)
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-${{ runner.os }}-tauri-deps-v1
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            libwebkit2gtk-4.1-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Rust toolchain (stable)
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
+        with:
+          workspaces: src/runtimes/tauri/src-tauri
+
+      - name: Run Rust unit tests
+        working-directory: src/runtimes/tauri/src-tauri
+        run: cargo test
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 1.5: Spec Kit Validation — enforce spec-driven development.
-  #            Runs in parallel with unit tests. On pushes the script
-  #            auto-passes for main/master; on PRs it validates the feature branch.
   # ═══════════════════════════════════════════════════════════════════════════
 
   spec-validation:
@@ -211,7 +210,6 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 2: SonarQube — static analysis + quality gate enforcement.
-  #          Runs only after ALL unit-test jobs succeed.
   # ═══════════════════════════════════════════════════════════════════════════
 
   sonarqube:
@@ -250,66 +248,16 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 3: Integration Tests — realistic service dependencies.
-  #          Runs only after SonarQube quality gate passes.
-  # ═══════════════════════════════════════════════════════════════════════════
-
-  integration-tests:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [sonarqube]
-    if: ${{ !cancelled() && needs.sonarqube.result == 'success' }}
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install uv
-        run: 'pip install --only-binary :all: uv==0.4.30'
-
-      - name: Restore uv cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies via lockfile
-        run: uv sync --frozen --extra dev --extra test
-
-      - name: Install Chromium for Selenium E2E helper
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q chromium-browser chromium-chromedriver
-
-      - name: Run integration tests
-        run: |
-          xvfb-run -a uv run --frozen pytest tests/integration/ -v -m integration \
-            --junitxml=integration-junit.xml
-
-      - name: Upload integration test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integration-test-results
-          path: integration-junit.xml
-          retention-days: 7
-
-  # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 4: Platform Build Matrix — parallel native builds.
-  #          Triggers only after integration tests pass.
+  # STAGE 3: Platform Build Matrix — parallel native builds.
+  #          `beforeBuildCommand` rebuilds the engine wheel and vendors the
+  #          Pyodide/PyScript runtime into web/, then Tauri embeds web/.
   # ═══════════════════════════════════════════════════════════════════════════
 
   build:
     name: Build / ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
-    needs: [integration-tests]
-    if: ${{ !cancelled() && needs.integration-tests.result == 'success' }}
+    needs: [sonarqube]
+    if: ${{ !cancelled() && needs.sonarqube.result == 'success' }}
     permissions:
       contents: read
     strategy:
@@ -317,7 +265,7 @@ jobs:
       matrix:
         include:
           - platform: linux
-            os: ubuntu-22.04
+            os: ubuntu-latest
             bundles: deb
             artifact-name: tauri-linux-x86_64
           - platform: windows
@@ -333,26 +281,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Cache downloaded .deb files across runs using actions/cache.
-      # apt-get install uses the cached archives on cache hit, skipping the download.
-      # patchelf is included here (not in unit-tests-rust) as it is only needed
-      # during the packaging/bundle step of a production build.
-      # Increment the cache key suffix ('tauri-deps-v1') when the package list changes.
-      - name: Cache apt package archives (Tauri system dependencies)
-        if: matrix.platform == 'linux'
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          key: apt-${{ runner.os }}-tauri-deps-v1
-
+      # patchelf is only needed during the packaging/bundle step.
       - name: Install Linux system dependencies
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libssl-dev \
             libgtk-3-dev \
+            libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
 
@@ -369,39 +307,21 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # The Tauri CLI comes from the project's own devDependencies (v2).
       - name: Install Tauri CLI
-        run: npm install -g --ignore-scripts @tauri-apps/cli@1.6.3
-
-      - name: Build Tauri application
         working-directory: src/runtimes/tauri
-        run: tauri build --bundles ${{ matrix.bundles }}
+        run: npm ci
 
-        # ── Smoke-test the actual built artifact ──────────────────────────
-      - name: Set up Python ${{ env.PYTHON_VERSION }} (for artifact validation)
-        if: matrix.platform == 'windows'
+      # Python builds the engine wheel and downloads the Pyodide/PyScript
+      # runtime that web/index.html loads (scripts/build-web.py).
+      - name: Set up Python ${{ env.PYTHON_VERSION }} (for the engine wheel)
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install artifact validation dependencies
-        if: matrix.platform == 'windows'
-        run: 'pip install --only-binary :all: pytest==9.0.3'
-
-      - name: Validate built backend.exe artifact
-        if: matrix.platform == 'windows'
-        shell: bash
-        run: |
-          export PYKARAOKE_BACKEND_EXE="src/runtimes/tauri/src-tauri/backend/backend.exe"
-          python -m pytest tests/validation/ \
-            -v -m artifact --tb=short --junitxml=validation-junit-windows.xml
-
-      - name: Upload validation test results
-        if: matrix.platform == 'windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: validation-results-windows
-          path: validation-junit-windows.xml
-          retention-days: 7
+      - name: Build Tauri application
+        working-directory: src/runtimes/tauri
+        run: npx tauri build --bundles ${{ matrix.bundles }}
 
       - name: Upload platform build artifact
         uses: actions/upload-artifact@v4
@@ -412,176 +332,16 @@ jobs:
           if-no-files-found: error
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 5: End-to-End Tests — validate each platform's artifact.
-  #          Runs per platform after ALL builds succeed.
-  # ═══════════════════════════════════════════════════════════════════════════
-
-  e2e-tests:
-    name: E2E Tests / ${{ matrix.platform }}
-    runs-on: ${{ matrix.os }}
-    needs: [build]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux
-            os: ubuntu-22.04
-            artifact-name: tauri-linux-x86_64
-          - platform: windows
-            os: windows-latest
-            artifact-name: tauri-windows-x86_64
-          - platform: macos
-            os: macos-latest
-            artifact-name: tauri-macos-aarch64
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download platform build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: dist/
-
-      - name: Verify artifact exists
-        shell: bash
-        run: |
-          echo "=== Platform build artifacts ==="
-          find dist/ -type f | sort
-          file_count=$(find dist/ -type f | wc -l)
-          echo "Total files: $file_count"
-          test "$file_count" -gt 0 || { echo "ERROR: No artifacts found"; exit 1; }
-
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install uv
-        run: 'pip install --only-binary :all: uv==0.4.30'
-
-      - name: Restore uv cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies via lockfile
-        run: uv sync --frozen --extra dev --extra test
-
-      - name: Install Linux display and Chromium (for headless E2E)
-        if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q xvfb chromium-browser chromium-chromedriver
-
-      - name: Run E2E tests (Linux — headless via Xvfb)
-        if: matrix.platform == 'linux'
-        run: |
-          xvfb-run -a uv run --frozen pytest tests/integration/test_end_to_end.py \
-            -v -m "e2e or integration" \
-            --junitxml=e2e-junit-${{ matrix.platform }}.xml
-
-      - name: Run E2E + artifact validation tests (Windows / macOS)
-        if: matrix.platform != 'linux'
-        run: |
-          uv run --frozen pytest tests/integration/test_end_to_end.py \
-            tests/validation/ \
-            -v -m "e2e or integration or artifact" \
-            --junitxml=e2e-junit-${{ matrix.platform }}.xml
-        shell: bash
-
-      - name: Upload E2E test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-results-${{ matrix.platform }}
-          path: e2e-junit-${{ matrix.platform }}.xml
-          retention-days: 7
-
-  # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 5b: BDD End-to-End Tests — Cucumber.js acceptance suite.
-  #           Runs after build stage succeeds. Uses docker-compose to
-  #           start backend + UI + Selenium, then runs BDD feature files.
-  # ═══════════════════════════════════════════════════════════════════════════
-
-  bdd-e2e-tests:
-    name: BDD E2E Tests
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: ${{ !cancelled() && needs.build.result == 'success' }}
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Start application services (backend + UI + Selenium)
-        run: |
-          docker compose -f deploy/docker/docker-compose.yml \
-            --profile e2e up -d --build --wait
-        env:
-          SONGS_DIR: ./songs
-
-      - name: Wait for backend to be healthy
-        run: |
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
-              echo "Backend is healthy"
-              exit 0
-            fi
-            echo "Waiting for backend... ($i/30)"
-            sleep 2
-          done
-          echo "Backend did not become healthy in time"
-          exit 1
-
-      - name: Install BDD test dependencies
-        working-directory: src/runtimes/tauri/e2e
-        run: npm ci --ignore-scripts
-
-      - name: Run BDD E2E tests (fail-fast)
-        working-directory: src/runtimes/tauri/e2e
-        run: npm run test:e2e:ci
-        env:
-          E2E_APP_URL: http://localhost:3000
-          SELENIUM_URL: http://localhost:4444/wd/hub
-
-      - name: Upload BDD test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bdd-e2e-reports
-          path: src/runtimes/tauri/e2e/reports/
-          retention-days: 7
-
-      - name: Stop application services
-        if: always()
-        run: |
-          docker compose -f deploy/docker/docker-compose.yml \
-            --profile e2e down
-
-  # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 6: Release — semver tag + GitHub Release with all platform artifacts.
-  #          Runs ONLY on main branch pushes after all E2E tests pass.
+  # STAGE 4: Release — semver tag + GitHub Release with all platform artifacts.
+  #          Runs ONLY on main branch pushes after all builds succeed.
   #          Pull requests never trigger this stage.
   # ═══════════════════════════════════════════════════════════════════════════
 
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [e2e-tests, bdd-e2e-tests]
-    if: ${{ !cancelled() && needs.e2e-tests.result == 'success' && needs.bdd-e2e-tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: [build]
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     permissions:
       contents: write  # required to create tags and GitHub Releases
     steps:
@@ -636,40 +396,3 @@ jobs:
           prerelease: false
           make_latest: true
           files: release-files/*
-
-# ═══════════════════════════════════════════════════════════════════════════
-# OPTIONAL IMPROVEMENT STRATEGIES (not yet implemented)
-# ═══════════════════════════════════════════════════════════════════════════
-#
-# 1. Custom Docker image with Tauri deps preinstalled
-#    Instead of caching apt packages, build a Docker image once with all
-#    Tauri dependencies pre-baked, publish it to GHCR, and use it as the
-#    container for the Rust job.  Eliminates apt entirely for subsequent runs.
-#
-#    unit-tests-rust:
-#      container: ghcr.io/${{ github.repository }}/tauri-builder:ubuntu-22.04
-#      ...
-#      # No apt-get step needed — all packages are in the image
-#
-#    Trade-off: requires maintaining the Docker image and a separate workflow
-#    to rebuild it when system dependencies change.
-#
-# 2. Migrate to Tauri v2 (webkit2gtk-4.1) to unpin ubuntu-22.04
-#    Tauri v2 targets webkit2gtk-4.1, which ships with Ubuntu 24.04 (ubuntu-latest).
-#    This would allow switching the Rust job from ubuntu-22.04 to ubuntu-latest,
-#    simplifying the runner configuration and eliminating the webkit4.0 constraint.
-#
-#    unit-tests-rust:
-#      runs-on: ubuntu-latest   # after Tauri v2 migration
-#      # apt package changes: libwebkit2gtk-4.1-dev instead of 4.0-dev
-#
-# 3. Convert the Rust job to a reusable workflow
-#    Extract the Rust unit-test job into .github/workflows/rust-tests.yml
-#    and call it with 'uses:' from this pipeline.  This allows other workflows
-#    (e.g., nightly builds, release candidates) to reuse the same job definition
-#    without duplication.
-#
-#    jobs:
-#      unit-tests-rust:
-#        uses: ./.github/workflows/rust-tests.yml
-#        secrets: inherit
