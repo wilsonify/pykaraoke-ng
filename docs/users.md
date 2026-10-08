@@ -99,7 +99,35 @@ Organize your files so CDG tracks have a matching audio file in the same folder:
 |--------|-----------|-------------|
 | CD+G | `.cdg` + `.mp3`/`.wav`/`.ogg` | Required separate audio file |
 | MIDI Karaoke | `.kar`, `.mid` | Built-in MIDI synthesis |
-| LRC lyrics | `.lrc`, `.lcr` + audio | Required separate audio file; optional `.elrc` word timing |
+| LRC lyrics | `.lrc`, `.lcr` + audio | Required separate audio file; optional `.elrc` word timing, duet part tags |
+
+### Duet Songs
+
+An LRC file can say which singer performs each line. The part tag goes
+straight after the timestamp and uses generic part ids (never gendered):
+`a` and `b` for the two singers, `ab` for a line they sing together.
+
+```lrc
+[pa:Alice]                ← optional singer names
+[pb:Bob]
+
+[00:01.00][a]I will sing the first line
+[00:05.00][b]Then I will answer back
+[00:09.00][ab]Together we hold the note
+[00:13.00]An untagged line stays solo
+```
+
+- Tagged lines are coloured by singer — blue for **A**, green for **B**,
+  violet for a **shared** line — with a small chip in front naming the
+  singer (`Alice`, `Bob`, `Alice + Bob`, or `A`, `B`, `A+B` when the song
+  does not name them).
+- Songs without `[pa:]`/`[pb:]` or line tags behave exactly as before:
+  solo lyrics keep their plain look and payload.
+- Word-level tags (`<mm:ss.xx>` inside a line) and companion `.elrc`
+  timing keep the line's part.
+- `[ba]` is accepted as a synonym of `[ab]`.
+- MIDI/KAR lyrics carry no duet tags: that format has no way to express
+  them, so the parts stay unexposed.
 | MPEG Video | `.mpg`, `.mpeg`, `.avi` | Embedded audio track |
 
 ---
