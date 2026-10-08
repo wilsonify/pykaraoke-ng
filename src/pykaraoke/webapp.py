@@ -171,6 +171,11 @@ class KaraokeApp:
         ``elrc_text`` is the optional companion ``.elrc`` file, which adds
         word-level timing on top of the line timestamps.  A missing or
         unusable ``.elrc`` is not an error: the plain LRC timing is used.
+
+        The payload also carries duet information when present: a
+        ``parts`` key with the ``[pa:]``/``[pb:]`` singer names, and a
+        per-line ``part`` key (``a``/``b``/``ab``) on tagged lyric events.
+        Both are preserved across an ``.elrc`` merge.
         """
         if not isinstance(text, str):
             return {"error": "invalid text"}
