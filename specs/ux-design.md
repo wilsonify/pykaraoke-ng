@@ -238,11 +238,13 @@ Dark theme by default (DJs work in low-light environments):
 
 ## 7. Component Hierarchy
 
-### 7.1 Current State (to be refactored)
+### 7.1 Current State
 
-The current frontend is a single `index.html` with a two-panel horizontal
-flexbox layout (`#main-content` splits into `.left-panel` and `.right-panel`)
-and a monolithic `app.js` class. This violates the single-column constraint.
+The frontend is a single `web/index.html` with one vertical column
+(`<main class="main-column">`) — no horizontal panels — and its markup,
+CSS, and vanilla-JS module all live inline in that file (no `app.js`, no
+build step). The single-column constraint holds; the hierarchy below is
+the logical breakdown of that file.
 
 ### 7.2 Target Component Hierarchy
 
@@ -269,7 +271,7 @@ and a monolithic `app.js` class. This violates the single-column constraint.
 | `SearchResults`    | Virtual-scrolling list of search matches               |
 | `NowPlaying`       | Current song display + play/pause/skip + progress bar  |
 | `Queue`            | Ordered list with drag-reorder and inline remove       |
-| `StatusBar`        | Backend status indicator, connection health            |
+| `StatusBar`        | Engine status indicator and action feedback            |
 
 ---
 
