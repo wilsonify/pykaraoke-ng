@@ -38,7 +38,7 @@ src/pykaraoke/            pure-stdlib engine (runs on CPython and Pyodide)
   webapp.py               JSON-friendly API exposed to the page
   cdg.py                  CD+G packet decoding
   midi.py                 MIDI/KAR parsing
-  lrc.py                  LRC / .elrc word-timing parsing
+  lrc.py                  LRC / .elrc word timing + duet part parsing
   database.py             library scan, search, settings
   filename_parser.py      "Artist - Title" extraction
 
@@ -143,7 +143,8 @@ The whole application lives in that file. Three sections, top to bottom:
    (CD+G packets, MIDI, LRC).
 
 The JS engine-neutral pieces are `CDGAnimator`, `MidiSynth`,
-`LrcHighlighter`, `queue` helpers and `formatTime`.
+`highlightState`, `buildLyricLines`, `partClass`/`partLabel`, the `queue`
+helpers and `formatTime`.
 
 ### Editing rules
 
