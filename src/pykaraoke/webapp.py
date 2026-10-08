@@ -20,6 +20,8 @@ class KaraokeApp:
         self._decoders: dict[str, cdg_module.CdgDecoder] = {}
         # Zip bytes keyed by zip file name (for reading members later).
         self._zips: dict[str, bytes] = {}
+        # Cached member names per zip (looked up for companion files).
+        self._zip_names: dict[str, list] = {}
 
     # ------------------------------------------------------------------
     # Persistence
@@ -42,6 +44,7 @@ class KaraokeApp:
         if isinstance(data, dict):
             self.library = database.SongLibrary.from_dict(data)
             self._decoders.clear()
+            self._zip_names.clear()
 
     # ------------------------------------------------------------------
     # Library
@@ -72,6 +75,7 @@ class KaraokeApp:
         except (TypeError, ValueError):
             return {"added": 0, "total": len(self.library.songs)}
         self._zips[str(name)] = raw
+        self._zip_names.pop(str(name), None)
         return self.library.scan_zip(str(name), raw)
 
     def read_zip_member(self, zip_name: str, member: str):
@@ -91,6 +95,26 @@ class KaraokeApp:
                 return zf.read(str(member))
         except (zipfile.BadZipFile, KeyError):
             return None
+
+    def zip_members(self, zip_name: str) -> list:
+        """Names of the files inside the loaded zip *zip_name*.
+
+        Empty when the zip is not in memory.  Lets the UI check for a
+        companion file (e.g. ``.elrc``) without reading it back.
+        """
+        name = str(zip_name)
+        if name not in self._zips:
+            return []
+        if name not in self._zip_names:
+            import io
+            import zipfile
+
+            try:
+                with zipfile.ZipFile(io.BytesIO(self._zips[name])) as zf:
+                    self._zip_names[name] = zf.namelist()
+            except zipfile.BadZipFile:
+                self._zip_names[name] = []
+        return self._zip_names[name]
 
     def search(self, query: str, limit: int = 500) -> dict:
         results = self.library.search(str(query), limit=int(limit))
@@ -141,13 +165,26 @@ class KaraokeApp:
             return {"error": "could not parse MIDI file"}
         return mf.to_dict()
 
-    def parse_lrc(self, text) -> dict:
-        """Parse LRC lyrics text into timed lyric events for the UI."""
+    def parse_lrc(self, text, elrc_text=None) -> dict:
+        """Parse LRC lyrics text into timed lyric events for the UI.
+
+        ``elrc_text`` is the optional companion ``.elrc`` file, which adds
+        word-level timing on top of the line timestamps.  A missing or
+        unusable ``.elrc`` is not an error: the plain LRC timing is used.
+        """
         if not isinstance(text, str):
             return {"error": "invalid text"}
         parsed = lrc.parse_lrc(text)
         if parsed is None:
             return {"error": "no timed lyrics found"}
+        if isinstance(elrc_text, str) and elrc_text.strip():
+            merged = lrc.parse_elrc(
+                elrc_text,
+                parsed["lyrics"],
+                offset_ms=lrc.parse_offset(parsed["meta"]),
+            )
+            if merged:
+                parsed = {**parsed, "lyrics": merged, "elrc": True}
         return parsed
 
     def cdg_open(self, song_id: str, data) -> str:
