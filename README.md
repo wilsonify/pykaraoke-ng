@@ -24,7 +24,7 @@ WebAssembly.
 ## Architecture
 
 ```
-web/
+src/web/
   index.html              the entire app: UI + CSS + JS + PyScript bridge
   _assets/                vendored Pyodide + PyScript (generated)
   _wheel/                 pykaraoke engine wheel (generated)
@@ -38,7 +38,7 @@ src/runtimes/tauri/       thin desktop shell (3 native commands)
 tests/                    pytest (engine) + vitest (JS extracted from index.html)
 ```
 
-`web/index.html` is one self-contained file: markup, `<style>`, the
+`src/web/index.html` is one self-contained file: markup, `<style>`, the
 vanilla-JS module (UI, file access, playback), and the inline
 `<script type="py">` bridge — no framework, no bundler, no build step.
 
@@ -51,22 +51,22 @@ no second Python process, service, or backend.
 
 ```bash
 # 1. Python engine + tests
-./scripts/setup-dev-env.sh          # create .venv, install dev deps
-./scripts/run-tests.sh              # pytest + vitest
+./src/scripts/setup-dev-env.sh          # create .venv, install dev deps
+./src/scripts/run-tests.sh              # pytest + vitest
 
 # 2. Run in a browser (dev / preview)
-bash scripts/build-web.py           # wheel + vendored Pyodide/PyScript
-python -m http.server 18000 --directory web
+bash src/scripts/build-web.py           # wheel + vendored Pyodide/PyScript
+python -m http.server 18000 --directory src/web
 # open http://localhost:18000
 
 # 3. Desktop app (Tauri)
 cd src/runtimes/tauri
 npm install
-npm run tauri dev                   # serves web/ + opens the window
+npm run tauri dev                   # serves src/web/ + opens the window
 npm run tauri build                 # produces the installer
 ```
 
-The desktop build embeds `web/` (including the vendored WASM runtime), so
+The desktop build embeds `src/web/` (including the vendored WASM runtime), so
 the app works fully offline. The only native code is a folder dialog and
 file reads (`src/runtimes/tauri/src-tauri/src/lib.rs`).
 
@@ -75,12 +75,43 @@ for the Tauri build.
 
 ## Documentation
 
+The documentation is built with MkDocs Material and deployed to GitHub Pages
+at `https://wilsonify.github.io/pykaraoke-ng/` by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml). (Publishing that
+site requires the one-time repository setting **Settings → Pages → Build and
+deployment → Source = "GitHub Actions"**.)
+
 | Audience | Guide |
 |----------|-------|
-| Users | [User Guide](docs/users.md) |
-| Developers | [Developer Guide](docs/developers.md) |
+| Users | [User guide](docs/user-guide/index.md) |
+| Install / build | [Quick start](docs/getting-started/quickstart.md) |
+| Developers | [Development](docs/contributing/index.md) |
 | Architecture | [Overview](docs/architecture/overview.md) |
-| Product spec | [Specs](specs/README.md) |
+| Specifications | [Specifications](docs/reference/specifications.md) |
+
+Build and preview the site locally:
+
+```bash
+python -m pip install -e ".[docs]"
+mkdocs serve            # http://127.0.0.1:8000
+mkdocs build --strict   # one-off build into site/ (git-ignored)
+```
+
+## Specifications
+
+PyKaraoke-NG uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for
+specification-driven development. Enduring requirements live in
+`openspec/specs/`; proposed, in-progress, and completed changes live in
+`openspec/changes/`.
+
+```bash
+npm install --global @fission-ai/openspec@1.14.1
+openspec new change my-feature     # scaffold a change
+openspec validate --all --strict   # validate specs and changes
+```
+
+The full lifecycle (propose → validate → implement → archive) is documented in
+[docs/contributing/openspec.md](docs/contributing/openspec.md).
 
 ## License
 
