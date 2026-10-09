@@ -7,11 +7,11 @@
 # the frontend test runner.
 #
 # Usage:
-#   ./scripts/setup-dev-env.sh
+#   ./src/scripts/setup-dev-env.sh
 #
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON="${PYTHON:-python3}"
@@ -32,9 +32,9 @@ echo "==> Installing pykaraoke-ng[dev]"
 "$VENV_PY" -m pip install -e "$ROOT_DIR[dev]" || "$VENV_PY" -m pip install -e "$ROOT_DIR"
 
 echo "==> Building web assets"
-"$VENV_PY" "$ROOT_DIR/scripts/build-web.py"
+"$VENV_PY" "$ROOT_DIR/src/scripts/build-web.py"
 
 echo "==> Installing frontend test runner"
 (cd "$ROOT_DIR/tests/web" && npm install)
 
-echo "Setup complete. Run ./scripts/run-tests.sh"
+echo "Setup complete. Run ./src/scripts/run-tests.sh"
