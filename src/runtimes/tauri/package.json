@@ -2,9 +2,9 @@
   "name": "pykaraoke-ng-tauri",
   "private": true,
   "version": "0.8.0",
-  "description": "PyKaraoke NG desktop shell (thin Tauri wrapper around web/)",
+  "description": "PyKaraoke NG desktop shell (thin Tauri wrapper around src/web/)",
   "scripts": {
-    "build": "python ../../../scripts/build-web.py",
+    "build": "python ../../scripts/build-web.py",
     "tauri": "tauri"
   },
   "devDependencies": {
