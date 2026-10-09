@@ -1,0 +1,102 @@
+# MkDocs configuration for the PyKaraoke-NG documentation site.
+#
+# The site is published to GitHub Pages by .github/workflows/docs.yml from the
+# default branch. Build it locally with:
+#
+#     python -m pip install -e ".[docs]"
+#     mkdocs serve          # live preview on http://127.0.0.1:8000
+#     mkdocs build --strict # one-off build into site/ (git-ignored)
+#
+# `site_url` sets the project-site base path (/pykaraoke-ng/); MkDocs rewrites
+# every asset and internal link to match, so the same build works on Pages and
+# on localhost.
+
+site_name: PyKaraoke-NG
+site_description: A slim, keyboard-driven karaoke queue manager for working DJs.
+site_url: https://wilsonify.github.io/pykaraoke-ng/
+repo_url: https://github.com/wilsonify/pykaraoke-ng
+repo_name: wilsonify/pykaraoke-ng
+edit_uri: edit/main/docs/
+copyright: LGPL-2.1-or-later
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+    absolute_links: warn
+  links:
+    not_found: warn
+    absolute_links: warn
+    unrecognized_links: warn
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start (from source): getting-started/quickstart.md
+  - User Guide:
+      - Overview: user-guide/index.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Web application: architecture/web-app.md
+      - Python engine: architecture/engine.md
+  - Reference:
+      - Supported formats: reference/formats.md
+      - Configuration: reference/configuration.md
+      - Engine API: reference/engine-api.md
+      - Specifications: reference/specifications.md
+  - Contributing:
+      - Development: contributing/index.md
+      - OpenSpec workflow: contributing/openspec.md
+      - Build system: contributing/build-system.md
