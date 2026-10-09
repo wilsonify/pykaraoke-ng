@@ -3,17 +3,17 @@
 # Run the PyKaraoke-NG test suite.
 #
 #   pytest    engine unit tests (CPython) — src/pykaraoke
-#   vitest    web UI logic tests — extracted from web/index.html
+#   vitest    web UI logic tests — extracted from src/web/index.html
 #
 # Usage:
-#   ./scripts/run-tests.sh            # everything
-#   ./scripts/run-tests.sh --engine   # pytest only
-#   ./scripts/run-tests.sh --web      # vitest only
-#   ./scripts/run-tests.sh --verbose
+#   ./src/scripts/run-tests.sh            # everything
+#   ./src/scripts/run-tests.sh --engine   # pytest only
+#   ./src/scripts/run-tests.sh --web      # vitest only
+#   ./src/scripts/run-tests.sh --verbose
 #
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VENV_DIR="${VENV_DIR:-$ROOT_DIR/.venv}"
 
 MODE=all
