@@ -1,0 +1,89 @@
+# Build and deploy the documentation site to GitHub Pages.
+#
+# The site is generated with MkDocs Material from docs/ and mkdocs.yml; the
+# built output in site/ is never committed. Deployment uses the official
+# GitHub Pages actions and the `github-pages` environment.
+#
+# One-time repository setting (cannot be automated from a workflow):
+#   Settings → Pages → Build and deployment → Source = "GitHub Actions".
+#
+# Triggers when documentation, site configuration, the specification tree,
+# or this workflow change on the default branch, and on manual dispatch.
+name: Documentation
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'openspec/**'
+      - 'README.md'
+      - 'pyproject.toml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'openspec/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+# Allow one concurrent deployment; let an in-progress deploy finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: '3.12'
+  MKDOCS_MATERIAL_VERSION: '9.6.14'
+
+jobs:
+  # Build the site with --strict so broken internal links, missing nav
+  # entries, and bad references fail the build instead of shipping.
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install MkDocs Material (pinned)
+        run: 'pip install --only-binary :all: mkdocs-material==${{ env.MKDOCS_MATERIAL_VERSION }}'
+
+      - name: Build documentation
+        run: mkdocs build --strict
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # Deploy the built artifact. Requires the Pages environment and the
+  # pages/id-token permissions granted below.
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # Do not deploy from pull requests — build-only validation there.
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
