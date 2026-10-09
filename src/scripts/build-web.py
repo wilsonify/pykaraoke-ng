@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Build the self-contained web assets for PyKaraoke NG (cross-platform).
 
-Produces, inside web/:
+Produces, inside src/web/:
 
     _wheel/pykaraoke_ng-<version>-py3-none-any.whl   the engine wheel
     _assets/pyodide/                                  the Pyodide runtime
     _assets/pyscript/                                 the PyScript core
 
-Everything under web/_assets and web/_wheel is generated and gitignored;
+Everything under src/web/_assets and src/web/_wheel is generated and gitignored;
 a fresh checkout needs to run this script before serving the app (and
 before `tauri build`).
 
-Usage: python scripts/build-web.py
+Usage: python src/scripts/build-web.py
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ import subprocess
 import sys
 import urllib.request
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-WEB = ROOT / "web"
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+WEB = ROOT / "src" / "web"
 WHEEL_DIR = WEB / "_wheel"
 PYODIDE_DIR = WEB / "_assets" / "pyodide"
 PYSCRIPT_DIR = WEB / "_assets" / "pyscript"
