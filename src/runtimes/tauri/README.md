@@ -1,7 +1,7 @@
 # PyKaraoke NG — Tauri desktop shell
 
 This directory is deliberately tiny. The entire application lives in
-[`web/`](../../web/) (HTML/CSS/JS + PyScript/Pyodide). Rust adds only the
+[`src/web/`](../../web/) (HTML/CSS/JS + PyScript/Pyodide). Rust adds only the
 three native capabilities a browser cannot provide:
 
 | Command        | Purpose                                        |
@@ -22,7 +22,7 @@ npm ci
 npm run tauri build        # or: npx tauri build
 ```
 
-`tauri.conf.json` runs `npm run build` (→ `python ../../../scripts/build-web.py`)
+`tauri.conf.json` runs `npm run build` (→ `python ../../scripts/build-web.py`)
 before building, so the wheel and vendored Pyodide/PyScript assets are
 recreated automatically. Output lands in `src-tauri/target/release/`.
 
@@ -34,7 +34,7 @@ npm ci
 npx tauri dev
 ```
 
-`beforeDevCommand` runs `python ../../../scripts/serve-web.py 18000`, so the
+`beforeDevCommand` runs `python ../../scripts/serve-web.py 18000`, so the
 window loads `http://localhost:18000` — the same URL you can open in a plain
 browser with the browser folder picker. Reload the window after editing
-`web/index.html`.
+`src/web/index.html`.
