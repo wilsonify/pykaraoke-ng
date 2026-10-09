@@ -1,0 +1,24 @@
+schema: spec-driven
+
+# Project context: constraints an agent cannot infer by reading the code.
+# Kept short on purpose — general documentation lives in docs/.
+context: |
+  PyKaraoke-NG is a cross-platform desktop karaoke player for working DJs.
+  The application is a single self-contained HTML file (src/web/index.html)
+  plus a pure-stdlib Python engine (src/pykaraoke) that runs both under
+  CPython (tests) and under Pyodide/PyScript (the shipped app). Tauri is a
+  thin desktop shell exposing only three native commands.
+
+  Constraints that must shape every artifact:
+  - The Python engine stays pure stdlib. No new runtime dependencies
+    (no pygame, numpy, or mutagen) without an approved proposal.
+  - Behaviour must be identical on Windows, macOS, and Linux. Specs and
+    tasks must cover all three; no shell-specific syntax in shared config.
+  - The product is a slim sidebar utility panel for a live DJ, not a
+    full-screen media player. The binding UX invariants live in the
+    ux-slim-sidebar spec and are treated as defects when violated.
+  - Test-first: every behavioural change starts from a failing test.
+  - Do not describe unimplemented behaviour as current. Record proposed
+    behaviour as a change in openspec/changes/ until it ships.
+
+  Full governance is in openspec/specs/project-governance/spec.md.
