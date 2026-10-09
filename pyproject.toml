@@ -43,13 +43,17 @@ test = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
 ]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5,<10",
+]
 all = [
-    "pykaraoke-ng[dev,test]",
+    "pykaraoke-ng[dev,test,docs]",
 ]
 
 [project.urls]
 Homepage = "https://github.com/wilsonify/pykaraoke-ng"
-Documentation = "https://github.com/wilsonify/pykaraoke-ng#readme"
+Documentation = "https://wilsonify.github.io/pykaraoke-ng/"
 Repository = "https://github.com/wilsonify/pykaraoke-ng.git"
 Issues = "https://github.com/wilsonify/pykaraoke-ng/issues"
 
@@ -61,8 +65,8 @@ build-backend = "hatchling.build"
 packages = ["src/pykaraoke"]
 exclude = [
     "tests/",
-    "scripts/",
-    "web/",
+    "src/scripts/",
+    "src/web/",
     "src-tauri/",
     "deploy/",
     ".git/",
@@ -102,8 +106,8 @@ exclude = [
     "build",
     "dist",
     "*.egg-info",
-    "web/_assets",
-    "web/_wheel",
+    "src/web/_assets",
+    "src/web/_wheel",
 ]
 
 [tool.ruff.lint]
@@ -156,8 +160,8 @@ omit = [
     ".venv/*",
     "tests/*",
     "*/__pycache__/*",
-    "web/_assets/*",
-    "web/_wheel/*",
+    "src/web/_assets/*",
+    "src/web/_wheel/*",
 ]
 
 [tool.coverage.report]
@@ -184,6 +188,6 @@ ignore_missing_imports = true
 exclude = [
     "^.venv/",
     "^tests/",
-    "^web/_assets/",
-    "^web/_wheel/",
+    "^src/web/_assets/",
+    "^src/web/_wheel/",
 ]
