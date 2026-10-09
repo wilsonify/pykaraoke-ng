@@ -5,9 +5,9 @@
   "identifier": "com.pykaraoke.ng",
   "build": {
     "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "python ../../../scripts/serve-web.py 18000",
+    "beforeDevCommand": "python ../../scripts/serve-web.py 18000",
     "devUrl": "http://localhost:18000",
-    "frontendDist": "../../../../web"
+    "frontendDist": "../../../web"
   },
   "app": {
     "withGlobalTauri": true,
