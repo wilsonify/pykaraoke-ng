@@ -17,8 +17,8 @@ target/
 src/runtimes/tauri/node_modules/
 
 # Generated web assets (recreated by scripts/build-web.py)
-web/_assets/
-web/_wheel/
+_assets/
+_wheel/
 
 # Frontend unit tests
 tests/web/node_modules/
