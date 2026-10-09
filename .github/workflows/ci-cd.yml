@@ -5,12 +5,12 @@
 #   unit-tests-rust   ─┼─► sonarqube ─► build (matrix) ─► release
 #   unit-tests-frontend┘
 #
-# The app is one HTML file (web/index.html) + a pure-Python engine wheel +
+# The app is one HTML file (src/web/index.html) + a pure-Python engine wheel +
 # a thin Tauri shell, so the pipeline only needs those three test/build legs:
 #   * pytest   → src/pykaraoke (runs under CPython and under Pyodide)
-#   * vitest   → the JS extracted from web/index.html
+#   * vitest   → the JS extracted from src/web/index.html
 #   * cargo    → src/runtimes/tauri/src-tauri (folder dialog + file reads)
-#   * tauri build → bundles the wheel + vendored Pyodide/PyScript + web/
+#   * tauri build → bundles the wheel + vendored Pyodide/PyScript + src/web/
 #
 # Pull requests: run full CI, but do NOT trigger the release stage.
 # Main branch pushes: run full CI + release stage.
@@ -132,7 +132,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # Extracts the inline <script type="module"> from web/index.html and
+      # Extracts the inline <script type="module"> from src/web/index.html and
       # runs the UI logic tests against it (vitest, no browser needed).
       - name: Run frontend unit tests
         working-directory: tests/web
@@ -183,30 +183,35 @@ jobs:
         run: cargo test
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # STAGE 1.5: Spec Kit Validation — enforce spec-driven development.
+  # STAGE 1.5: OpenSpec Validation — enforce spec-driven development.
+  #   `openspec validate --all --strict` checks every artifact under
+  #   openspec/specs/ and openspec/changes/. `--archived` additionally
+  #   fails when an archived change still has unchecked tasks.
   # ═══════════════════════════════════════════════════════════════════════════
 
-  spec-validation:
-    name: Spec Kit Validation
+  openspec-validation:
+    name: OpenSpec Validation
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Validate spec completion
-        env:
-          PR_HEAD_REF: ${{ github.head_ref }}
-        run: |
-          set -euo pipefail
-          chmod +x specs/ci/validate-spec-completion.sh
-          # On pushes github.head_ref is empty; fall back to the current branch
-          BRANCH_NAME="${PR_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD)}"
-          SAFE_BRANCH_NAME="$(printf '%s' "$BRANCH_NAME" | tr -cd '[:alnum:]._/-')"
-          ./specs/ci/validate-spec-completion.sh "$SAFE_BRANCH_NAME"
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Pin the CLI: the spec schema and validator evolve between releases.
+      - name: Install OpenSpec CLI (pinned)
+        run: npm install -g @fission-ai/openspec@1.14.1
+
+      - name: Validate specs and changes
+        run: openspec validate --all --strict
+
+      - name: Validate archived changes are complete
+        run: openspec validate --archived
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 2: SonarQube — static analysis + quality gate enforcement.
@@ -215,9 +220,9 @@ jobs:
   sonarqube:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend, spec-validation]
+    needs: [unit-tests-python, unit-tests-rust, unit-tests-frontend, openspec-validation]
     # unit-tests-rust may be 'skipped' when no Rust files changed; treat skipped as acceptable.
-    if: always() && needs.unit-tests-python.result == 'success' && (needs.unit-tests-rust.result == 'success' || needs.unit-tests-rust.result == 'skipped') && needs.unit-tests-frontend.result == 'success' && (needs.spec-validation.result == 'success' || needs.spec-validation.result == 'skipped')
+    if: always() && needs.unit-tests-python.result == 'success' && (needs.unit-tests-rust.result == 'success' || needs.unit-tests-rust.result == 'skipped') && needs.unit-tests-frontend.result == 'success' && (needs.openspec-validation.result == 'success' || needs.openspec-validation.result == 'skipped')
     permissions:
       contents: read
       pull-requests: read
@@ -250,7 +255,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 3: Platform Build Matrix — parallel native builds.
   #          `beforeBuildCommand` rebuilds the engine wheel and vendors the
-  #          Pyodide/PyScript runtime into web/, then Tauri embeds web/.
+  #          Pyodide/PyScript runtime into src/web/, then Tauri embeds src/web/.
   # ═══════════════════════════════════════════════════════════════════════════
 
   build:
@@ -313,7 +318,7 @@ jobs:
         run: npm ci
 
       # Python builds the engine wheel and downloads the Pyodide/PyScript
-      # runtime that web/index.html loads (scripts/build-web.py).
+      # runtime that src/web/index.html loads (src/scripts/build-web.py).
       - name: Set up Python ${{ env.PYTHON_VERSION }} (for the engine wheel)
         uses: actions/setup-python@v5
         with:
