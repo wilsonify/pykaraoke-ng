@@ -1,6 +1,6 @@
 # Architecture Overview
 
-[← Home](../index.md) · [Developer Guide](../developers.md)
+[← Home](../index.md) · [Development](../contributing/index.md) · [Specifications](../reference/specifications.md)
 
 ---
 
@@ -16,7 +16,7 @@ PyKaraoke-NG is three thin layers and nothing else:
 └───────────────┬──────────────────────────────────────────────┘
                 │ window.__TAURI__.core.invoke / convertFileSrc
 ┌───────────────▼──────────────────────────────────────────────┐
-│  web/index.html — the whole application                      │
+│  src/web/index.html — the whole application                  │
 │    <style>            all CSS                                │
 │    <script type=module>  UI, state, file access, playback    │
 │    <script type=py>      bridge → window.pykaraoke_api       │
@@ -36,7 +36,7 @@ test suite.
 
 ## Components
 
-### Web application (`web/index.html`)
+### Web application (`src/web/index.html`)
 
 One self-contained file — UI, CSS, state, interaction, playback, and the
 inline PyScript bridge. Vanilla JS, no framework, no bundler, no build
@@ -70,7 +70,7 @@ Pure stdlib, so it runs unchanged under CPython and Pyodide:
 | `database.py` | Song library, scanning, search, settings |
 | `filename_parser.py` | "Artist - Title" extraction from filenames |
 
-It is packaged as one wheel (`web/_wheel/*.whl`) that PyScript installs
+It is packaged as one wheel (`src/web/_wheel/*.whl`) that PyScript installs
 at page load — no pip on the target machine, no Python interpreter
 required.
 
@@ -122,4 +122,4 @@ rather than a dead window.
 | **Pyodide instead of a backend process** | Same code path in dev, tests, and the shipped app; nothing to spawn or supervise |
 | **Single engine wheel** | One artifact, one version, no service split |
 | **Vanilla JS + stdlib Python** | Zero frontend deps; zero Python deps |
-| **Slim sidebar UI** | DJs need screen space for primary software (see [constitution §2](../../specs/constitution.md)) |
+| **Slim sidebar UI** | DJs need screen space for primary software (governed by the [project-governance](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/project-governance/spec.md) and [ux-slim-sidebar](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/ux-slim-sidebar/spec.md) specs) |

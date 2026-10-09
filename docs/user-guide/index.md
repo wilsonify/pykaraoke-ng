@@ -2,7 +2,7 @@
 
 Install PyKaraoke-NG, set up a song library, and run karaoke at a live event.
 
-[← Home](index.md)
+[← Home](../index.md)
 
 ---
 
@@ -54,7 +54,7 @@ window with a slim sidebar UI.
 | macOS | DMG | `PyKaraoke NG_<version>_x64.dmg` |
 | Linux | deb | `pykaraoke-ng_<version>_amd64.deb` |
 
-Alternatively serve `web/` and use the app in a browser — same page, same
+Alternatively serve `src/web/` and use the app in a browser — same page, same
 engine, with folder picking via the directory file input.
 
 ### Requirements
@@ -100,6 +100,7 @@ Organize your files so CDG tracks have a matching audio file in the same folder:
 | CD+G | `.cdg` + `.mp3`/`.wav`/`.ogg` | Required separate audio file |
 | MIDI Karaoke | `.kar`, `.mid` | Built-in MIDI synthesis |
 | LRC lyrics | `.lrc`, `.lcr` + audio | Required separate audio file; optional `.elrc` word timing, duet part tags |
+| MPEG Video | `.mpg`, `.mpeg`, `.avi` | Embedded audio track |
 
 ### Duet Songs
 
@@ -128,7 +129,6 @@ straight after the timestamp and uses generic part ids (never gendered):
 - `[ba]` is accepted as a synonym of `[ab]`.
 - MIDI/KAR lyrics carry no duet tags: that format has no way to express
   them, so the parts stay unexposed.
-| MPEG Video | `.mpg`, `.mpeg`, `.avi` | Embedded audio track |
 
 ---
 
@@ -142,16 +142,16 @@ search results.
 | Button | ID | Action |
 |--------|-----|--------|
 | ⏮ Previous | `prev-btn` | Jump to previous song in queue |
-| ⏪ Rewind | `rewind-btn` | Skip back 10 seconds (hold for continuous) |
+| ⏪ Rewind | `rewind-btn` | Skip back 5 seconds |
 | ▶ Play | `play-btn` | Start playback or resume from pause/stop |
 | ⏸ Pause | `pause-btn` | Pause playback (press Play to resume) |
-| ⏩ Fast Forward | `ff-btn` | Skip forward 10 seconds (hold for continuous) |
+| ⏩ Fast Forward | `ff-btn` | Skip forward 5 seconds |
 | ⏭ Next | `next-btn` | Skip to next song in queue |
 | ⏹ Stop | `stop-btn` | Stop playback, reset position |
 
-**How Stop works:** Stop resets the position to 0:00 and clears the player,
-but keeps the current song loaded. Pressing **Play** after Stop restarts the
-same song from the beginning — you don't need to re-queue it.
+**How Stop works:** Stop halts playback, resets the position to 0:00, and
+unloads the current song. To play it again, select it from the results or add
+it to the queue.
 
 ### Progress Slider
 
@@ -173,6 +173,7 @@ Click the gear icon (⚙) to open the inline settings panel:
 - **CDG zoom** — `quick` (0.75×), `int` (1×), `full` (1.5×), `soft` (2×)
 - **Look inside .zip files** — scan archives for karaoke files
 - **Hide songs without artist** — drop entries with no artist metadata
+- **Derive song info from filename** — read artist/title from the filename
 
 ---
 
@@ -181,7 +182,7 @@ Click the gear icon (⚙) to open the inline settings panel:
 The search bar at the top of the sidebar is the primary way to find songs.
 
 - **Incremental:** Results update as you type — no search button needed.
-- **Debounced:** 200 ms delay prevents excessive re-queries.
+- **Debounced:** a short delay (150 ms) prevents excessive re-queries.
 - **Empty query:** Clears the results list.
 - **Navigate:** Use `↑` / `↓` to move through results.
 
@@ -239,11 +240,11 @@ The bottom of the window shows:
 
 | Problem | Fix |
 |---------|------|
-| Engine never finishes loading | The first launch downloads/builds `_assets/` and `_wheel/` — run `scripts/build-web.py` once, or wait for network |
+| Engine never finishes loading | The first launch downloads/builds `_assets/` and `_wheel/` — run `src/scripts/build-web.py` once, or wait for network |
 | No sound | Check system volume and OS output device; verify `.mp3` sits next to `.cdg` |
 | Video stuttering | Close other apps; use a smaller window |
 | Songs missing after scan | Check extensions (`.cdg`, `.kar`, `.mpg`) and re-scan |
-| Stop button restarts same song | This is by design — Stop keeps the song loaded |
+| Song won't resume after Stop | Stop unloads the song — pick it again from the results or queue |
 | FF/Rewind doesn't change audio | Some codecs don't honour seek in the middle of a decode; position display still updates |
 | Folder picker doesn't appear | Only the desktop app has it — in a browser, use **Add Folder** with the directory file input |
 | Settings don't persist | Library and settings live in browser storage; clearing site data resets them |

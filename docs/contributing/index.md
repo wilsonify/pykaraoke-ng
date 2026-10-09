@@ -2,7 +2,7 @@
 
 Set up, test, build, and contribute to PyKaraoke-NG.
 
-[← Home](index.md)
+[← Home](../index.md)
 
 ---
 
@@ -21,14 +21,14 @@ step for the app itself.
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-./scripts/setup-dev-env.sh          # .venv + editable install + dev deps
+./src/scripts/setup-dev-env.sh          # .venv + editable install + dev deps
 uv sync                              # or: uv sync --extra dev
 ```
 
 ## Project Structure
 
 ```
-web/
+src/web/
   index.html              the app: markup + <style> + <script type="module">
                            + <script type="py"> bridge   (one file, no build)
   _assets/                vendored Pyodide + PyScript   (generated)
@@ -48,12 +48,12 @@ src/runtimes/tauri/       desktop shell
 
 tests/
   pykaraoke/              pytest (engine)
-  web/                    vitest on the JS extracted from web/index.html
+  web/                    vitest on the JS extracted from src/web/index.html
   fixtures/               karaoke + LRC samples
 
-scripts/                  setup, test runner, web build/serve helpers
-specs/                    constitution, workflow, feature specs (CI-enforced)
-docs/                     this documentation
+src/scripts/              setup, test runner, web build/serve helpers
+openspec/                 specifications + change proposals (OpenSpec, CI-validated)
+docs/                     this documentation (published with MkDocs)
 ```
 
 ## Tests
@@ -66,7 +66,7 @@ uv run pytest tests/pykaraoke/ --cov --cov-report=html
 uv run pytest tests/pykaraoke/test_cdg.py -v   # single file
 ```
 
-### Frontend (JS extracted from `web/index.html`)
+### Frontend (JS extracted from `src/web/index.html`)
 
 ```bash
 cd tests/web
@@ -75,7 +75,7 @@ npm test
 ```
 
 The loader (`tests/web/load-app.mjs`) pulls the inline module out of
-`web/index.html`, so tests always run against the real shipped script —
+`src/web/index.html`, so tests always run against the real shipped script —
 no `app.js` to keep in sync.
 
 ### Rust
@@ -88,7 +88,7 @@ cargo test
 ### Everything
 
 ```bash
-./scripts/run-tests.sh          # pytest + vitest
+./src/scripts/run-tests.sh          # pytest + vitest
 ```
 
 ## Code Quality
@@ -111,10 +111,10 @@ pipeline blocks release if the quality gate fails.  Key rules:
 `ci-cd.yml` runs in stages:
 
 ```
-python tests ─┐
-rust tests   ─┼─► sonarqube ─► build (linux/windows/macos) ─► release
-frontend tests─┘
-spec-validation ─┘
+python tests    ─┐
+rust tests      ─┼─► sonarqube ─► build (linux/windows/macos) ─► release
+frontend tests  ─┤
+openspec-validation ─┘
 ```
 
 | Stage | What it does | Gating |
@@ -122,14 +122,14 @@ spec-validation ─┘
 | `unit-tests-python` | `pytest` + coverage upload | — |
 | `unit-tests-rust` | `cargo test` (skipped when no Rust files changed) | — |
 | `unit-tests-frontend` | `npm test` in `tests/web` | — |
-| `spec-validation` | Enforces spec-driven development | — |
+| `openspec-validation` | Validates specs and changes with `openspec validate` | — |
 | `sonarqube` | Static analysis + quality gate | Blocks build on failure |
 | `build` | Platform matrix: deb / NSIS / DMG via `npx tauri build` | — |
 | `release` | Tag + GitHub Release with built installers | main branch pushes only |
 
 Pull requests never reach `release`.
 
-## Working on `web/index.html`
+## Working on `src/web/index.html`
 
 The whole application lives in that file. Three sections, top to bottom:
 
@@ -164,10 +164,10 @@ npm ci
 npx tauri dev
 ```
 
-`beforeDevCommand` starts `python ../../../scripts/serve-web.py 18000`,
-which serves `web/` (including `_assets/` and `_wheel/`) on
+`beforeDevCommand` starts `python ../../scripts/serve-web.py 18000`,
+which serves `src/web/` (including `_assets/` and `_wheel/`) on
 `http://localhost:18000`, and the window loads that URL. Edit
-`web/index.html` and reload the window.
+`src/web/index.html` and reload the window.
 
 ### Production build
 
@@ -178,9 +178,9 @@ npx tauri build --bundles dmg    # macOS
 npx tauri build --bundles deb    # Linux
 ```
 
-`beforeBuildCommand` runs `python ../../../scripts/build-web.py`, which
+`beforeBuildCommand` runs `python ../../scripts/build-web.py`, which
 rebuilds the engine wheel and vendors the Pyodide/PyScript runtime into
-`web/`. Tauri then embeds `web/` as the app's frontend. Output:
+`src/web/`. Tauri then embeds `src/web/` as the app's frontend. Output:
 `src-tauri/target/release/bundle/`.
 
 ### The three native commands
@@ -192,7 +192,7 @@ rebuilds the engine wheel and vendors the Pyodide/PyScript runtime into
 | `read_file` | `std::fs` | Raw bytes over IPC → `ArrayBuffer` |
 
 If you change them, update the Rust unit tests in `src/runtimes/tauri/src-tauri`
-(`cargo test`) and the fallback path in `web/index.html`
+(`cargo test`) and the fallback path in `src/web/index.html`
 (`window.__TAURI__` detection).
 
 ### Tauri prerequisites
@@ -214,29 +214,34 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget \
 
 **macOS** — Xcode Command Line Tools (`xcode-select --install`).
 
-## Spec-Driven Development
+## Specification-Driven Development
 
-Features start as spec artifacts in `specs/features/NNN-*/`:
+Every behavioural change starts as an OpenSpec **change** under
+`openspec/changes/`, with a proposal, a design, a task list, and delta specs.
+When it ships, `openspec archive` merges the deltas into the enduring
+capability specs under `openspec/specs/`.
 
+```bash
+npm install --global @fission-ai/openspec@1.14.1
+openspec new change my-feature     # scaffold a change
+openspec validate --all --strict   # validate specs and changes
+openspec archive my-feature --yes  # after the pull request merges
 ```
-specs/features/NNN-description/
-├── README.md           # Feature specification
-├── scenario-*.md       # User scenarios
-└── acceptance.md       # Acceptance criteria
-```
 
-CI enforces spec completion via `specs/ci/validate-spec-completion.sh`:
-the branch name determines the feature number, and the `spec-validation`
-job fails if the spec directory is missing or malformed.
+CI runs `openspec validate --all --strict` and `openspec validate --archived`
+in the `openspec-validation` job, so a malformed spec fails the build. The full
+lifecycle is documented in the [OpenSpec workflow](openspec.md); the system
+overview is in [Specifications](../reference/specifications.md).
 
 ## Contributing
 
-1. Create a feature branch: `NNN-short-description`
-2. Write spec artifacts in `specs/features/NNN-*/`
-3. Implement via TDD: failing test → pass → refactor
+1. Create a branch (`NNN-short-description` remains a useful feature convention)
+2. Write an OpenSpec change under `openspec/changes/<id>/`
+3. Implement via TDD: failing test → pass → refactor, checking off `tasks.md`
 4. Lint: `uv run ruff check .`
-5. Run the suite: `./scripts/run-tests.sh`
-6. Open a PR
+5. Run the suite: `./src/scripts/run-tests.sh`
+6. Open a pull request — CI validates the specs, the tests, and the docs build
+7. After merge, archive the change: `openspec archive <id> --yes`
 
-Read the [Project Constitution](../specs/constitution.md) and
-[Developer Workflow](../specs/workflow.md) first.
+The binding engineering rules live in the
+[project-governance specification](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/project-governance/spec.md).

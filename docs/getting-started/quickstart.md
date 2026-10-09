@@ -2,7 +2,7 @@
 
 Get running in under a minute after cloning.
 
-[← Home](index.md)
+[← Home](../index.md)
 
 ---
 
@@ -11,34 +11,34 @@ Get running in under a minute after cloning.
 ```bash
 git clone https://github.com/wilsonify/pykaraoke-ng.git
 cd pykaraoke-ng
-./scripts/setup-dev-env.sh       # .venv + editable install + dev deps
+./src/scripts/setup-dev-env.sh       # .venv + editable install + dev deps
 # or: uv sync                     # plain uv
 ```
 
 ## 2. Run the tests
 
 ```bash
-./scripts/run-tests.sh            # pytest + vitest
+./src/scripts/run-tests.sh            # pytest + vitest
 ```
 
 Individually:
 
 ```bash
 uv run pytest tests/pykaraoke/ -v # Python engine tests
-cd tests/web && npm ci && npm test # JS extracted from web/index.html
+cd tests/web && npm ci && npm test # JS extracted from src/web/index.html
 ```
 
 ## 3. Run in a browser
 
 ```bash
-bash scripts/build-web.py         # build the wheel + vendor Pyodide/PyScript
-python -m http.server 18000 --directory web
+bash src/scripts/build-web.py         # build the wheel + vendor Pyodide/PyScript
+python -m http.server 18000 --directory src/web
 ```
 
 Open <http://localhost:18000>.
 
 The page loads Pyodide in a Web Worker, installs the `pykaraoke` wheel,
-and runs the app from `web/index.html`. Folder picking falls back to
+and runs the app from `src/web/index.html`. Folder picking falls back to
 `<input webkitdirectory>` when there is no Tauri window.
 
 ## 4. Desktop app (Tauri)
@@ -51,8 +51,8 @@ npm ci
 npx tauri dev
 ```
 
-`beforeDevCommand` serves `web/` on port 18000; the window loads that
-URL. Reload the window after editing `web/index.html`.
+`beforeDevCommand` serves `src/web/` on port 18000; the window loads that
+URL. Reload the window after editing `src/web/index.html`.
 
 ### Production build
 
@@ -80,7 +80,7 @@ uv run ruff format --check .
 | `ModuleNotFoundError: pykaraoke` | Run `uv sync` or `pip install -e .` |
 | Tests fail with import errors | Use `uv run pytest` or set `PYTHONPATH=src` |
 | `npm ci` fails in `tests/web` | Node 20+ required |
-| Blank page, engine never starts | Run `scripts/build-web.py` first — `_wheel/` and `_assets/` are generated |
+| Blank page, engine never starts | Run `src/scripts/build-web.py` first — `_wheel/` and `_assets/` are generated |
 | Tauri linker errors (Windows) | Install VS Build Tools, then run `vcvars64.bat` |
 | `npx tauri` not found | `cd src/runtimes/tauri && npm ci` |
-| Port 18000 already in use | `python -m http.server 18001 --directory web` and load that port |
+| Port 18000 already in use | `python -m http.server 18001 --directory src/web` and load that port |
