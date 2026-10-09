@@ -6,7 +6,7 @@ every response, so the webview never shows a stale (pre-rewrite) page.
 ``tauri.conf.json`` runs this as ``beforeDevCommand``; it can also be run
 by hand from anywhere in the repo:
 
-    python scripts/serve-web.py [port]   (default 18000)
+    python src/scripts/serve-web.py [port]   (default 18000)
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pathlib
 import sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18000
-WEB_DIR = pathlib.Path(__file__).resolve().parent.parent / "web"
+WEB_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "src" / "web"
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
