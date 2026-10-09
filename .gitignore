@@ -16,12 +16,15 @@ dist/
 target/
 src/runtimes/tauri/node_modules/
 
-# Generated web assets (recreated by scripts/build-web.py)
-_assets/
-_wheel/
+# Generated web assets (recreated by src/scripts/build-web.py)
+src/web/_assets/
+src/web/_wheel/
 
 # Frontend unit tests
 tests/web/node_modules/
+
+# Documentation site build output (recreated by `mkdocs build`)
+site/
 
 # IDE specific files
 .idea/
@@ -34,5 +37,5 @@ tests/web/node_modules/
 *.pdf
 
 .freebuff/
-# Extracted from web/index.html by tests/web/load-app.mjs
+# Extracted from src/web/index.html by tests/web/load-app.mjs
 tests/web/.extracted/
