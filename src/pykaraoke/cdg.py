@@ -217,36 +217,47 @@ class CdgDecoder:
         self._apply_scroll(v_pixels, h_pixels, colour, copy)
         self.updated_tiles = 0xFFFFFFFF
 
-    def _apply_scroll(self, v_pixels: int, h_pixels: int, colour: int, copy: bool) -> None:
+    @staticmethod
+    def _shift_line(
+        line: bytearray, n: int, direction: int, fill: bytearray, copy: bool
+    ) -> bytearray:
+        """Shift *line* by *n* cells (positive *direction* moves towards index 0)."""
+        if copy:
+            return line[n:] + line[:n] if direction > 0 else line[-n:] + line[:-n]
+        if direction > 0:
+            return line[n:] + fill
+        return fill + line[:-n]
+
+    def _scroll_columns(self, v_pixels: int, colour: int, copy: bool) -> None:
+        """Shift columns (y direction) by *v_pixels*."""
         w, h = CDG_FULL_WIDTH, CDG_FULL_HEIGHT
-        if v_pixels:
-            # Shift columns (y direction) by v_pixels.
-            n = abs(v_pixels)
-            direction = 1 if v_pixels > 0 else -1
-            for x in range(w):
-                col = bytearray(self.pixels[x::w])  # all y for this x
-                if copy:
-                    new_col = col[n:] + col[:n] if direction > 0 else col[-n:] + col[:-n]
-                else:
-                    fill = bytes([colour]) * n
-                    new_col = col[n:] + fill if direction > 0 else fill + col[:-n]
-                for y in range(h):
-                    self.pixels[y * w + x] = new_col[y]
-        if h_pixels:
-            # Shift rows (x direction) by h_pixels.
-            n = abs(h_pixels)
-            direction = 1 if h_pixels > 0 else -1
-            fill = bytes([colour]) * n
+        n = abs(v_pixels)
+        direction = 1 if v_pixels > 0 else -1
+        fill = bytearray([colour]) * n
+        for x in range(w):
+            col = bytearray(self.pixels[x::w])  # all y for this x
+            new_col = self._shift_line(col, n, direction, fill, copy)
             for y in range(h):
-                base = y * w
-                row = self.pixels[base : base + w]
-                if copy:
-                    row = row[n:] + row[:n] if direction > 0 else row[-n:] + row[:-n]
-                elif direction > 0:
-                    row = row[n:] + fill
-                else:
-                    row = fill + row[:-n]
-                self.pixels[base : base + w] = row
+                self.pixels[y * w + x] = new_col[y]
+
+    def _scroll_rows(self, h_pixels: int, colour: int, copy: bool) -> None:
+        """Shift rows (x direction) by *h_pixels*."""
+        w, h = CDG_FULL_WIDTH, CDG_FULL_HEIGHT
+        n = abs(h_pixels)
+        direction = 1 if h_pixels > 0 else -1
+        fill = bytearray([colour]) * n
+        for y in range(h):
+            base = y * w
+            row = self._shift_line(
+                bytearray(self.pixels[base : base + w]), n, direction, fill, copy
+            )
+            self.pixels[base : base + w] = row
+
+    def _apply_scroll(self, v_pixels: int, h_pixels: int, colour: int, copy: bool) -> None:
+        if v_pixels:
+            self._scroll_columns(v_pixels, colour, copy)
+        if h_pixels:
+            self._scroll_rows(h_pixels, colour, copy)
 
     def _load_colour_table(self, data: bytes, start: int) -> None:
         for i in range(8):
@@ -259,36 +270,46 @@ class CdgDecoder:
         # The whole screen must be redrawn under the new palette.
         self.updated_tiles = 0xFFFFFFFF
 
+    @staticmethod
+    def _clamp_tile_origin(data: bytes) -> tuple[int, int]:
+        """Tile-block origin, clamped in case a corrupt CDG goes out of bounds."""
+        x = (data[3] & CDG_MASK) * 6
+        y = (data[2] & 0x1F) * 12
+        if y > CDG_FULL_HEIGHT - 12:
+            y = CDG_FULL_HEIGHT - 12
+        if x > CDG_FULL_WIDTH - 6:
+            x = CDG_FULL_WIDTH - 6
+        return x, y
+
+    def _draw_tile_pixel(
+        self, index: int, pixel: int, colour0: int, colour1: int, xor: bool
+    ) -> None:
+        if xor:
+            xor_col = colour1 if pixel else colour0
+            self.pixels[index] = self.pixels[index] ^ xor_col
+        else:
+            self.pixels[index] = colour1 if pixel else colour0
+
+    def _draw_tile_row(
+        self, byte: int, x: int, py: int, colour0: int, colour1: int, xor: bool
+    ) -> None:
+        w = CDG_FULL_WIDTH
+        for j in range(6):
+            pixel = (byte >> (5 - j)) & 0x01
+            self._draw_tile_pixel(py * w + x + j, pixel, colour0, colour1, xor)
+
     def _tile_block(self, data: bytes, xor: bool) -> None:
         if data[1] & 0x20:
             # Some discs set this bit to mean "ignore this command".
             return
         colour0 = data[0] & 0x0F
         colour1 = data[1] & 0x0F
-        x = (data[3] & CDG_MASK) * 6
-        y = (data[2] & 0x1F) * 12
-        # Sanity-check the offsets in case a corrupt CDG sends us out of
-        # bounds.
-        if y > CDG_FULL_HEIGHT - 12:
-            y = CDG_FULL_HEIGHT - 12
-        if x > CDG_FULL_WIDTH - 6:
-            x = CDG_FULL_WIDTH - 6
+        x, y = self._clamp_tile_origin(data)
 
         self._mark_tile_dirty(x, y)
 
-        w = CDG_FULL_WIDTH
         for i in range(12):
-            byte = data[4 + i] & CDG_MASK
-            for j in range(6):
-                pixel = (byte >> (5 - j)) & 0x01
-                px = x + j
-                py = y + i
-                index = py * w + px
-                if xor:
-                    xor_col = colour1 if pixel else colour0
-                    self.pixels[index] = self.pixels[index] ^ xor_col
-                else:
-                    self.pixels[index] = colour1 if pixel else colour0
+            self._draw_tile_row(data[4 + i] & CDG_MASK, x, y + i, colour0, colour1, xor)
 
     def _mark_tile_dirty(self, x: int, y: int) -> None:
         """Mark the tiles overlapped by the tile block at (x, y)."""
