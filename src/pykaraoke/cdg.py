@@ -56,6 +56,15 @@ _BORDER_LEFT = CDG_DISPLAY_X  # 6
 _BORDER_TOP = CDG_DISPLAY_Y  # 12
 
 
+def _scroll_pixels(command: int, unit: int) -> int:
+    """Pixel shift for a scroll command: 2 means +*unit*, 1 means -*unit*."""
+    if command == 2:
+        return unit
+    if command == 1:
+        return -unit
+    return 0
+
+
 def packet_index_at(ms: int) -> int:
     """Return the CDG packet index that should be displayed at *ms*."""
     return int(ms * PACKETS_PER_SECOND / 1000)
@@ -203,8 +212,8 @@ class CdgDecoder:
         v_s_cmd = (v_scroll & 0x30) >> 4
         v_offset = v_scroll & 0x0F
 
-        v_pixels = 12 if v_s_cmd == 2 else (-12 if v_s_cmd == 1 else 0)
-        h_pixels = 6 if h_s_cmd == 2 else (-6 if h_s_cmd == 1 else 0)
+        v_pixels = _scroll_pixels(v_s_cmd, 12)
+        h_pixels = _scroll_pixels(h_s_cmd, 6)
 
         if h_offset != self.h_offset or v_offset != self.v_offset:
             self.h_offset = min(h_offset, 5)
