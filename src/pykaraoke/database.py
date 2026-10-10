@@ -8,6 +8,7 @@ settings in localStorage.
 
 from __future__ import annotations
 
+import fnmatch
 import io
 import os
 import re
@@ -40,6 +41,33 @@ _KIND_BY_EXT = {
 def kind_for_name(name: str) -> str | None:
     """Return the song kind ('cdg' | 'kar' | 'mpg') for *name*, or None."""
     return _KIND_BY_EXT.get(os.path.splitext(name)[1].lower())
+
+
+# Scan-report categories. "unsupported" and "filtered" are ordinary outcomes;
+# the rest explain why an input produced no songs.
+REPORT_CATEGORIES = (
+    "unsupported",
+    "filtered",
+    "corrupt_archive",
+    "unsupported_compression",
+    "unreadable",
+    "parse_failure",
+)
+
+
+def _pattern_match(pattern: str, name: str) -> bool:
+    """Match *name* (already lowercased) against one case-insensitive glob.
+
+    An untranslatable pattern degrades to a literal substring match rather
+    than raising, so a stray character in a user pattern cannot break a scan.
+    """
+    pattern = pattern.strip().lower()
+    if not pattern:
+        return False
+    try:
+        return fnmatch.fnmatchcase(name, pattern)
+    except re.error:
+        return pattern in name
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +135,8 @@ class Settings:
     look_inside_zips: bool = True
     sort: str = "filename"  # 'filename' | 'title' | 'artist'
     volume: float = 0.75
+    include_patterns: list = field(default_factory=list)
+    exclude_patterns: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -118,6 +148,8 @@ class Settings:
             "look_inside_zips": self.look_inside_zips,
             "sort": self.sort,
             "volume": self.volume,
+            "include_patterns": [str(p) for p in self.include_patterns],
+            "exclude_patterns": [str(p) for p in self.exclude_patterns],
         }
 
     @staticmethod
@@ -133,6 +165,8 @@ class Settings:
         s.look_inside_zips = bool(data.get("look_inside_zips", s.look_inside_zips))
         s.sort = data.get("sort", s.sort)
         s.volume = float(data.get("volume", s.volume))
+        s.include_patterns = [str(p) for p in data.get("include_patterns", [])]
+        s.exclude_patterns = [str(p) for p in data.get("exclude_patterns", [])]
         return s
 
 
@@ -172,6 +206,48 @@ class SongLibrary:
         self.songs: list[Song] = []
         self.settings = Settings()
         self._files: dict[str, dict] = {}  # path(lower) -> file entry
+        # Parsed member sets per zip (lowercased archive name), so a rebuild
+        # can restore zip songs without the archive bytes.
+        self._zip_cache: dict[str, list[dict]] = {}
+        # Scan diagnostics: ordered problem entries plus a set used to keep
+        # each (category, path) pair reported once across repeated rebuilds.
+        self._report_entries: list[dict] = []
+        self._report_seen: set[tuple[str, str]] = set()
+
+    # ------------------------------------------------------------------
+    # Scan reporting and filename filters
+    # ------------------------------------------------------------------
+
+    def _report(self, category: str, path: str) -> None:
+        """Record one scan outcome. Never raises for an unknown category."""
+        key = (category, path)
+        if key in self._report_seen:
+            return
+        self._report_seen.add(key)
+        self._report_entries.append({"category": category, "path": path})
+
+    def scan_report(self) -> dict:
+        """Return the accumulated scan report as a JSON-compatible dict."""
+        counts = {category: 0 for category in REPORT_CATEGORIES}
+        for entry in self._report_entries:
+            counts[entry["category"]] = counts.get(entry["category"], 0) + 1
+        return {"entries": list(self._report_entries), "counts": counts}
+
+    def clear_scan_report(self) -> None:
+        """Forget every recorded scan outcome."""
+        self._report_entries = []
+        self._report_seen = set()
+
+    def _name_allowed(self, name: str) -> bool:
+        """True when *name* passes the include/exclude pattern settings."""
+        base = os.path.basename(name).lower()
+        includes = [p for p in self.settings.include_patterns if str(p).strip()]
+        excludes = [p for p in self.settings.exclude_patterns if str(p).strip()]
+        if includes and not any(_pattern_match(str(p), base) for p in includes):
+            return False
+        if any(_pattern_match(str(p), base) for p in excludes):
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # Scanning
@@ -187,8 +263,14 @@ class SongLibrary:
         for entry in files:
             name = entry.get("name", "")
             path = entry.get("path", name)
-            if name:
-                self._files[(path or name).lower()] = entry
+            if not name:
+                continue
+            ext = os.path.splitext(name)[1].lower()
+            # Zip archives are expanded separately via scan_zip (they need
+            # their bytes); do not count them as unsupported loose files.
+            if kind_for_name(name) is None and ext not in ZIP_EXTENSIONS:
+                self._report("unsupported", path or name)
+            self._files[(path or name).lower()] = entry
         self._rebuild()
         return {"added": len(self.songs), "total": len(self.songs)}
 
@@ -199,9 +281,34 @@ class SongLibrary:
         try:
             zf = zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile:
+            self._report("corrupt_archive", name)
             return {"added": 0, "total": len(self.songs)}
-        members = [m for m in zf.namelist() if kind_for_name(m)]
-        zf.close()
+        except Exception:
+            self._report("unreadable", name)
+            return {"added": 0, "total": len(self.songs)}
+        try:
+            members = []
+            for member in zf.namelist():
+                if not kind_for_name(member):
+                    continue
+                if not self._name_allowed(member):
+                    self._report("filtered", name + "!" + member)
+                    continue
+                members.append(member)
+            if members:
+                # Probe the first member so unsupported compression or
+                # encryption is classified at scan time, not at first play.
+                try:
+                    with zf.open(members[0]) as fh:
+                        fh.read(1)
+                except NotImplementedError:
+                    self._report("unsupported_compression", name)
+                    return {"added": 0, "total": len(self.songs)}
+                except Exception:
+                    self._report("unreadable", name)
+                    return {"added": 0, "total": len(self.songs)}
+        finally:
+            zf.close()
         if not members:
             return {"added": 0, "total": len(self.songs)}
 
@@ -219,11 +326,16 @@ class SongLibrary:
             if song and song.id not in existing:
                 self.songs.append(song)
                 added += 1
+        # Cache the full member set so later rebuilds (which no longer have
+        # the archive bytes) can restore this zip's songs.
+        self._zip_cache[name.lower()] = [
+            s.to_dict() for s in self.songs if s.zip_name == name
+        ]
         self._dedupe_and_sort()
         return {"added": added, "total": len(self.songs)}
 
     def _rebuild(self) -> None:
-        """Rebuild the song list from the raw file entries."""
+        """Rebuild the song list from the raw file entries and zip cache."""
         songs = []
         for entry in self._files.values():
             name = entry.get("name", "")
@@ -244,15 +356,22 @@ class SongLibrary:
             )
             if song:
                 songs.append(song)
+        for cached in self._zip_cache.values():
+            for song_dict in cached:
+                songs.append(Song.from_dict(song_dict))
         self.songs = songs
         self._dedupe_and_sort()
 
     def _make_song(self, path, name, size, zip_name, zip_member):
         """Build a Song from a file entry, or None if it should be excluded."""
+        if not self._name_allowed(name):
+            self._report("filtered", path)
+            return None
         parsed = self._parse_name(name if zip_member is None else zip_member, zip_member)
         title = parsed.title or os.path.splitext(name)[0]
         artist = parsed.artist
         if not artist and self.settings.exclude_non_matching:
+            self._report("filtered", path)
             return None
         return Song(
             id=path if zip_member is None else zip_name + "!" + zip_member,
@@ -269,11 +388,12 @@ class SongLibrary:
 
     def _parse_name(self, name: str, zip_member: str | None):
         parser = FilenameParser(file_name_type=FileNameType(self.settings.file_name_type))
-        if zip_member:
-            return parser.parse_zip_path(zip_member)
         try:
+            if zip_member:
+                return parser.parse_zip_path(zip_member)
             return parser.parse(name)
         except Exception:  # defensive: never let one bad name kill a scan
+            self._report("parse_failure", zip_member or name)
             return _EmptyParsed()
 
     def pair_cdg_audio(self) -> None:
@@ -385,7 +505,13 @@ class SongLibrary:
             lib.settings = Settings.from_dict(data.get("settings", {}))
             lib.songs = [Song.from_dict(d) for d in data.get("songs", [])]
             for song in lib.songs:
-                if not song.zip_name and song.path:
+                if song.zip_name:
+                    # Rebuild the zip-member cache so a later scan of loose
+                    # files does not drop the restored zip songs.
+                    lib._zip_cache.setdefault(song.zip_name.lower(), []).append(
+                        song.to_dict()
+                    )
+                elif song.path:
                     lib._files.setdefault(
                         song.path.lower(),
                         {
