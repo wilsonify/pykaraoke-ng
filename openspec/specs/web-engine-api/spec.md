@@ -203,10 +203,10 @@ report as JSON (outcomes plus counts) and `clear_scan_report()` resetting
 it. Both SHALL be callable from the browser page without side effects on
 playback or the song list.
 
-> Source: `KaraokeApp.scan_report()` at `src/pykaraoke/webapp.py:157` and
-> `KaraokeApp.clear_scan_report()` at `src/pykaraoke/webapp.py:161`, both
-> reachable through the generic dispatcher by method name. Verified by
-> `tests/pykaraoke/test_webapp.py:143` (`TestScanReportAPI`).
+> Source: `KaraokeApp.scan_report()` and `KaraokeApp.clear_scan_report()`
+> in `src/pykaraoke/webapp.py`, reachable through the generic dispatcher by
+> method name. Verified by `TestScanReportAPI` in
+> `tests/pykaraoke/test_webapp.py`.
 
 #### Scenario: Report after a mixed scan
 
@@ -285,9 +285,8 @@ prune operation, treating an empty known-set as a no-op.
 dict, recognised schema) and return `{"ok": true}` on success or
 `{"ok": false, "error": …}` with the previous library intact on failure.
 
-> Source: `KaraokeApp.export_json()` / `KaraokeApp.import_json()` at
-> `src/pykaraoke/webapp.py:84`, forwarding to the library envelope methods.
-> Verified by `tests/pykaraoke/test_webapp.py:341` (`TestImportExportAPI`).
+> Source: `KaraokeApp.export_json()` / `KaraokeApp.import_json()` in
+> `src/pykaraoke/webapp.py`; verified by `TestImportExportAPI`.
 
 #### Scenario: Round-trip through the page
 
