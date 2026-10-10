@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fnmatch
 import io
+import json
 import os
 import re
 import zipfile
@@ -159,9 +160,7 @@ class Settings:
         s.cdg_zoom = data.get("cdg_zoom", s.cdg_zoom)
         s.derive_song_info = bool(data.get("derive_song_info", s.derive_song_info))
         s.file_name_type = int(data.get("file_name_type", s.file_name_type))
-        s.exclude_non_matching = bool(
-            data.get("exclude_non_matching", s.exclude_non_matching)
-        )
+        s.exclude_non_matching = bool(data.get("exclude_non_matching", s.exclude_non_matching))
         s.look_inside_zips = bool(data.get("look_inside_zips", s.look_inside_zips))
         s.sort = data.get("sort", s.sort)
         s.volume = float(data.get("volume", s.volume))
@@ -204,7 +203,7 @@ class SongLibrary:
 
     def __init__(self):
         self.songs: list[Song] = []
-        self.settings = Settings()
+        self.settings: Settings = Settings()
         self._files: dict[str, dict] = {}  # path(lower) -> file entry
         # Parsed member sets per zip (lowercased archive name), so a rebuild
         # can restore zip songs without the archive bytes.
@@ -228,7 +227,7 @@ class SongLibrary:
 
     def scan_report(self) -> dict:
         """Return the accumulated scan report as a JSON-compatible dict."""
-        counts = {category: 0 for category in REPORT_CATEGORIES}
+        counts = dict.fromkeys(REPORT_CATEGORIES, 0)
         for entry in self._report_entries:
             counts[entry["category"]] = counts.get(entry["category"], 0) + 1
         return {"entries": list(self._report_entries), "counts": counts}
@@ -245,19 +244,25 @@ class SongLibrary:
         excludes = [p for p in self.settings.exclude_patterns if str(p).strip()]
         if includes and not any(_pattern_match(str(p), base) for p in includes):
             return False
-        if any(_pattern_match(str(p), base) for p in excludes):
-            return False
-        return True
+        return not any(_pattern_match(str(p), base) for p in excludes)
 
     # ------------------------------------------------------------------
     # Scanning
     # ------------------------------------------------------------------
 
-    def scan(self, files: list[dict]) -> dict:
+    def scan(self, files: list[dict], replace: bool = False) -> dict:
         """Add a batch of file entries from the folder picker.
+
+        With ``replace=True`` the previously scanned loose files and zip
+        expansions are cleared first (Settings are untouched), supporting
+        library relocation; the default stays additive.
 
         Returns ``{"added": n, "total": m}``.
         """
+        if replace:
+            self._files.clear()
+            self._zip_cache.clear()
+            self.songs = []
         if not files:
             return {"added": 0, "total": len(self.songs)}
         for entry in files:
@@ -274,44 +279,68 @@ class SongLibrary:
         self._rebuild()
         return {"added": len(self.songs), "total": len(self.songs)}
 
-    def scan_zip(self, name: str, data: bytes) -> dict:
-        """Scan a zip archive's bytes and add its karaoke members as songs."""
-        if not self.settings.look_inside_zips:
-            return {"added": 0, "total": len(self.songs)}
+    def prune_songs(self, known_paths) -> int:
+        """Remove loose and zip songs whose paths are absent from *known_paths*.
+
+        An empty known-set is a no-op so an accidental empty call cannot wipe
+        the library. Returns the number of songs removed.
+        """
+        known = {str(p).replace("\\", "/").lower() for p in known_paths}
+        if not known:
+            return 0
+        self._files = {k: v for k, v in self._files.items() if k in known}
+        for key in list(self._zip_cache):
+            kept = [
+                d
+                for d in self._zip_cache[key]
+                if str(d.get("path", "")).replace("\\", "/").lower() in known
+            ]
+            if kept:
+                self._zip_cache[key] = kept
+            else:
+                del self._zip_cache[key]
+        before = len(self.songs)
+        self.songs = [s for s in self.songs if s.path.replace("\\", "/").lower() in known]
+        return before - len(self.songs)
+
+    def _open_archive(self, name: str, data: bytes):
+        """Open zip *data*, reporting corrupt/unreadable archives (None then)."""
         try:
-            zf = zipfile.ZipFile(io.BytesIO(data))
+            return zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile:
             self._report("corrupt_archive", name)
-            return {"added": 0, "total": len(self.songs)}
+            return None
         except Exception:
             self._report("unreadable", name)
-            return {"added": 0, "total": len(self.songs)}
-        try:
-            members = []
-            for member in zf.namelist():
-                if not kind_for_name(member):
-                    continue
-                if not self._name_allowed(member):
-                    self._report("filtered", name + "!" + member)
-                    continue
-                members.append(member)
-            if members:
-                # Probe the first member so unsupported compression or
-                # encryption is classified at scan time, not at first play.
-                try:
-                    with zf.open(members[0]) as fh:
-                        fh.read(1)
-                except NotImplementedError:
-                    self._report("unsupported_compression", name)
-                    return {"added": 0, "total": len(self.songs)}
-                except Exception:
-                    self._report("unreadable", name)
-                    return {"added": 0, "total": len(self.songs)}
-        finally:
-            zf.close()
-        if not members:
-            return {"added": 0, "total": len(self.songs)}
+            return None
 
+    def _select_zip_members(self, zf: zipfile.ZipFile, name: str) -> list:
+        """Karaoke members of *zf*, reporting pattern-filtered ones."""
+        members = []
+        for member in zf.namelist():
+            if not kind_for_name(member):
+                continue
+            if not self._name_allowed(member):
+                self._report("filtered", name + "!" + member)
+                continue
+            members.append(member)
+        return members
+
+    def _probe_zip_readable(self, zf: zipfile.ZipFile, member: str, name: str) -> bool:
+        """Probe the first member so bad compression/encryption is classified now."""
+        try:
+            with zf.open(member) as fh:
+                fh.read(1)
+            return True
+        except NotImplementedError:
+            self._report("unsupported_compression", name)
+            return False
+        except Exception:
+            self._report("unreadable", name)
+            return False
+
+    def _store_zip_songs(self, name: str, members: list) -> int:
+        """Build songs for *members*, skipping duplicates; returns added count."""
         base = os.path.splitext(name)[0]
         existing = {s.id for s in self.songs if s.zip_name == name}
         added = 0
@@ -326,11 +355,28 @@ class SongLibrary:
             if song and song.id not in existing:
                 self.songs.append(song)
                 added += 1
+        return added
+
+    def scan_zip(self, name: str, data: bytes) -> dict:
+        """Scan a zip archive's bytes and add its karaoke members as songs."""
+        if not self.settings.look_inside_zips:
+            return {"added": 0, "total": len(self.songs)}
+        zf = self._open_archive(name, data)
+        if zf is None:
+            return {"added": 0, "total": len(self.songs)}
+        try:
+            members = self._select_zip_members(zf, name)
+            if members and not self._probe_zip_readable(zf, members[0], name):
+                return {"added": 0, "total": len(self.songs)}
+        finally:
+            zf.close()
+        if not members:
+            return {"added": 0, "total": len(self.songs)}
+
+        added = self._store_zip_songs(name, members)
         # Cache the full member set so later rebuilds (which no longer have
         # the archive bytes) can restore this zip's songs.
-        self._zip_cache[name.lower()] = [
-            s.to_dict() for s in self.songs if s.zip_name == name
-        ]
+        self._zip_cache[name.lower()] = [s.to_dict() for s in self.songs if s.zip_name == name]
         self._dedupe_and_sort()
         return {"added": added, "total": len(self.songs)}
 
@@ -396,6 +442,25 @@ class SongLibrary:
             self._report("parse_failure", zip_member or name)
             return _EmptyParsed()
 
+    @staticmethod
+    def _needs_audio(song) -> bool:
+        """Whether *song* still needs a companion audio file attached."""
+        return song.kind in ("cdg", "lrc") and song.zip_name is None and not song.audio_name
+
+    def _find_companion_audio(self, song_stem: str, song_norm: str):
+        """Best audio entry for a stem: exact match wins, else normalized."""
+        best = None
+        for entry in self._files.values():
+            name = entry.get("name", "")
+            if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
+                continue
+            audio_stem = os.path.splitext(os.path.basename(name))[0]
+            if audio_stem.lower() == song_stem.lower():
+                return name
+            if _normalize_stem(audio_stem) == song_norm:
+                best = name
+        return best
+
     def pair_cdg_audio(self) -> None:
         """Attach companion audio files to .cdg and .lrc/.lcr songs.
 
@@ -404,24 +469,10 @@ class SongLibrary:
         (e.g. ``01 - Inside Out.lrc`` pairs with ``Inside Out.mp3``).
         """
         for song in self.songs:
-            if song.kind not in ("cdg", "lrc") or song.zip_name is not None or song.audio_name:
+            if not self._needs_audio(song):
                 continue
             song_stem = os.path.splitext(os.path.basename(song.path))[0]
-            song_norm = _normalize_stem(song_stem)
-            best = None
-            best_is_exact = False
-            for entry in self._files.values():
-                name = entry.get("name", "")
-                if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
-                    continue
-                audio_stem = os.path.splitext(os.path.basename(name))[0]
-                exact = audio_stem.lower() == song_stem.lower()
-                if exact:
-                    best = name
-                    best_is_exact = True
-                    break
-                if not best_is_exact and _normalize_stem(audio_stem) == song_norm:
-                    best = name
+            best = self._find_companion_audio(song_stem, _normalize_stem(song_stem))
             if best:
                 song.audio_name = best
 
@@ -448,9 +499,7 @@ class SongLibrary:
             return []
         results = []
         for song in self.songs:
-            haystack = " ".join(
-                [song.title.lower(), song.artist.lower(), song.filename.lower()]
-            )
+            haystack = " ".join([song.title.lower(), song.artist.lower(), song.filename.lower()])
             if all(term in haystack for term in terms):
                 results.append(song)
                 if len(results) >= limit:
@@ -477,9 +526,7 @@ class SongLibrary:
                 )
             )
         else:
-            self.songs.sort(
-                key=lambda s: (s.filename.lower(), _strip_articles(s.artist))
-            )
+            self.songs.sort(key=lambda s: (s.filename.lower(), _strip_articles(s.artist)))
 
     def get_song(self, song_id: str) -> Song | None:
         for song in self.songs:
@@ -498,6 +545,59 @@ class SongLibrary:
             "settings": self.settings.to_dict(),
         }
 
+    EXPORT_FORMAT = "pykaraoke-ng-library"
+    EXPORT_SCHEMA = 1
+
+    def export_json(self) -> str:
+        """Export the library as a self-describing JSON envelope string."""
+        return json.dumps(
+            {
+                "format": self.EXPORT_FORMAT,
+                "schema": self.EXPORT_SCHEMA,
+                "library": self.to_dict(),
+            }
+        )
+
+    def import_json(self, payload: str) -> dict:
+        """Replace the library from *payload* (envelope or bare library dict).
+
+        Returns ``{"ok": True}`` on success. On any failure the previous
+        library is left untouched and ``{"ok": False, "error": …}`` is
+        returned — never a partial state.
+        """
+        try:
+            data = json.loads(payload)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "payload is not valid JSON"}
+        if not isinstance(data, dict):
+            return {"ok": False, "error": "payload is not a JSON object"}
+        if "library" in data or "format" in data or "schema" in data:
+            if data.get("schema") != self.EXPORT_SCHEMA:
+                return {
+                    "ok": False,
+                    "error": f"unrecognised schema: {data.get('schema')!r}",
+                }
+            lib_data = data.get("library")
+        else:
+            lib_data = data
+        if not isinstance(lib_data, dict):
+            return {"ok": False, "error": "library payload is not an object"}
+        if lib_data.get("version") != 2:
+            return {
+                "ok": False,
+                "error": f"unrecognised library version: {lib_data.get('version')!r}",
+            }
+        try:
+            new_lib = SongLibrary.from_dict(lib_data)
+        except Exception as exc:  # noqa: BLE001 - report, never raise
+            return {"ok": False, "error": f"invalid library: {exc}"}
+        # Atomic swap: build fully, then copy state over in one step.
+        self.songs = new_lib.songs
+        self.settings = new_lib.settings
+        self._files = new_lib._files
+        self._zip_cache = new_lib._zip_cache
+        return {"ok": True}
+
     @staticmethod
     def from_dict(data: dict) -> SongLibrary:
         lib = SongLibrary()
@@ -508,9 +608,7 @@ class SongLibrary:
                 if song.zip_name:
                     # Rebuild the zip-member cache so a later scan of loose
                     # files does not drop the restored zip songs.
-                    lib._zip_cache.setdefault(song.zip_name.lower(), []).append(
-                        song.to_dict()
-                    )
+                    lib._zip_cache.setdefault(song.zip_name.lower(), []).append(song.to_dict())
                 elif song.path:
                     lib._files.setdefault(
                         song.path.lower(),
