@@ -30,6 +30,7 @@ class FileNameType(IntEnum):
     DISCTRACK_ARTIST_TITLE = 1  # DiscTrack-Artist-Title.ext
     DISC_ARTIST_TITLE = 2  # Disc-Artist-Title.ext
     ARTIST_TITLE = 3  # Artist-Title.ext
+    DISC_TRACK_SPACED = 4  # Disc-Track - Artist - Title.ext (spaces required)
 
 
 @dataclass
@@ -98,6 +99,8 @@ class FilenameParser:
         stem, _ = os.path.splitext(filename)
 
         if _SPACE_DASH_RE.search(stem):
+            if self.file_name_type == FileNameType.DISC_TRACK_SPACED:
+                return self._parse_disc_track_spaced(stem)
             return self._parse_space_dash(stem)
 
         return self._parse_legacy(stem)
@@ -154,6 +157,37 @@ class FilenameParser:
             return ParsedSong(artist=parts[0].strip(), title=parts[1].strip())
         # Only one part means the regex found nothing useful; fall back.
         return ParsedSong(title=stem.strip())
+
+    def _parse_disc_track_spaced(self, stem: str) -> ParsedSong:
+        """Handle the ``"Disc-Track - Artist - Title"`` spaced convention.
+
+        Spaces around every separating dash are required. The text before
+        the first " - " is a disc-track part split into disc and track at
+        its *last* hyphen; the remainder splits at its first " - " into
+        artist and title, so inner dashes in the artist name and further
+        separators in the title are preserved. Any mismatch (no hyphen in
+        the prefix, empty disc or track) falls back to the ordinary
+        space-dash parse so a mixed library still loads under one setting.
+        """
+        parts = _SPACE_DASH_RE.split(stem, maxsplit=1)
+        if len(parts) != 2:
+            return self._parse_space_dash(stem)
+        prefix, remainder = parts[0].strip(), parts[1].strip()
+        if not remainder or "-" not in prefix:
+            return self._parse_space_dash(stem)
+
+        disc, _, track = prefix.rpartition("-")
+        disc, track = disc.strip(), track.strip()
+        if not disc or not track:
+            return self._parse_space_dash(stem)
+
+        artist_parts = _SPACE_DASH_RE.split(remainder, maxsplit=1)
+        if len(artist_parts) != 2:
+            return self._parse_space_dash(stem)
+        artist, title = artist_parts[0].strip(), artist_parts[1].strip()
+        if not artist or not title:
+            return self._parse_space_dash(stem)
+        return ParsedSong(artist=artist, title=title, disc=disc, track=track)
 
     def _parse_legacy(self, stem: str) -> ParsedSong:
         """Handle the legacy ``"Disc-Track-Artist-Title"`` family of patterns.
