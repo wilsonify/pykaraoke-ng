@@ -512,16 +512,16 @@ validatable on import.
 ### Requirement: Library import with validation and atomic swap
 
 The library SHALL import from a JSON string that is either the export
-envelope or a bare serialised library dictionary. It SHALL validate the
-payload and schema version before applying. A recognised, valid payload
-SHALL atomically replace the in-memory library; malformed JSON, an
-unrecognised schema, or an invalid library SHALL leave the existing library
-unchanged and SHALL report a structured error rather than a partial state.
+envelope or a bare serialised library dictionary, validating the payload
+and schema version before applying. A recognised, valid payload SHALL
+atomically replace the in-memory library; malformed JSON, an unrecognised
+schema, or an invalid library SHALL leave the existing library unchanged
+and SHALL report a structured error rather than a partial state.
 
-> Source: `SongLibrary.import_json()` in `src/pykaraoke/database.py:561`
-> (validates envelope schema and library version, builds a fresh
-> `SongLibrary` from the payload, then swaps state in one step). Verified by
-> `tests/pykaraoke/test_database.py:540` (`TestExportImport`).
+> Source: `SongLibrary.import_json()` in `src/pykaraoke/database.py`
+> (validates schema and library version, builds a fresh library, then
+> swaps state in one step). Verified by `TestExportImport` in
+> `tests/pykaraoke/test_database.py`.
 
 #### Scenario: Export/import round-trip
 
