@@ -25,17 +25,17 @@ it, its type, its default, and its effect.
 | `derive_song_info` | Settings panel — **Derive song info from filename** | boolean | `true` | UI-facing toggle. See the note below. |
 | `volume` | Volume slider (transport controls) | float `0.0`–`1.0` | `0.75` | Playback volume applied to audio, video, and MIDI synthesis. |
 | `folders` | No separate control — updated as folders are added | list of strings | `[]` | The scan sources recorded by the library. |
-| `file_name_type` | Not exposed in the settings panel | integer `0`–`3` | `3` (`ARTIST_TITLE`) | The legacy filename naming convention used when a file has no `" - "` separator: `DISC_TRACK_ARTIST_TITLE` (0), `DISCTRACK_ARTIST_TITLE` (1), `DISC_ARTIST_TITLE` (2), `ARTIST_TITLE` (3). |
+| `file_name_type` | Settings panel — **Naming convention** | integer `0`–`4` | `3` (`ARTIST_TITLE`) | The legacy filename naming convention: `DISC_TRACK_ARTIST_TITLE` (0), `DISCTRACK_ARTIST_TITLE` (1), `DISC_ARTIST_TITLE` (2), `ARTIST_TITLE` (3), `DISC_TRACK_SPACED` (4 — `Disc-Track - Artist - Title`, spaces required). |
+| `include_patterns` | Settings panel — **Include patterns** | list of `fnmatch` patterns | `[]` | When non-empty, only files whose basename (or zip-member basename) matches at least one pattern are scanned. Case-insensitive. |
+| `exclude_patterns` | Settings panel — **Exclude patterns** | list of `fnmatch` patterns | `[]` | Files whose basename (or zip-member basename) matches any pattern are skipped; exclude wins over include. Case-insensitive. |
 
-!!! note "Two settings deserve a caveat"
+!!! note "`derive_song_info` is a UI-facing toggle"
 
-    - **`derive_song_info`** is persisted and round-tripped, but the library
-      does not consult it during scanning today — only `file_name_type` selects
-      the parser. It is a UI-facing toggle at present.
-    - **`file_name_type`** is persisted and *is* used by the scanner, but it has
-      no control in the settings panel yet, so it keeps its `ARTIST_TITLE`
-      default unless set programmatically. The authoritative behaviour is in the
-      [song-library specification](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
+    **`derive_song_info`** is persisted and round-tripped, but the library
+    does not consult it during scanning today — only `file_name_type` selects
+    the parser. It is a UI-facing toggle at present. The authoritative
+    behaviour is in the
+    [song-library specification](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
 
 `cdg_zoom` also accepts `none` at the model level, but that value is not
 offered by the settings panel.
