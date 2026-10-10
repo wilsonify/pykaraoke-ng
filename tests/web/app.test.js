@@ -84,10 +84,7 @@ describe('companion files (.elrc)', () => {
 
 describe('SongQueue', () => {
   it('pushes, removes and clears', () => {
-    const q = new SongQueue();
-    q.push({ id: 'a' });
-    q.push({ id: 'b' });
-    q.push({ id: 'c' });
+    const q = new SongQueue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
     expect(q.length).toBe(3);
     expect(q.removeAt(1).id).toBe('b');
     expect(q.length).toBe(2);
