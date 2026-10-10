@@ -39,22 +39,22 @@ spec is linked.
 | [#2](https://github.com/kelvinlawson/pykaraoke/issues/2) | Pitch-shifting | Not implemented |
 | [#3](https://github.com/kelvinlawson/pykaraoke/issues/3) | Lyrics Preview Window | Partly |
 | [#4](https://github.com/kelvinlawson/pykaraoke/issues/4) | Tempo-Shifting | Not implemented |
-| [#5](https://github.com/kelvinlawson/pykaraoke/issues/5) | Custom pattern for song structure filter | Partly |
+| [#5](https://github.com/kelvinlawson/pykaraoke/issues/5) | Custom pattern for song structure filter | Solved |
 | [#6](https://github.com/kelvinlawson/pykaraoke/issues/6) | Scan DIVX and XVID extensions | Solved |
-| [#7](https://github.com/kelvinlawson/pykaraoke/issues/7) | Reallocate file links in database | Partly |
-| [#8](https://github.com/kelvinlawson/pykaraoke/issues/8) | Backup and restore library | Partly |
+| [#7](https://github.com/kelvinlawson/pykaraoke/issues/7) | Reallocate file links in database | Solved |
+| [#8](https://github.com/kelvinlawson/pykaraoke/issues/8) | Backup and restore library | Solved |
 | [#9](https://github.com/kelvinlawson/pykaraoke/issues/9) | KJ Features | Not implemented |
 | [#10](https://github.com/kelvinlawson/pykaraoke/issues/10) | Unresponsive after a MIDI file without lyrics | Solved |
-| [#11](https://github.com/kelvinlawson/pykaraoke/issues/11) | Log files that failed during a scan | Not implemented |
+| [#11](https://github.com/kelvinlawson/pykaraoke/issues/11) | Log files that failed during a scan | Partly |
 | [#12](https://github.com/kelvinlawson/pykaraoke/issues/12) | Kamikaze mode double performer prompt | Moot |
-| [#13](https://github.com/kelvinlawson/pykaraoke/issues/13) | Scan exclusion filter | Partly |
-| [#14](https://github.com/kelvinlawson/pykaraoke/issues/14) | Artist-Title parsing fails under certain circumstances | Partly |
+| [#13](https://github.com/kelvinlawson/pykaraoke/issues/13) | Scan exclusion filter | Solved |
+| [#14](https://github.com/kelvinlawson/pykaraoke/issues/14) | Artist-Title parsing fails under certain circumstances | Solved |
 | [#16](https://github.com/kelvinlawson/pykaraoke/issues/16) | Fails to play sound with no error message (MIDI) | Solved |
 | [#18](https://github.com/kelvinlawson/pykaraoke/issues/18) | Renamed `libwxgtk-python` to `python-wxgtk2.8` | Moot |
 | [#21](https://github.com/kelvinlawson/pykaraoke/issues/21) | GP2X still relevant? | Solved |
 | [#22](https://github.com/kelvinlawson/pykaraoke/issues/22) | Installation on Ubuntu 22 | Solved |
 
-Tally: 5 solved, 7 partly, 4 not implemented, 2 moot (18 total).
+Tally: 10 solved, 2 partly, 4 not implemented, 2 moot (18 total).
 
 ---
 
@@ -158,10 +158,10 @@ synthesis has no rate parameter exposed.
 not parse it properly"; the reporter supplied a `pykdb.py` patch and noted
 that "fix[ing] it properly would require much more programming".
 
-**In PyKaraoke-NG** — the reported layout works. Archives are scanned in-page
-(no extraction to disk); each member is parsed, and when the member's filename
-yields no artist, the **immediate parent directory** is used as the artist.
-Measured against the current parser:
+**In PyKaraoke-NG** — **solved.** The reported layout works. Archives are
+scanned in-page (no extraction to disk); each member is parsed, and when the
+member's filename yields no artist, the **immediate parent directory** is used
+as the artist. Measured against the current parser:
 
 ```text
 language/artist/song.kar           -> artist='artist'  title='song'
@@ -169,24 +169,22 @@ Language/Artist/Title.kar          -> artist='Artist'  title='Title'
 Some Dir/Queen - Bohemian Rhapsody.kar -> artist='Queen' title='Bohemian Rhapsody'
 ```
 
-The naming convention is also configurable (`file_name_type`, one of four
-legacy schemes). What is *not* implemented is the feature title's
-fully custom, user-supplied pattern: `file_name_type` selects a fixed scheme
-and currently has no control in the settings panel.
+Beyond the fixed legacy schemes (`file_name_type` `0`–`3`, now selectable in
+the settings panel), the library accepts fully custom, user-supplied
+`fnmatch` **include** and **exclude** patterns
+(`include_patterns` / `exclude_patterns`) matched case-insensitively against
+every file and zip-member basename — so any structure the user can express as
+a glob can be filtered in or out of the scan.
 
 **Evidence**
 
 * `parse_zip_path()` and the "Archive members fall back to the directory as
   artist" requirement —
   [filename-parsing spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/filename-parsing/spec.md).
-* Zip scanning —
-  [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md)
-  ("Zip archive scanning").
-* The `file_name_type` caveat —
+* Requirement "Include and exclude filename patterns" —
+  [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
+* `file_name_type` and the pattern settings —
   [Configuration](configuration.md).
-
-**Still open** — a user-visible control for the naming scheme, and arbitrary
-user-defined patterns if that is wanted.
 
 ## #6 Scan DIVX and XVID Extensions
 
@@ -213,30 +211,29 @@ tested.
 `D:\Myfiles\…` to `C:\MyKaraoke\…` invalidated every entry; the request is to
 "change root of file links in database".
 
-**In PyKaraoke-NG** — there is no database of absolute media paths to
-reallocate. The library is **derived** from the folder you pick on each scan
-(`SongLibrary.scan()`), keyed by folder-relative path, and performs no
-filesystem access of its own. Moving the collection means picking the new
-folder and scanning it.
+**In PyKaraoke-NG** — **solved.** There is still no database of absolute
+media paths to reallocate — the library is **derived** from the folders you
+pick (`SongLibrary.scan()`), keyed by folder-relative path — but relocation
+is now an explicit operation:
 
-Two honest caveats. First, there is no explicit "change root" command — a move
-is a re-scan, not a relocation. Second, the scan **merges** entries: the file
-index accumulates every path it has seen in the session, and on restart it is
-repopulated from the persisted songs. So a move can leave the same song
-present under both its old and new path until the stored state is cleared
-(browser site data / desktop webview storage) or the library is rebuilt from a
-fresh folder pick.
+* **Replace-scan** (`scan(files, replace=True)`, or the **Replace library**
+  button) clears previously scanned loose files and zip expansions before
+  applying the new batch, leaving settings untouched. A move becomes: pick
+  the new folder, click **Replace library** — no ghosts of the old root.
+* **Prune** (`prune_songs(known_paths)`, exercised internally by replace)
+  drops songs whose paths are absent from a caller-supplied on-disk path
+  set; an empty set is a guarded no-op.
 
 **Evidence**
 
-* Derived, side-effect-free library — requirement "Deterministic,
-  side-effect-free operation" in the
+* Requirements "Replace-scan clears prior contents" and "Prune stale songs
+  by known path set" —
   [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
-* `scan()` / `_rebuild()` / `_files` in `src/pykaraoke/database.py`.
-* Resetting state — [Configuration](configuration.md) ("To reset everything …").
-
-**Still open** — a relocation/root-replacement operation, and removal of stale
-entries for paths that no longer exist.
+* `SongLibrary.scan(replace=True)` / `prune_songs()` —
+  `src/pykaraoke/database.py`; `scan_files(replace=)` / `prune_songs()` —
+  `src/pykaraoke/webapp.py`.
+* Relocate workflow — [User guide](../user-guide/index.md) ("Library
+  Management").
 
 ## #8 Backup and restore library
 
@@ -244,25 +241,32 @@ entries for paths that no longer exist.
 … the list of artists and songs and the link to the media file … and not the
 media files themselves."
 
-**In PyKaraoke-NG** — the *data* half exists: the library and settings
-serialise to a single versioned, JSON-compatible payload and restore from it,
-and malformed or unknown-version state is ignored rather than fatal. The
-engine can therefore back up and restore everything the reporter asked for.
-The *user-facing* half does not: the payload is persisted to local storage
-automatically, but there is no button to export it to a file or import one
-back.
+**In PyKaraoke-NG** — **solved.** The library and settings serialise to a
+single versioned, JSON-compatible payload and restore from it, and malformed
+or unknown-version state is ignored rather than fatal. On top of that there
+is now a full backup/share path:
+
+* **Export** downloads the whole library (songs, pairing, folders, settings —
+  never the media files themselves) as a self-describing envelope
+  (`{"format": "pykaraoke-ng-library", "schema": 1, "library": {…}}`) named
+  `pykaraoke-library.json`.
+* **Import** validates the payload — envelope or bare library dict, recognised
+  schema only — and atomically replaces the in-memory library on success. A
+  corrupt or wrong-version file returns a structured error and leaves the
+  existing library untouched; there is never a partial state.
 
 **Evidence**
 
-* `KaraokeApp.to_json()` / `from_json()` in `src/pykaraoke/webapp.py`.
-* Requirements "Library persistence" and "Settings defaults and round-trip" —
+* Requirements "Library export envelope" and "Library import with validation
+  and atomic swap" —
   [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
-* Requirements "Persistence round-trip" and "Malformed persisted state is
-  ignored" —
+* Requirements "Import and export API" —
   [web-engine-api spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/web-engine-api/spec.md).
-* Storage keys — [Configuration](configuration.md).
-
-**Still open** — export/import of the library JSON as a file.
+* `SongLibrary.export_json()` / `import_json()` — `src/pykaraoke/database.py`;
+  `KaraokeApp.export_json()` / `import_json()` — `src/pykaraoke/webapp.py`;
+  Export/Import buttons — `src/web/index.html`.
+* Share workflow — [User guide](../user-guide/index.md) ("Library
+  Management").
 
 ## #9 KJ Features
 
@@ -329,24 +333,24 @@ pre-screening the library.
 logged to a file or a GUI window, ideally separated by reason (unsupported
 compression, invalid/corrupt zip, name could not be parsed).
 
-**In PyKaraoke-NG** — **not implemented.** By design the scan is quiet about
-things it does not recognise: unsupported extensions are simply ignored, an
-unreadable archive reports "added nothing" instead of raising, and the UI logs
-a single `console.warn` for a failed archive and an aggregate count in the
-status bar. There is no list of skipped files, no per-reason categorisation,
-and no log file.
+**In PyKaraoke-NG** — **partly.** The scan now records a structured,
+per-file, per-reason report: unsupported extensions, filtered (pattern-excluded)
+files, corrupt archives, unsupported compression, unreadable archives, and
+filename parse failures each get their own category and path entry. The UI
+shows a summary line under the library header (counts plus a few example
+paths) with a dismiss control. What is *not* implemented is a persistent log
+file — the report lives in memory for the session and is cleared on demand or
+on reload.
 
 **Evidence**
 
-* "Anything the scan does not recognise is simply ignored, so the scan never
-  fails on unrelated files" — [Supported formats](formats.md).
-* Requirement "Zip archive scanning" / scenario "Unreadable archive" —
+* Requirement "Scan reporting" —
   [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
-* Current fallback advice — [User guide](../user-guide/index.md) troubleshooting
-  ("Songs missing after scan → Check extensions and re-scan").
-* `scanZips()`'s `console.warn` — `src/web/index.html`.
+* `scan_report()` / `clear_scan_report()` —
+  [Engine API](engine-api.md).
+* `renderScanSummary()` — `src/web/index.html`.
 
-**Still open** — a scan report (per-file, per-reason) and/or an exportable log.
+**Still open** — an exportable/persisted log file.
 
 ## #12 Kamikaze mode double performer prompt
 
@@ -372,24 +376,25 @@ is wanted it would be a new proposal rather than a fix.
 **Reported** — "add the ability to exclude files matching certain patterns
 from a scan", e.g. `_(Vocal)_`, `_(Gospel)_`, `_(Spanish)_`.
 
-**In PyKaraoke-NG** — **partly.** Two exclusion mechanisms exist, but neither
-matches arbitrary filename patterns:
+**In PyKaraoke-NG** — **solved.** Arbitrary filename-pattern exclusion is
+implemented via the `exclude_patterns` (and `include_patterns`) settings:
+lists of case-insensitive `fnmatch` patterns matched against each file and
+zip-member basename. `_(Vocal)_` and friends work as expected, e.g.
+`*_(vocal)_*` excludes `Song - Artist_(Vocal)_.cdg`. Exclude wins over
+include; an empty include list means "everything". Both are editable in the
+settings panel and filter the scan at the library level (filtered files are
+counted in the scan report). The two older mechanisms remain as well:
 
 * **Kind filters** — results can be filtered to CDG, KAR/MID, MPG, and LRC.
-* **`exclude_non_matching`** — "Hide songs without artist": entries from which
-  no artist can be parsed are omitted from the library (off by default, so
-  such entries are otherwise kept as title-only songs). This is a
-  parseability filter, not a pattern filter.
+* **`exclude_non_matching`** — "Hide songs without artist": a parseability
+  filter, not a pattern filter.
 
 **Evidence**
 
-* Filter checkboxes and the **Hide songs without artist** toggle —
-  `src/web/index.html`.
-* Requirement "Optional exclusion of songs without an artist" —
+* Requirement "Include and exclude filename patterns" —
   [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).
-* `exclude_non_matching` — [Configuration](configuration.md).
-
-**Still open** — user-defined pattern exclusion (`_(Vocal)_` and friends).
+* `include_patterns` / `exclude_patterns` — [Configuration](configuration.md).
+* Settings panel inputs and `parsePatternList()` — `src/web/index.html`.
 
 ## #14 Artist-Title parsing fails under certain circumstances
 
@@ -401,52 +406,44 @@ proposed a new "DISC-TRACK - ARTIST - TITLE" mode in which spaces are
 **required**, the last dash inside the disc-track part separates disc from
 track, and the first ` - ` in the remainder separates artist from title.
 
-**In PyKaraoke-NG** — **partly.** What is fixed:
-
-* Names are no longer dropped. `exclude_non_matching` defaults to off and
-  parse failures never abort a scan, so a hard-to-parse file is kept as a
-  title-only or loosely-parsed song instead of vanishing.
-* The parser never raises — a bad name cannot kill the scan.
-* Directory dashes are ignored (only the basename is parsed), inner dashes in
-  the title are preserved, and dash-containing artist names are handled in
-  legacy `ARTIST_TITLE` mode by a documented abbreviation heuristic
-  (`AC-DC-Back In Black`).
-* Zipped libraries are parsed per *member*, so the archive filename's dashes
-  are irrelevant; the member's parent directory can supply the artist
-  (see [#5](#5-custom-pattern-for-song-structure-filter)).
-
-What is **not** implemented is the reporter's requested mode. The space-dash
-rule is "split at the **first** separator", so a spaced disc/track prefix still
-lands in the artist field, and the legacy mode still mis-splits a dash inside
-the artist name:
+**In PyKaraoke-NG** — **solved.** The reporter's requested mode is implemented
+as `DISC_TRACK_SPACED` (`file_name_type` = `4`, selectable in the settings
+panel as **Naming convention → Disc-Track - Artist - Title (spaced)**). It
+requires the spaces, splits the prefix at its last hyphen into disc and
+track, and splits the remainder at its first ` - ` into artist and title.
+Measured with the spaced mode enabled:
 
 ```text
-CB30055-15 - Switchfoot - Stars.zip                -> artist='CB30055-15'  title='Switchfoot - Stars'
-SC3448-03 - All-American Rejects - Dirty Little Secret.zip
-                                                   -> artist='SC3448-03'   title='All-American Rejects - Dirty Little Secret'
-CB5056-03-06 - Al Green - Let's Stay Together.zip  -> artist='CB5056-03-06' title="Al Green - Let's Stay Together"
-
-# legacy DISC_TRACK_ARTIST_TITLE (no spaces)
-CB30055-15-Switchfoot-Stars.cdg                    -> disc='CB30055' track='15' artist='Switchfoot' title='Stars'
-SC3448-03-All-American Rejects-Dirty Little Secret.cdg
-                                                   -> disc='SC3448' track='03' artist='All' title='American Rejects-Dirty Little Secret'
+CB30055-15 - Switchfoot - Stars.cdg                -> disc='CB30055' track='15' artist='Switchfoot' title='Stars'
+SC3448-03 - All-American Rejects - Dirty Little Secret.cdg
+                                                   -> disc='SC3448' track='03' artist='All-American Rejects' title='Dirty Little Secret'
+CB5056-03-06 - Al Green - Let's Stay Together.cdg  -> disc='CB5056-03' track='06' artist='Al Green' title="Let's Stay Together"
+PHM - Pop/PHM0512/PHM0512-08 - Switchfoot - Stars.kar (zip member)
+                                                   -> disc='PHM0512' track='08' artist='Switchfoot' title='Stars'
 ```
+
+The earlier safety fixes remain in place: names are never dropped
+(`exclude_non_matching` defaults to off, parse failures never abort a scan),
+the parser never raises, directory dashes are ignored, inner dashes in the
+title are preserved, and zipped libraries are parsed per *member* with the
+parent directory able to supply the artist
+(see [#5](#5-custom-pattern-for-song-structure-filter)).
+
+One caveat remains for the *legacy unspaced* modes: a dash inside an artist
+name (`SC3448-03-All-American Rejects-…` under `DISC_TRACK_ARTIST_TITLE`)
+still mis-splits, because the legacy schemes have no reliable way to know
+where the artist begins. The spaced mode sidesteps this by requiring the
+` - ` separator.
 
 **Evidence**
 
-* Requirement "Space-dash-space filenames split at the first separator" and
-  "Legacy naming conventions are selected by configuration" —
+* Requirements "Disc-track spaced naming mode" and "Spaced disc-track
+  fallback and setting value" —
   [filename-parsing spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/filename-parsing/spec.md).
-* Abbreviation heuristic requirement ("Artist-Title mode groups dashed
-  abbreviations into the artist") — same spec.
-* Active change covering *other* parser edge cases (Unicode normalisation,
-  full-width folding, field hygiene, bare titles, parenthetical titles,
-  archive-directory artists) —
-  [`openspec/changes/filename-parser-edge-cases`](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/changes/filename-parser-edge-cases/proposal.md).
-  It does **not** add the disc-track-with-spaces mode.
-
-**Still open** — a spaced disc/track-aware mode, and correct handling of dashes
-inside legacy artist names.
+* `FilenameParser._parse_disc_track_spaced()` —
+  `src/pykaraoke/filename_parser.py`; tests in
+  `tests/pykaraoke/test_filename_parser.py` (`TestDiscTrackSpaced`).
+* Settings exposure (`file_name_type` = `4`) — [Configuration](configuration.md).
 
 ## #16 pykaraoke 7.5 fails to play sound with no error message
 
