@@ -15,7 +15,7 @@ class KaraokeApp:
     """One instance per page; published to JS as ``window.pykaraoke``."""
 
     def __init__(self):
-        self.library = database.SongLibrary()
+        self.library: database.SongLibrary = database.SongLibrary()
         # Live CDG decoders keyed by song id (incremental decode state).
         self._decoders: dict[str, cdg_module.CdgDecoder] = {}
         # Zip bytes keyed by zip file name (for reading members later).
@@ -50,8 +50,12 @@ class KaraokeApp:
     # Library
     # ------------------------------------------------------------------
 
-    def scan_files(self, files) -> dict:
-        """Scan file entries ``[{name, path, size}]`` from the folder picker."""
+    def scan_files(self, files, replace: bool = False) -> dict:
+        """Scan file entries ``[{name, path, size}]`` from the folder picker.
+
+        With ``replace=True`` previously scanned loose files and zip
+        expansions are cleared first (settings untouched).
+        """
         entries = []
         for f in files:
             if not isinstance(f, dict):
@@ -66,7 +70,24 @@ class KaraokeApp:
                 )
             except (TypeError, ValueError):
                 continue
-        return self.library.scan(entries)
+        return self.library.scan(entries, replace=bool(replace))
+
+    def prune_songs(self, known) -> dict:
+        """Remove songs whose paths are absent from *known* (empty = no-op)."""
+        try:
+            paths = list(known) if known else []
+        except TypeError:
+            paths = []
+        pruned = self.library.prune_songs(paths)
+        return {"pruned": pruned, "total": len(self.library.songs)}
+
+    def export_json(self) -> str:
+        """Export the library as a self-describing JSON envelope string."""
+        return self.library.export_json()
+
+    def import_json(self, payload: str) -> dict:
+        """Replace the library from a JSON string; ``{ok, error}`` result."""
+        return self.library.import_json(str(payload))
 
     def scan_zip(self, name: str, data) -> dict:
         """Scan a zip archive (bytes) and add its karaoke members."""
