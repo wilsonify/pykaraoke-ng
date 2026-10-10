@@ -50,8 +50,33 @@ class ParsedSong:
     track: str = ""
 
 
-# Regex matching " - " with optional surrounding whitespace
-_SPACE_DASH_RE = re.compile(r"\s+-\s+")
+_WS_ASCII = " \t\n\r\f\v"
+
+
+def _is_sep_space(ch: str) -> bool:
+    """Whether *ch* matches ``\\s`` (ASCII whitespace or non-ASCII space)."""
+    return ch in _WS_ASCII or (ord(ch) > 127 and ch.isspace())
+
+
+def _split_space_dash(stem: str) -> list[str]:
+    """Split *stem* at the first ``" - "`` separator (1-2 parts).
+
+    The separator is a hyphen with whitespace on both sides.  A linear
+    scan replaces ``re.split(r"\\s+-\\s+", stem, maxsplit=1)``, whose
+    leading ``\\s+`` backtracks quadratically on dash-less whitespace runs.
+    """
+    i = stem.find("-", 1)
+    while i != -1 and i + 1 < len(stem):
+        if _is_sep_space(stem[i - 1]) and _is_sep_space(stem[i + 1]):
+            start = i - 1
+            while start > 0 and _is_sep_space(stem[start - 1]):
+                start -= 1
+            end = i + 2
+            while end < len(stem) and _is_sep_space(stem[end]):
+                end += 1
+            return [stem[:start], stem[end:]]
+        i = stem.find("-", i + 1)
+    return [stem]
 
 # Typographic dash variants treated as ASCII hyphen equivalents:
 # hyphen, non-breaking, figure, en, em, horizontal bar, minus sign,
@@ -145,7 +170,7 @@ class FilenameParser:
         stem, _ = os.path.splitext(filename)
         stem = _normalize_stem(stem)
 
-        if _SPACE_DASH_RE.search(stem):
+        if len(_split_space_dash(stem)) == 2:
             if self.file_name_type == FileNameType.DISC_TRACK_SPACED:
                 return self._parse_disc_track_spaced(stem)
             return self._parse_space_dash(stem)
@@ -199,7 +224,7 @@ class FilenameParser:
         everything after (including any additional " - " segments) becomes
         the title, so that subtitles like "Live" or "(Remix)" are preserved.
         """
-        parts = _SPACE_DASH_RE.split(stem, maxsplit=1)
+        parts = _split_space_dash(stem)
         if len(parts) == 2:
             return ParsedSong(artist=parts[0].strip(), title=parts[1].strip())
         # Only one part means the regex found nothing useful; fall back.
@@ -216,7 +241,7 @@ class FilenameParser:
         the prefix, empty disc or track) falls back to the ordinary
         space-dash parse so a mixed library still loads under one setting.
         """
-        parts = _SPACE_DASH_RE.split(stem, maxsplit=1)
+        parts = _split_space_dash(stem)
         if len(parts) != 2:
             return self._parse_space_dash(stem)
         prefix, remainder = parts[0].strip(), parts[1].strip()
@@ -228,7 +253,7 @@ class FilenameParser:
         if not disc or not track:
             return self._parse_space_dash(stem)
 
-        artist_parts = _SPACE_DASH_RE.split(remainder, maxsplit=1)
+        artist_parts = _split_space_dash(remainder)
         if len(artist_parts) != 2:
             return self._parse_space_dash(stem)
         artist, title = artist_parts[0].strip(), artist_parts[1].strip()
