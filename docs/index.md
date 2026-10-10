@@ -49,7 +49,8 @@ There is no backend process, service, or API server.
 
     ---
 
-    Supported formats, configuration, the engine API, and the specifications.
+    Supported formats, configuration, the engine API, the specifications, and
+    how the original PyKaraoke tracker's open issues map onto this rewrite.
 
     [:octicons-arrow-right-24: Reference](reference/specifications.md)
 
