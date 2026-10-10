@@ -148,7 +148,20 @@ class KaraokeApp:
             settings.look_inside_zips = bool(updates["look_inside_zips"])
         if "folders" in updates:
             settings.folders = [str(f) for f in updates["folders"]]
+        if "include_patterns" in updates:
+            settings.include_patterns = [str(p) for p in updates["include_patterns"]]
+        if "exclude_patterns" in updates:
+            settings.exclude_patterns = [str(p) for p in updates["exclude_patterns"]]
         return settings.to_dict()
+
+    def scan_report(self) -> dict:
+        """Structured scan outcomes (entries plus per-category counts)."""
+        return self.library.scan_report()
+
+    def clear_scan_report(self) -> dict:
+        """Forget recorded scan outcomes; returns the now-empty report."""
+        self.library.clear_scan_report()
+        return self.library.scan_report()
 
     # ------------------------------------------------------------------
     # Playback data
