@@ -96,6 +96,7 @@ nav:
       - Configuration: reference/configuration.md
       - Engine API: reference/engine-api.md
       - Specifications: reference/specifications.md
+      - Original PyKaraoke issue coverage: reference/original-pykaraoke-issues.md
   - Contributing:
       - Development: contributing/index.md
       - OpenSpec workflow: contributing/openspec.md
