@@ -41,7 +41,22 @@ import re
 _LINE_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\](.*)$")
 # Any [key:value] ID tag.  Keys must start with a letter so timestamps
 # like [00:12.34] are never mistaken for metadata.
-_META_RE = re.compile(r"^\[([a-zA-Z][a-zA-Z0-9_-]*):([^\]]*)\]$")
+_META_KEY_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]*\Z")
+
+
+def _parse_meta(stripped: str) -> tuple[str, str] | None:
+    """Key and value of a ``[key:value]`` tag (None when not one).
+
+    Plain string slicing replaces ``^\\[([a-zA-Z][...]*):([^\\]]*)\\]$``:
+    the trailing ``[^\\]]*\\]$`` backtracks on long bracket-less tails.
+    """
+    if not stripped.startswith("[") or not stripped.endswith("]"):
+        return None
+    key, sep, value = stripped[1:-1].partition(":")
+    if not sep or "]" in value or _META_KEY_RE.match(key) is None:
+        return None    return key.lower(), value.strip()
+
+
 # Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
 _WORD_RE = re.compile(r"<(\d{1,2}):(\d{1,2})\.(\d{1,3})>")
 # .elrc word entry: [mm:ss.xx] text (same timestamp shape as a line tag).
@@ -233,10 +248,11 @@ def _accumulate_syllables(
 
 def _consume_meta(stripped: str, meta: dict[str, str]) -> bool:
     """Record a ``[key:value]`` metadata tag; True when the line was one."""
-    meta_match = _META_RE.match(stripped)
-    if not meta_match:
+    parsed = _parse_meta(stripped)
+    if parsed is None:
         return False
-    meta[meta_match.group(1).lower()] = meta_match.group(2).strip()
+    key, value = parsed
+    meta[key] = value
     return True
 
 
