@@ -87,12 +87,15 @@ callApi('from_json', localStorage.getItem('pykaraoke'));
 
 ## Library
 
-### `scan_files(files) -> dict`
+### `scan_files(files, replace=False) -> dict`
 
 Add recognised karaoke songs from folder-picker entries. Each entry is a
 mapping `{name, path, size}`; a missing `path` defaults to `name`. Entries
 that are not mappings, or whose numeric fields are unusable, are skipped
-rather than failing the scan.
+rather than failing the scan. With `replace=True` previously scanned loose
+files and zip expansions are cleared first (settings untouched) — use it to
+relocate a library without carrying ghosts of the old root; the default
+stays additive.
 
 ```json
 { "added": 12, "total": 240 }
@@ -153,14 +156,59 @@ silently ignored — no error is raised.
 | `cdg_zoom` | `str` | CD+G canvas zoom (`quick` / `int` / `full` / `soft`) |
 | `sort` | `str` | Library sort (`filename` / `title` / `artist`) |
 | `volume` | `float` | Playback volume in `[0, 1]` |
-| `file_name_type` | `int` | Legacy filename convention selector |
+| `file_name_type` | `int` | Legacy filename convention selector (`0`–`4`; `4` = spaced disc-track) |
 | `derive_song_info` | `bool` | Derive artist/title from the filename |
 | `exclude_non_matching` | `bool` | Hide songs without an artist |
 | `look_inside_zips` | `bool` | Scan `.zip` archives |
 | `folders` | `list[str]` | Configured library folders |
+| `include_patterns` | `list[str]` | Case-insensitive `fnmatch` patterns; when non-empty, only matching basenames are scanned |
+| `exclude_patterns` | `list[str]` | Case-insensitive `fnmatch` patterns; matching basenames are skipped (exclude wins) |
 
 ```js
 const settings = callApi('set_settings', { volume: 0.4, sort: 'artist' });
+```
+
+### `scan_report() -> dict`
+
+The accumulated scan report: `{ entries: [{category, path}, ...], counts: {unsupported, filtered, corrupt_archive, unsupported_compression, unreadable, parse_failure} }`. Entries are deduplicated per `(category, path)` and survive until cleared; reporting never influences which songs are added.
+
+### `clear_scan_report() -> dict`
+
+Forgets every recorded scan outcome and returns the now-empty report.
+
+```js
+const report = callApi('scan_report');
+if (report.counts.corrupt_archive) console.warn(report.entries);
+callApi('clear_scan_report');
+```
+
+### `prune_songs(known) -> dict`
+
+Remove songs whose paths are absent from the caller-supplied `known` list of
+paths (loose and zip songs alike); returns `{pruned, total}`. An empty
+`known` list is a no-op so an accidental empty call cannot wipe the library.
+
+```js
+const { pruned, total } = callApi('prune_songs', onDiskPaths);
+```
+
+### `export_json() -> str`
+
+Export the whole library (songs, pairing, folders, settings) as a
+self-describing JSON envelope string:
+`{"format": "pykaraoke-ng-library", "schema": 1, "library": {…}}`.
+
+### `import_json(payload) -> dict`
+
+Replace the in-memory library from a JSON string — either the export
+envelope or a bare serialised library dict. Returns `{ok: true}` on success;
+on malformed JSON, an unrecognised schema, or an invalid library it returns
+`{ok: false, error}` and leaves the previous library untouched (never a
+partial state).
+
+```js
+const payload = callApi('export_json');
+const result = callApi('import_json', payload); // {ok: true}
 ```
 
 ---
