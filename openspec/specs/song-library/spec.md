@@ -149,13 +149,11 @@ match that ignores leading track numbers and trailing `karaoke` /
 When the `look_inside_zips` setting is enabled, the library SHALL expand a zip
 archive supplied as bytes into songs for each supported karaoke member, keying
 each song by the archive name plus the member name and recording the archive
-name. Member entries SHALL be deduplicated, and an unreadable archive SHALL be
-reported as adding nothing rather than raising — and SHALL additionally be
-recorded in the scan report with a distinguishing outcome
-(`corrupt_archive`, `unsupported_compression`, or `unreadable`) so the caller
-can tell the user why songs are missing.
+name. Member entries SHALL be deduplicated; an unreadable archive SHALL add
+nothing rather than raise, and its outcome SHALL be recorded in the scan
+report (see "Scan reporting").
 
-> Source: `SongLibrary.scan_zip()` in `src/pykaraoke/database.py:277`.
+> Source: `SongLibrary.scan_zip()` in `src/pykaraoke/database.py`.
 
 #### Scenario: Supported members become songs
 
@@ -281,11 +279,9 @@ disc-track mode — SHALL persist the selected value with the other settings,
 SHALL apply it to the next library scan, and SHALL restore the selection
 after a restart.
 
-> Source: the `#setting-naming` control in `src/web/index.html` (settings
-> panel), wired through `refreshSettings()` and the change listener that
-> calls `set_settings({file_name_type})`. Verified by
-> `tests/pykaraoke/test_webapp.py:128`
-> (`test_file_name_type_accepts_spaced_disc_track`).
+> Source: the `#setting-naming` control in `src/web/index.html`, wired
+> through `refreshSettings()` and `set_settings({file_name_type})`.
+> Verified by `TestSettings` in `tests/pykaraoke/test_webapp.py`.
 
 #### Scenario: Selecting the spaced disc-track mode
 
@@ -301,14 +297,16 @@ after a restart.
 
 ### Requirement: Include and exclude filename patterns
 
-The library SHALL accept `include_patterns` and `exclude_patterns` settings as lists of case-insensitive `fnmatch` patterns matched against the file basename and each zip member's basename. A file SHALL be scanned when it matches the include list (or the include list is empty) and does not match the exclude list; exclude wins. Patterns SHALL round-trip through settings persistence, and an invalid pattern SHALL degrade to a literal match rather than raising.
+The library SHALL accept `include_patterns` and `exclude_patterns` settings
+as lists of case-insensitive `fnmatch` patterns matched against the file
+basename and each zip member's basename. A file SHALL be scanned when it
+matches the include list (or the include list is empty) and does not match
+the exclude list; exclude wins.
 
-> Source: `SongLibrary._name_allowed()` in `src/pykaraoke/database.py:241`
-> and `_pattern_match()` in `src/pykaraoke/database.py:58`; applied in
-> `scan()` (`src/pykaraoke/database.py:256`), `scan_zip()`
-> (`src/pykaraoke/database.py:277`), and `_make_song()`
-> (`src/pykaraoke/database.py:365`). Verified by
-> `tests/pykaraoke/test_database.py:321` (`TestPatternFilters`).
+> Source: `SongLibrary._name_allowed()` and `_pattern_match()` in
+> `src/pykaraoke/database.py`; applied in `scan()`, `scan_zip()`, and
+> `_make_song()`. Verified by `TestPatternFilters` in
+> `tests/pykaraoke/test_database.py`.
 
 #### Scenario: Exclude a vocal version
 
@@ -338,17 +336,30 @@ The library SHALL accept `include_patterns` and `exclude_patterns` settings as l
 - **WHEN** a zip member matches an exclude pattern
 - **THEN** that member becomes no song while other members still do
 
+### Requirement: Invalid patterns degrade to a literal match
+
+An unparseable or invalid pattern SHALL degrade to a literal substring match
+rather than raising or aborting the scan.
+
+> Source: `_pattern_match()` in `src/pykaraoke/database.py`.
+
+#### Scenario: A malformed pattern never aborts a scan
+
+- **WHEN** a pattern that cannot be compiled is configured
+- **THEN** the scan completes and the pattern only matches its literal text
+
 ### Requirement: Scan reporting
 
-The library SHALL record a structured scan report — per-input outcome plus per-kind counts — covering `unsupported`, `filtered`, `corrupt_archive`, `unsupported_compression`, `unreadable`, and `parse_failure` (recorded when filename parsing raises, after which the file is kept as title-only instead of aborting the scan). The report SHALL be retrievable and clearable by the caller, SHALL survive independent of the song list until cleared, SHALL deduplicate repeated (category, path) pairs, and SHALL never influence which songs are added.
+The library SHALL record a structured scan report — per-input outcome plus
+per-kind counts — covering `unsupported`, `filtered`, `corrupt_archive`,
+`unsupported_compression`, `unreadable`, and `parse_failure`. The report
+SHALL be retrievable and clearable by the caller and SHALL never influence
+which songs are added.
 
-> Source: `SongLibrary._report()` in `src/pykaraoke/database.py:221`,
-> `scan_report()` at `src/pykaraoke/database.py:229`,
-> `clear_scan_report()` at `src/pykaraoke/database.py:236`, and the
-> defensive parse catch in `_parse_name()` at
-> `src/pykaraoke/database.py:389`. Categories are defined by
-> `REPORT_CATEGORIES` in `src/pykaraoke/database.py:48`. Verified by
-> `tests/pykaraoke/test_database.py:377` (`TestScanReport`).
+> Source: `SongLibrary._report()`, `scan_report()`, and
+> `clear_scan_report()` in `src/pykaraoke/database.py`; categories are
+> defined by `REPORT_CATEGORIES`. Verified by `TestScanReport` in
+> `tests/pykaraoke/test_database.py`.
 
 #### Scenario: A mixed batch reports every category
 
@@ -357,10 +368,19 @@ The library SHALL record a structured scan report — per-input outcome plus per
 - **THEN** the report counts one `unsupported`, one `filtered`, and zero
   problems for the parseable song
 
-#### Scenario: Report is clearable
+#### Scenario: Unreadable archive outcomes are distinguished
 
-- **WHEN** the caller clears the scan report
-- **THEN** the next `scan_report()` is empty
+- **WHEN** bytes that are not a valid zip are scanned
+- **THEN** the library adds no songs and does not raise
+- **AND** the scan report records the archive path as `corrupt_archive`
+
+#### Scenario: Unsupported compression is distinguished
+
+- **WHEN** a valid zip whose members use a compression method the runtime
+  cannot read is scanned
+- **THEN** the library adds no songs and does not raise
+- **AND** the scan report records the archive path as
+  `unsupported_compression`
 
 #### Scenario: Reporting never aborts
 
@@ -373,6 +393,21 @@ The library SHALL record a structured scan report — per-input outcome plus per
 - **THEN** the scan report counts one `parse_failure` for that path
 - **AND** the file is still added as a title-only song
 
+### Requirement: Scan report survives until cleared
+
+The report SHALL survive independent of the song list — including across
+rebuilds — until the caller clears it, and repeated (category, path)
+outcomes SHALL be recorded only once.
+
+> Source: `_report_entries` and `clear_scan_report()` in
+> `src/pykaraoke/database.py`. Verified by `TestScanReport` in
+> `tests/pykaraoke/test_database.py`.
+
+#### Scenario: Report is clearable
+
+- **WHEN** the caller clears the scan report
+- **THEN** the next `scan_report()` is empty
+
 #### Scenario: Outcomes are not duplicated across rebuilds
 
 - **WHEN** a later scan rebuilds the song list and re-visits an already
@@ -381,13 +416,15 @@ The library SHALL record a structured scan report — per-input outcome plus per
 
 ### Requirement: Zip songs survive rebuilds
 
-Rebuilding the song list after settings changes SHALL preserve songs that came from zip archives using a cache of previously parsed members, so that a rebuild does not require re-reading archive bytes and does not silently drop zip songs. Restoring a persisted library SHALL rebuild the cache from the restored zip songs.
+Rebuilding the song list after settings changes SHALL preserve songs that
+came from zip archives using a cache of previously parsed members, so that
+a rebuild does not require re-reading archive bytes and does not silently
+drop zip songs. Restoring a persisted library SHALL rebuild the cache from
+the restored zip songs.
 
-> Source: `SongLibrary._zip_cache` in `src/pykaraoke/database.py:211`,
-> written by `scan_zip()` at `src/pykaraoke/database.py:331`, consumed by
-> `_rebuild()` at `src/pykaraoke/database.py:359`, and repopulated by
-> `SongLibrary.from_dict()` at `src/pykaraoke/database.py:502`. Verified by
-> `tests/pykaraoke/test_database.py:444` (`TestZipMemberCache`).
+> Source: `SongLibrary._zip_cache` in `src/pykaraoke/database.py` (written
+> by `scan_zip()`, consumed by `_rebuild()`, repopulated by `from_dict()`).
+> Verified by `TestZipMemberCache` in `tests/pykaraoke/test_database.py`.
 
 #### Scenario: Rebuild keeps zip songs
 
@@ -413,9 +450,9 @@ loose files and zip expansions before applying the new batch, while leaving
 so existing callers keep their accumulated behaviour.
 
 > Source: `SongLibrary.scan(files, replace=…)` in
-> `src/pykaraoke/database.py:253` (replace clears `_files`, `_zip_cache`,
-> and `songs` before the normal apply path). Verified by
-> `tests/pykaraoke/test_database.py:476` (`TestReplaceScan`).
+> `src/pykaraoke/database.py` (replace clears `_files`, `_zip_cache`, and
+> `songs` before the normal apply path). Verified by `TestReplaceScan` in
+> `tests/pykaraoke/test_database.py`.
 
 #### Scenario: Replace-scan relocates a library
 
