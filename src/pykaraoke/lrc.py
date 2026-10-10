@@ -159,6 +159,116 @@ def parse_offset(meta: dict[str, str]) -> int:
         return 0
 
 
+def _collect_line_timestamps(rest: str) -> tuple[list[int], str]:
+    """Every leading ``[mm:ss.xx]`` timestamp and the text after them."""
+    timestamps: list[int] = []
+    while True:
+        line_match = _LINE_RE.match(rest)
+        if not line_match:
+            break
+        timestamps.append(_tag_ms(line_match.group(1), line_match.group(2), line_match.group(3)))
+        rest = line_match.group(4)
+    return timestamps, rest
+
+
+def _parse_timed_entry(stripped: str) -> tuple[list[int], str | None, str] | None:
+    """Timestamps, duet part and lyric text of one line (None if unusable)."""
+    timestamps, rest = _collect_line_timestamps(stripped)
+    if not timestamps:
+        # Untimed, blank, malformed and comment lines are ignored.
+        return None
+
+    # Optional duet tag after the timestamps: [00:12.00][a]lyric.
+    # Consumed before bracket stripping so the tag never reaches text.
+    part: str | None = None
+    part_match = _PART_RE.match(rest)
+    if part_match:
+        part = normalize_part(part_match.group(1))
+        rest = rest[part_match.end() :]
+
+    lyric_text = _strip_bracket_tags(rest).strip()
+    if not lyric_text:
+        return None
+    return timestamps, part, lyric_text
+
+
+def _append_word_syllables(
+    syllables: list, segments: list, timestamps: list[int], current_line: int, part: str | None
+) -> int:
+    """Append word-level syllables for every line timestamp; returns the max."""
+    line_max = 0
+    for line_ms in timestamps:
+        for seg_ms, seg_text in segments:
+            word = seg_text.strip()
+            if not word:
+                continue
+            ms = seg_ms if seg_ms is not None else line_ms
+            syllables.append((ms, word, current_line, part))
+            line_max = max(line_max, ms)
+    return line_max
+
+
+def _append_plain_syllables(
+    syllables: list, timestamps: list[int], lyric_text: str, current_line: int, part: str | None
+) -> int:
+    """Append one syllable per line timestamp; returns the max timestamp."""
+    line_max = 0
+    for ms in timestamps:
+        syllables.append((ms, lyric_text, current_line, part))
+        line_max = max(line_max, ms)
+    return line_max
+
+
+def _accumulate_syllables(
+    syllables: list, timestamps: list[int], lyric_text: str, current_line: int, part: str | None
+) -> int:
+    """Append one line's syllables; returns the largest timestamp added."""
+    # Enhanced LRC: word-level <mm:ss.xx> tags inside the line text.
+    segments = _split_word_segments(lyric_text)
+    if any(seg_ms is not None for seg_ms, _seg in segments):
+        return _append_word_syllables(syllables, segments, timestamps, current_line, part)
+    # Simple LRC: one syllable per line timestamp.
+    return _append_plain_syllables(syllables, timestamps, lyric_text, current_line, part)
+
+
+def _consume_meta(stripped: str, meta: dict[str, str]) -> bool:
+    """Record a ``[key:value]`` metadata tag; True when the line was one."""
+    meta_match = _META_RE.match(stripped)
+    if not meta_match:
+        return False
+    meta[meta_match.group(1).lower()] = meta_match.group(2).strip()
+    return True
+
+
+def _apply_offset(syllables: list, offset_ms: int) -> tuple[list, int]:
+    """Shift every timestamp sooner by *offset_ms* (never negative)."""
+    if not offset_ms:
+        max_ms = max((ms for ms, _text, _line, _part in syllables), default=0)
+        return syllables, max_ms
+    adjusted = [(max(0, ms - offset_ms), text, line, part) for ms, text, line, part in syllables]
+    return adjusted, max(ms for ms, _text, _line, _part in adjusted)
+
+
+def _resolve_duration(meta: dict[str, str], max_ms: int) -> int:
+    """Duration from the ``[length:]`` tag, else the last timestamp."""
+    length = meta.get("length")
+    if not length:
+        return max_ms
+    parts = length.split(":")
+    if len(parts) != 2 or not parts[0].isdigit():
+        return max_ms
+    seconds_part = parts[1]
+    frac = ""
+    if "." in seconds_part:
+        seconds_part, frac = seconds_part.split(".", 1)
+    if not seconds_part.isdigit() or (frac and not frac.isdigit()):
+        return max_ms
+    duration_ms = int(parts[0]) * 60_000 + int(seconds_part) * 1000
+    if frac:
+        duration_ms += _fraction_ms(frac)
+    return duration_ms
+
+
 def parse_lrc(text: str) -> dict | None:
     """Parse LRC *text* into timed lyrics, or None when unusable.
 
@@ -191,59 +301,23 @@ def parse_lrc(text: str) -> dict | None:
 
     for line in text.splitlines():
         stripped = line.strip()
-        meta_match = _META_RE.match(stripped)
-        if meta_match:
-            meta[meta_match.group(1).lower()] = meta_match.group(2).strip()
+        if _consume_meta(stripped, meta):
             continue
 
-        # Collect every leading [mm:ss.xx] timestamp: [t1][t2]text means
+        # A line may carry several leading timestamps: [t1][t2]text means
         # the text occurs at both times (a repeated line).
-        timestamps: list[int] = []
-        rest = stripped
-        while True:
-            line_match = _LINE_RE.match(rest)
-            if not line_match:
-                break
-            timestamps.append(
-                _tag_ms(line_match.group(1), line_match.group(2), line_match.group(3))
-            )
-            rest = line_match.group(4)
-
-        if not timestamps:
+        entry = _parse_timed_entry(stripped)
+        if entry is None:
             # Untimed, blank, malformed and comment lines are ignored.
             continue
-
-        # Optional duet tag after the timestamps: [00:12.00][a]lyric.
-        # Consumed before bracket stripping so the tag never reaches text.
-        part: str | None = None
-        part_match = _PART_RE.match(rest)
-        if part_match:
-            part = normalize_part(part_match.group(1))
-            rest = rest[part_match.end() :]
-
-        lyric_text = _strip_bracket_tags(rest).strip()
-        if not lyric_text:
-            continue
+        timestamps, part, lyric_text = entry
 
         current_line = line_number
         line_number += 1
 
-        # Enhanced LRC: word-level <mm:ss.xx> tags inside the line text.
-        segments = _split_word_segments(lyric_text)
-        if any(seg_ms is not None for seg_ms, _seg in segments):
-            for line_ms in timestamps:
-                for seg_ms, seg_text in segments:
-                    text = seg_text.strip()
-                    if not text:
-                        continue
-                    ms = seg_ms if seg_ms is not None else line_ms
-                    syllables.append((ms, text, current_line, part))
-                    max_ms = max(max_ms, ms)
-        else:
-            # Simple LRC: one syllable per line timestamp.
-            for ms in timestamps:
-                syllables.append((ms, lyric_text, current_line, part))
-                max_ms = max(max_ms, ms)
+        max_ms = max(
+            max_ms, _accumulate_syllables(syllables, timestamps, lyric_text, current_line, part)
+        )
 
     if not syllables:
         return None
@@ -251,36 +325,19 @@ def parse_lrc(text: str) -> dict | None:
     # [offset:] shifts every timestamp; positive makes lyrics appear
     # sooner (per the LRC spec), so subtract the offset.  Never negative.
     offset_ms = parse_offset(meta)
-    adjusted = syllables
-    if offset_ms:
-        adjusted = [
-            (max(0, ms - offset_ms), text, line, part) for ms, text, line, part in syllables
-        ]
-        max_ms = max(ms for ms, _text, _line, _part in adjusted)
+    adjusted, max_ms = _apply_offset(syllables, offset_ms)
 
     # [length:] is "mm:ss" or "mm:ss.xx"; fall back to the last timestamp.
-    duration_ms = max_ms
-    length = meta.get("length")
-    if length:
-        parts = length.split(":")
-        if len(parts) == 2 and parts[0].isdigit():
-            seconds_part = parts[1]
-            frac = ""
-            if "." in seconds_part:
-                seconds_part, frac = seconds_part.split(".", 1)
-            if seconds_part.isdigit() and (not frac or frac.isdigit()):
-                duration_ms = int(parts[0]) * 60_000 + int(seconds_part) * 1000
-                if frac:
-                    duration_ms += _fraction_ms(frac)
+    duration_ms = _resolve_duration(meta, max_ms)
 
     result = {
         "lyrics": [_event(ms, text, line, part) for ms, text, line, part in adjusted],
         "meta": meta,
         "duration_ms": duration_ms,
     }
-    parts = parse_parts(meta)
-    if parts:
-        result["parts"] = parts
+    song_parts = parse_parts(meta)
+    if song_parts:
+        result["parts"] = song_parts
     return result
 
 
@@ -330,7 +387,7 @@ def _line_groups(lyrics: list[dict]) -> list[dict]:
                 "syllables": syllables,
             }
         )
-    groups.sort(key=lambda group: group["ms"])
+    groups.sort(key=lambda group: group["ms"] if isinstance(group["ms"], int) else 0)
     return groups
 
 
@@ -378,32 +435,41 @@ def _fill_missing_times(group: dict, tokens: list[str], times: list) -> list[dic
     return words
 
 
-def _match_line_words(group: dict, entries: list[tuple[int, str]]) -> tuple[list[dict], int]:
-    """Time *group*'s tokens against the .elrc *entries* assigned to it.
-
-    Walks a cursor over the line's letters: an entry counts only when its
-    letters really are the next letters of the line, which skips the line
-    header and stray entries without shifting timings onto the wrong word.
-
-    Returns ``(words, timed)``: every token of the line (so no word is
-    ever dropped from the display) and how many carry an .elrc time.
-    """
-    tokens = group["text"].split()
-    if not tokens:
-        return [], 0
+def _token_letter_bounds(tokens: list[str]) -> tuple[list[tuple[int, int]], str]:
+    """Per-token letter spans and the line's letters concatenated."""
     bounds = []
     flat = ""
     for token in tokens:
         letters = _normalize_letters(token)
         bounds.append((len(flat), len(flat) + len(letters)))
         flat += letters
-    if not flat:
-        return [], 0
+    return bounds, flat
 
-    times: list[int | None] = [None] * len(tokens)
+
+def _apply_entry_to_tokens(
+    times: list, bounds: list[tuple[int, int]], cursor: int, word: str, ms: int
+) -> int:
+    """Stamp overlapped tokens with *ms*; returns how many were newly timed."""
+    newly_timed = 0
+    for idx, (start, end) in enumerate(bounds):
+        if times[idx] is None and end > cursor and start < cursor + len(word):
+            times[idx] = ms
+            newly_timed += 1
+    return newly_timed
+
+
+def _align_entry_times(
+    bounds: list[tuple[int, int]], flat: str, entries: list[tuple[int, str]]
+) -> list:
+    """Match .elrc entries to token slots, walking a cursor over letters.
+
+    An entry counts only when its letters really are the next letters of
+    the line, which skips the line header and stray entries without
+    shifting timings onto the wrong word.
+    """
+    times: list[int | None] = [None] * len(bounds)
     cursor = 0
     header_skipped = False
-    timed = 0
     for ms, text in entries:
         word = _normalize_letters(text)
         if not word:
@@ -413,14 +479,28 @@ def _match_line_words(group: dict, entries: list[tuple[int, str]]) -> tuple[list
             continue
         if not flat.startswith(word, cursor):
             continue  # not the letters the cursor expects: skip, don't shift
-        for idx, (start, end) in enumerate(bounds):
-            if times[idx] is None and end > cursor and start < cursor + len(word):
-                times[idx] = ms
-                timed += 1
+        _apply_entry_to_tokens(times, bounds, cursor, word, ms)
         cursor += len(word)
         if cursor >= len(flat):
             break
+    return times
 
+
+def _match_line_words(group: dict, entries: list[tuple[int, str]]) -> tuple[list[dict], int]:
+    """Time *group*'s tokens against the .elrc *entries* assigned to it.
+
+    Returns ``(words, timed)``: every token of the line (so no word is
+    ever dropped from the display) and how many carry an .elrc time.
+    """
+    tokens = group["text"].split()
+    if not tokens:
+        return [], 0
+    bounds, flat = _token_letter_bounds(tokens)
+    if not flat:
+        return [], 0
+
+    times = _align_entry_times(bounds, flat, entries)
+    timed = sum(1 for ms in times if ms is not None)
     return _fill_missing_times(group, tokens, times), timed
 
 
