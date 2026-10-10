@@ -12,14 +12,15 @@ produces:
 from __future__ import annotations
 
 import io
+import logging
 import struct
+
+logger = logging.getLogger(__name__)
 
 # text types.
 TEXT_LYRIC = 0
 TEXT_INFO = 1
 TEXT_TITLE = 2
-
-_DEBUG = False
 
 
 class MidiFile:
@@ -324,8 +325,8 @@ def _parse_midi_tracks(filehdl, midifile):
         if packet == b"" or len(packet) < 8:
             break
         chunk_type, length = struct.unpack(">4sL", packet)
-        if chunk_type != b"MTrk" and _DEBUG:
-            print("Didn't find expected MIDI Track")
+        if chunk_type != b"MTrk":
+            logger.debug("Expected MIDI track chunk, found %r", chunk_type)
         track_desc = midi_parse_track(filehdl, midifile, track_num, length)
         if not track_desc:
             break
@@ -605,8 +606,7 @@ def _read_and_discard_var(filehdl):
 
 
 def _meta_discard_var(filehdl, event):
-    if _DEBUG:
-        print(f"Unknown meta-event: 0x{event:X}")
+    logger.debug("Unknown meta-event: 0x%02X", event)
     return _read_and_discard_var(filehdl)
 
 
