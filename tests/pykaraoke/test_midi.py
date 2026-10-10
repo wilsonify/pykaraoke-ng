@@ -1,11 +1,21 @@
 """Tests for pykaraoke.midi — the pure MIDI/KAR parser."""
 
+import io
 import os
 import struct
 
 import pytest
 
-from pykaraoke.midi import Lyrics, MidiFile, MidiTimestamp, parse_midi, var_length
+from pykaraoke.midi import (
+    Lyrics,
+    MidiFile,
+    MidiTimestamp,
+    TrackDesc,
+    _meta_set_tempo,
+    _meta_time_signature,
+    parse_midi,
+    var_length,
+), var_length
 
 FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures")
 ELVIS_KAR = os.path.join(
