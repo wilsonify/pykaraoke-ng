@@ -126,8 +126,15 @@ including any further separators — is the title.
 When the stem contains no space-dash-space separator, the parser SHALL fall
 back to the legacy convention named by the parser's `file_name_type`, one of
 `DISC_TRACK_ARTIST_TITLE`, `DISCTRACK_ARTIST_TITLE`, `DISC_ARTIST_TITLE`, or
-`ARTIST_TITLE` (the default). The convention is a persisted user setting, so
-the same library can be re-parsed under a different scheme.
+`ARTIST_TITLE` (the default). When `file_name_type` is `DISC_TRACK_SPACED`, a
+stem that contains a spaced separator is instead parsed by the spaced
+convention (see "Disc-track spaced naming mode" below). The convention is a
+persisted user setting, so the same library can be re-parsed under a
+different scheme.
+
+> Source: `FilenameParser._parse_legacy()` in
+> `src/pykaraoke/filename_parser.py:190` and the `file_name_type` field in
+> `Settings` (`src/pykaraoke/database.py:105`).
 
 #### Scenario: Disc-Track-Artist-Title
 
@@ -148,6 +155,80 @@ the same library can be re-parsed under a different scheme.
 
 - **WHEN** `SC1234-05-Artist-Title-With-Dashes.cdg` is parsed with `DISC_TRACK_ARTIST_TITLE`
 - **THEN** the disc is `SC1234`, the track is `05`, the artist is `Artist`, and the title is `Title-With-Dashes`
+
+### Requirement: Disc-track spaced naming mode
+
+When `file_name_type` is `DISC_TRACK_SPACED`, the parser SHALL recognise stems of the form `DISC-TRACK - ARTIST - TITLE` in which the spaces around the separating dashes are required: it SHALL split the stem at the first space-dash-space separator, treat the prefix as a disc-track part separated into disc and track at the last hyphen inside the prefix, and split the remainder at its first space-dash-space separator into artist and title.
+
+> Source: `FilenameParser._parse_disc_track_spaced()` in
+> `src/pykaraoke/filename_parser.py:161`, dispatched from
+> `FilenameParser.parse()` (`src/pykaraoke/filename_parser.py:102`);
+> `FileNameType.DISC_TRACK_SPACED = 4` at
+> `src/pykaraoke/filename_parser.py:33`. Verified by
+> `tests/pykaraoke/test_filename_parser.py:205` (`TestDiscTrackSpaced`).
+
+#### Scenario: Issue #14 example parses correctly
+
+- **WHEN** `CB30055-15 - Switchfoot - Stars.cdg` is parsed with
+  `DISC_TRACK_SPACED`
+- **THEN** the disc is `CB30055`, the track is `15`, the artist is
+  `Switchfoot`, and the title is `Stars`
+
+#### Scenario: The last hyphen in the prefix separates disc from track
+
+- **WHEN** `CB5056-03-06 - Al Green - Let's Stay Together.cdg` is parsed
+  with `DISC_TRACK_SPACED`
+- **THEN** the disc is `CB5056-03` and the track is `06`
+
+#### Scenario: Dashes inside the artist name are preserved
+
+- **WHEN** `SC3448-03 - All-American Rejects - Dirty Little Secret.cdg` is
+  parsed with `DISC_TRACK_SPACED`
+- **THEN** the artist is `All-American Rejects`
+- **AND** the title is `Dirty Little Secret`
+
+#### Scenario: Extra separators stay in the title
+
+- **WHEN** `SC1-01 - Artist - Title - Radio Edit.cdg` is parsed with
+  `DISC_TRACK_SPACED`
+- **THEN** the title is `Title - Radio Edit`
+
+#### Scenario: A plain space-dash name still parses
+
+- **WHEN** `Artist - Title.cdg` is parsed with `DISC_TRACK_SPACED`
+- **THEN** the artist is `Artist` and the title is `Title`
+- **AND** no disc or track is produced
+
+#### Scenario: Zip members use the same mode
+
+- **WHEN** `PHM - Pop/PHM0512/PHM0512-08 - Switchfoot - Stars.kar` is
+  parsed with `DISC_TRACK_SPACED` via the zip-member entry point
+- **THEN** the disc is `PHM0512`, the track is `08`, the artist is
+  `Switchfoot`, and the title is `Stars`
+
+### Requirement: Spaced disc-track fallback and setting value
+
+When the stem has no spaced separator, or the disc-track prefix has no hyphen, `DISC_TRACK_SPACED` SHALL fall back to ordinary space-dash and best-effort legacy parsing rather than mis-attributing the artist. The mode SHALL apply to zip member paths and be accepted as the integer value `4` by the `file_name_type` setting.
+
+> Source: fallback branches in `_parse_disc_track_spaced()`
+> (`src/pykaraoke/filename_parser.py:161`) and the `_parse_legacy()`
+> fall-through (`src/pykaraoke/filename_parser.py:190`); integer value
+> asserted at `tests/pykaraoke/test_filename_parser.py:278`.
+
+#### Scenario: An unspaced stem degrades to best-effort parsing
+
+- **WHEN** `CB30055-15-Switchfoot-Stars.cdg` is parsed with
+  `DISC_TRACK_SPACED`
+- **THEN** no disc-track result is forced from the spaced convention
+- **AND** the parse degrades to the ordinary best-effort result rather
+  than mis-attributing the artist
+
+#### Scenario: A prefix with no hyphen falls back
+
+- **WHEN** `Something - Artist - Title.cdg` is parsed with
+  `DISC_TRACK_SPACED`
+- **THEN** no disc or track is produced from the prefix
+- **AND** the result follows the ordinary space-dash parse
 
 ### Requirement: Artist-Title mode groups dashed abbreviations into the artist
 
