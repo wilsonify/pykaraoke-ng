@@ -12,11 +12,18 @@ Supported patterns:
   - "SC123405-John Doe-My Song.cdg"     (legacy DiscTrack-Artist-Title)
   - "SC1234-John Doe-My Song.cdg"       (legacy Disc-Artist-Title)
   - "John Doe-My Song.cdg"              (legacy Artist-Title)
+
+Before parsing, every stem is normalised: Unicode is composed to NFC so
+macOS (NFD) and Windows/Linux (NFC) agree, typographic dash variants fold
+to the ASCII hyphen, full-width ASCII folds to plain ASCII, zero-width
+characters are removed, embedded null bytes truncate the stem, and
+surrounding whitespace plus Windows trailing dots are stripped.
 """
 
 import logging
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -45,6 +52,40 @@ class ParsedSong:
 
 # Regex matching " - " with optional surrounding whitespace
 _SPACE_DASH_RE = re.compile(r"\s+-\s+")
+
+# Typographic dash variants treated as ASCII hyphen equivalents:
+# hyphen, non-breaking, figure, en, em, horizontal bar, minus sign,
+# small em-dash, full-width hyphen-minus, and modifier letter plus sign.
+_UNICODE_DASH_RE = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFF0D\u02D7]")
+
+# Invisible zero-width characters stripped from stems.
+_ZERO_WIDTH_RE = re.compile("[\u200B\u200C\u200D\u2060\uFEFF]")
+
+# Full-width ASCII range (U+FF01..U+FF5E) folds by subtracting 0xFEE0.
+_FULLWIDTH_OFFSET = 0xFEE0
+
+
+def _fold_fullwidth(stem: str) -> str:
+    """Fold full-width ASCII variants (U+FF01..U+FF5E) to plain ASCII."""
+    return "".join(
+        chr(ord(ch) - _FULLWIDTH_OFFSET) if "\uFF01" <= ch <= "\uFF5E" else ch for ch in stem
+    )
+
+
+def _normalize_stem(stem: str) -> str:
+    """Return the canonical form of *stem* used for pattern detection.
+
+    Applies NFC composition, Unicode-dash folding, full-width ASCII
+    folding, zero-width stripping, embedded-null truncation, and removal
+    of surrounding whitespace and trailing dots. Pure and dependency-free
+    (stdlib ``unicodedata`` only).
+    """
+    stem = unicodedata.normalize("NFC", stem)
+    stem = stem.split("\x00", 1)[0]
+    stem = _UNICODE_DASH_RE.sub("-", stem)
+    stem = _fold_fullwidth(stem)
+    stem = _ZERO_WIDTH_RE.sub("", stem)
+    return stem.strip().rstrip(".")
 
 
 def _is_abbreviation_part(part: str) -> bool:
@@ -90,13 +131,19 @@ class FilenameParser:
 
         Returns:
             :class:`ParsedSong` with extracted fields.
+
+        Raises:
+            TypeError: If *filepath* is not a string (a caller defect).
         """
+        if not isinstance(filepath, str):
+            raise TypeError(f"filepath must be a str, got {type(filepath).__name__}")
         # Normalise path separators so Windows paths are handled on all
         # platforms, then strip directory components so dashes in directory
         # names do not interfere with parsing.
         filename = os.path.basename(filepath.replace("\\", "/"))
         # Remove file extension.
         stem, _ = os.path.splitext(filename)
+        stem = _normalize_stem(stem)
 
         if _SPACE_DASH_RE.search(stem):
             if self.file_name_type == FileNameType.DISC_TRACK_SPACED:
@@ -225,7 +272,7 @@ class FilenameParser:
         logger.debug("Could not parse filename stem %r; returning as title only.", stem)
         return ParsedSong(title=stem.strip())
 
-    def _parse_artist_title(self, parts: list) -> ParsedSong:
+    def _parse_artist_title(self, parts: list[str]) -> ParsedSong:
         """Handle the ``"Artist-Title"`` legacy pattern.
 
         Includes a heuristic for artists whose names contain dashes
