@@ -125,6 +125,20 @@ class TestSettings:
         assert updated["sort"] == "artist"
         assert app.library.settings.sort == "artist"
 
+    def test_file_name_type_accepts_spaced_disc_track(self):
+        app = KaraokeApp()
+        updated = app.set_settings({"file_name_type": 4})
+        assert updated["file_name_type"] == 4
+        app.scan_files(
+            [{"name": "CB30055-15 - Switchfoot - Stars.cdg",
+              "path": "/lib/CB30055-15 - Switchfoot - Stars.cdg",
+              "size": 100}]
+        )
+        songs = app.library_songs()["songs"]
+        assert songs[0]["artist"] == "Switchfoot"
+        assert songs[0]["title"] == "Stars"
+        assert songs[0]["disc"] == "CB30055"
+
 
 class TestCdg:
     def test_open_update_close(self):
