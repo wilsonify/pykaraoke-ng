@@ -132,6 +132,33 @@ straight after the timestamp and uses generic part ids (never gendered):
 
 ---
 
+## Library Management
+
+The **Library** panel (top of the sidebar, under the header) holds the scan
+and maintenance actions:
+
+| Action | What it does |
+|--------|--------------|
+| **Rescan folders** | Re-reads the configured folders and *adds* their songs (existing songs are kept). |
+| **Replace library** | Clears the current song list, then re-scans the configured folders — use this after *moving* your collection so no ghost entries from the old location remain. In the browser, files are re-read from the already-picked folder handles. |
+| **Export** | Downloads the whole library (songs, pairing, folders, settings — not the media files) as `pykaraoke-library.json`. |
+| **Import** | Loads a previously exported JSON file, replacing the current library after validation. A corrupt or wrong-version file is rejected cleanly and the existing library stays intact. |
+
+**Relocating a library** (moved to a new drive or folder): move the files on
+disk, pick the new folder with **＋ Folder**, then click **Replace library**.
+Settings (volume, naming convention, patterns) are preserved.
+
+**Sharing with another machine**: click **Export** on the source machine,
+copy `pykaraoke-library.json` across, and click **Import** on the target —
+the song list, metadata, folders, and settings arrive intact (the media
+files themselves must be reachable at the imported paths).
+
+A scan summary line under the library header reports anything the scan could
+not use (unsupported files, pattern-filtered files, corrupt archives, parse
+failures), with a **Dismiss** control to clear it.
+
+---
+
 ## Playback Controls
 
 Controls appear in the **Now Playing** section of the sidebar, below the
