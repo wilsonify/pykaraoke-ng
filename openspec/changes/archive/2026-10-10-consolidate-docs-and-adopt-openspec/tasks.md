@@ -40,4 +40,4 @@
 - [x] 5.2 Repoint `pyproject.toml` Documentation URL and fix in-repo references
 - [x] 5.3 Remove the legacy `specs/` tree from version control
 - [x] 5.4 Write the migration summary
-- [ ] 5.5 Archive this change after the pull request merges (`openspec archive consolidate-docs-and-adopt-openspec --yes`)
+- [x] 5.5 Archive this change after the pull request merges (`openspec archive consolidate-docs-and-adopt-openspec --yes`)

@@ -196,6 +196,110 @@ mapping, ignore unrecognised keys, and return the updated settings.
 - **WHEN** an update contains a key the engine does not recognise
 - **THEN** no error is raised and the settings are otherwise unchanged
 
+### Requirement: Scan report API
+
+The webapp SHALL expose `scan_report()` returning the library's structured
+report as JSON (outcomes plus counts) and `clear_scan_report()` resetting
+it. Both SHALL be callable from the browser page without side effects on
+playback or the song list.
+
+> Source: `KaraokeApp.scan_report()` at `src/pykaraoke/webapp.py:157` and
+> `KaraokeApp.clear_scan_report()` at `src/pykaraoke/webapp.py:161`, both
+> reachable through the generic dispatcher by method name. Verified by
+> `tests/pykaraoke/test_webapp.py:143` (`TestScanReportAPI`).
+
+#### Scenario: Report after a mixed scan
+
+- **WHEN** the page scans a batch containing a corrupt archive
+- **THEN** `scan_report()` includes a `corrupt_archive` entry and its count
+
+#### Scenario: Clearing
+
+- **WHEN** the page calls `clear_scan_report()`
+- **THEN** the next `scan_report()` shows empty outcomes and zero counts
+
+### Requirement: Pattern settings API
+
+`set_settings()` SHALL accept and persist `include_patterns` and
+`exclude_patterns` lists, and a subsequent scan SHALL apply them. The keys
+SHALL round-trip through `get_settings()`.
+
+> Source: the `include_patterns` / `exclude_patterns` branches of
+> `KaraokeApp.set_settings()` at `src/pykaraoke/webapp.py:151`. Verified by
+> `tests/pykaraoke/test_webapp.py:166` (`TestPatternSettingsAPI`).
+
+#### Scenario: Setting patterns
+
+- **WHEN** `set_settings({"exclude_patterns": ["*_(vocal)_*"]})` is
+  called
+- **THEN** a subsequent scan filters matching files
+
+#### Scenario: Patterns round-trip
+
+- **WHEN** patterns are set and settings are read back
+- **THEN** both lists are returned unchanged
+
+### Requirement: Replace-scan API
+
+`scan_files()` SHALL accept a `replace` flag: when true it SHALL clear
+previously scanned loose files and zip expansions before applying the
+batch, and SHALL leave settings untouched. The flag SHALL default to
+preserving the accumulated behaviour.
+
+> Source: `KaraokeApp.scan_files(files, replace=…)` at
+> `src/pykaraoke/webapp.py:53`, forwarding to `SongLibrary.scan`. Verified
+> by `tests/pykaraoke/test_webapp.py:303` (`TestRelocationAPI`).
+
+#### Scenario: Relocation via replace
+
+- **WHEN** `scan_files(new_entries, replace=True)` is called
+- **THEN** the returned song list contains only the new entries' songs
+
+#### Scenario: Default remains additive
+
+- **WHEN** `scan_files(entries)` is called without the flag
+- **THEN** previously scanned songs are retained as before
+
+### Requirement: Prune API
+
+The webapp SHALL expose `prune_songs(known)` forwarding to the library's
+prune operation, treating an empty known-set as a no-op.
+
+> Source: `KaraokeApp.prune_songs()` at `src/pykaraoke/webapp.py:75`.
+> Verified by `tests/pykaraoke/test_webapp.py:303` (`TestRelocationAPI`).
+
+#### Scenario: Prune from the page
+
+- **WHEN** the page calls `prune_songs` with the current on-disk path set
+- **THEN** songs with paths absent from that set are removed
+
+#### Scenario: Empty set does nothing
+
+- **WHEN** the page calls `prune_songs` with an empty set
+- **THEN** the library is unchanged
+
+### Requirement: Import and export API
+
+`export_json()` SHALL return the envelope-wrapped library as a string, and
+`import_json(payload)` SHALL validate the payload (envelope or bare library
+dict, recognised schema) and return `{"ok": true}` on success or
+`{"ok": false, "error": …}` with the previous library intact on failure.
+
+> Source: `KaraokeApp.export_json()` / `KaraokeApp.import_json()` at
+> `src/pykaraoke/webapp.py:84`, forwarding to the library envelope methods.
+> Verified by `tests/pykaraoke/test_webapp.py:341` (`TestImportExportAPI`).
+
+#### Scenario: Round-trip through the page
+
+- **WHEN** the page exports and immediately imports its own payload
+- **THEN** the library is unchanged and the result is ok
+
+#### Scenario: Corrupt payload
+
+- **WHEN** `import_json("not json")` is called
+- **THEN** the result is not-ok with an error string
+- **AND** the existing library is unchanged
+
 ### Requirement: MIDI parsing
 
 `parse_midi` SHALL accept the bytes of a `.kar`/`.mid` file and return the

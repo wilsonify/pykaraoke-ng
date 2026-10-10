@@ -273,6 +273,32 @@ The library SHALL persist and losslessly restore the settings `folders`,
 > only `file_name_type` is consulted during scanning. `derive_song_info` is a
 > UI-facing toggle at present.
 
+### Requirement: Naming convention is user-selectable
+
+The settings panel SHALL expose `file_name_type` as a labelled control
+offering every supported naming convention — including the spaced
+disc-track mode — SHALL persist the selected value with the other settings,
+SHALL apply it to the next library scan, and SHALL restore the selection
+after a restart.
+
+> Source: the `#setting-naming` control in `src/web/index.html` (settings
+> panel), wired through `refreshSettings()` and the change listener that
+> calls `set_settings({file_name_type})`. Verified by
+> `tests/pykaraoke/test_webapp.py:128`
+> (`test_file_name_type_accepts_spaced_disc_track`).
+
+#### Scenario: Selecting the spaced disc-track mode
+
+- **WHEN** the user selects the disc-track spaced convention in settings
+- **THEN** `file_name_type` is persisted as `4`
+- **AND** the next scan parses matching filenames with that convention
+
+#### Scenario: Selection survives a restart
+
+- **WHEN** a non-default convention is selected and the application is
+  reloaded
+- **THEN** the settings control shows the persisted convention
+
 ### Requirement: Include and exclude filename patterns
 
 The library SHALL accept `include_patterns` and `exclude_patterns` settings as lists of case-insensitive `fnmatch` patterns matched against the file basename and each zip member's basename. A file SHALL be scanned when it matches the include list (or the include list is empty) and does not match the exclude list; exclude wins. Patterns SHALL round-trip through settings persistence, and an invalid pattern SHALL degrade to a literal match rather than raising.
@@ -378,6 +404,111 @@ Rebuilding the song list after settings changes SHALL preserve songs that came f
 - **WHEN** a library containing zip songs is serialised and restored, and a
   loose-file scan then runs
 - **THEN** the restored zip songs are still present
+
+### Requirement: Replace-scan clears prior contents
+
+The library SHALL support a replace-scan that clears previously scanned
+loose files and zip expansions before applying the new batch, while leaving
+`Settings` untouched. The default (non-replace) scan SHALL remain additive
+so existing callers keep their accumulated behaviour.
+
+> Source: `SongLibrary.scan(files, replace=…)` in
+> `src/pykaraoke/database.py:253` (replace clears `_files`, `_zip_cache`,
+> and `songs` before the normal apply path). Verified by
+> `tests/pykaraoke/test_database.py:476` (`TestReplaceScan`).
+
+#### Scenario: Replace-scan relocates a library
+
+- **WHEN** a replace-scan supplies the files under a new root
+- **THEN** the library contains exactly the new root's songs
+- **AND** no song from the previous root remains
+
+#### Scenario: Settings survive a replace-scan
+
+- **WHEN** a replace-scan runs with a non-default volume setting
+- **THEN** the volume setting is unchanged afterwards
+
+#### Scenario: Default scan stays additive
+
+- **WHEN** a scan runs without the replace flag after an earlier scan
+- **THEN** songs from both batches are present
+
+### Requirement: Prune stale songs by known path set
+
+The library SHALL provide a prune operation that removes loose and zip
+songs whose paths are absent from a caller-supplied set of known paths.
+Pruning with an empty known-set SHALL be a no-op so an accidental empty
+call cannot wipe the library.
+
+> Source: `SongLibrary.prune_songs()` in `src/pykaraoke/database.py:282`
+> (prunes `_files`, `_zip_cache`, and `songs`; normalises separators and
+> case). Verified by `tests/pykaraoke/test_database.py:506` (`TestPrune`).
+
+#### Scenario: Prune removes stale paths
+
+- **WHEN** prune is called with a known set lacking one previously scanned
+  path
+- **THEN** that song is removed and the rest remain
+
+#### Scenario: Empty known-set is a no-op
+
+- **WHEN** prune is called with an empty set
+- **THEN** the library is unchanged
+
+### Requirement: Library export envelope
+
+The library SHALL export as a JSON string containing a versioned envelope
+`{"format": …, "schema": 1, "library": …}` whose `library` value is the
+library's own serialised dictionary, so an export is self-describing and
+validatable on import.
+
+> Source: `SongLibrary.export_json()` and the `EXPORT_FORMAT` /
+> `EXPORT_SCHEMA` constants in `src/pykaraoke/database.py:548`. Verified by
+> `tests/pykaraoke/test_database.py:540` (`TestExportImport`).
+
+#### Scenario: Envelope shape
+
+- **WHEN** the library is exported
+- **THEN** the payload parses to an object with a `schema` of `1` and a
+  `library` member equal to the serialised library
+
+### Requirement: Library import with validation and atomic swap
+
+The library SHALL import from a JSON string that is either the export
+envelope or a bare serialised library dictionary. It SHALL validate the
+payload and schema version before applying. A recognised, valid payload
+SHALL atomically replace the in-memory library; malformed JSON, an
+unrecognised schema, or an invalid library SHALL leave the existing library
+unchanged and SHALL report a structured error rather than a partial state.
+
+> Source: `SongLibrary.import_json()` in `src/pykaraoke/database.py:561`
+> (validates envelope schema and library version, builds a fresh
+> `SongLibrary` from the payload, then swaps state in one step). Verified by
+> `tests/pykaraoke/test_database.py:540` (`TestExportImport`).
+
+#### Scenario: Export/import round-trip
+
+- **WHEN** a library is exported and imported into a fresh instance
+- **THEN** songs, pairing, folders, and settings are identical
+
+#### Scenario: Bare library dict is accepted
+
+- **WHEN** an import payload is the bare serialised library without the
+  envelope
+- **THEN** the import succeeds as if the envelope were present
+
+#### Scenario: Malformed JSON leaves state intact
+
+- **WHEN** an import payload is not valid JSON
+- **THEN** the existing library is unchanged
+- **AND** the import reports an error
+
+#### Scenario: Unrecognised schema is rejected cleanly
+
+- **WHEN** an import payload declares a schema the library does not
+  recognise
+- **THEN** the existing library is unchanged
+- **AND** the import reports an error
 
 ### Requirement: Library persistence
 

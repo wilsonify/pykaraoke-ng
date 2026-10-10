@@ -2,9 +2,9 @@
 
 > Status: proposed — not implemented.
 > Capabilities: `song-library`, `web-engine-api`
-> Legacy issue: kelvinlawson/pykaraoke#5 (partly — the export/import half of
-> a relocatable library), plus the standing operational need to move a
-> library to a new drive or hand a collection to another machine.
+> Legacy issues: kelvinlawson/pykaraoke#7 (reallocate file links) and
+> #8 (backup and restore library), plus the standing operational need to
+> move a library to a new drive or hand a collection to another machine.
 
 ## Intent
 

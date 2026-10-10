@@ -13,12 +13,16 @@ and desktop builds.
 > `src/pykaraoke/database.py` during library scans, configured through the
 > `file_name_type` setting exposed by `src/pykaraoke/webapp.py`.
 
-> Known limitation: only the ASCII space-dash-space separator (`" - "`) and
-> plain ASCII hyphens are recognised. Unicode dash variants (em dash, en
-> dash, full-width hyphen-minus, figure dash), full-width ASCII characters,
-> and decomposed (NFD) Unicode are **not** normalised. Closing that gap is a
-> proposed, not-yet-implemented change recorded in
-> `openspec/changes/filename-parser-edge-cases/`.
+> Normalisation (shipped): before pattern detection every stem is composed
+> to Unicode NFC, typographic dash variants (em dash, en dash, figure dash,
+> small em-dash, full-width hyphen-minus, and friends) fold to the ASCII
+> hyphen, full-width ASCII (U+FF01–U+FF5E) folds to plain ASCII, zero-width
+> characters are removed, embedded null bytes truncate the stem, and
+> surrounding whitespace plus Windows trailing dots are stripped — so
+> macOS (NFD) and Windows/Linux (NFC) libraries parse identically. See
+> "Stems are Unicode-normalised and hygienic" below. The remaining work of
+> the `openspec/changes/filename-parser-edge-cases/` change (bulk-parse
+> performance test) is tracked there.
 
 ## Requirements
 
@@ -80,12 +84,70 @@ earlier dots in the stem intact.
 - **THEN** the artist is `Artist`
 - **AND** the title is `Title`
 
+### Requirement: Stems are Unicode-normalised and hygienic
+
+Before any pattern is detected, the parser SHALL normalise the filename
+stem: compose it to Unicode NFC, fold Unicode typographic dash variants to
+the ASCII hyphen, fold full-width ASCII (U+FF01–U+FF5E) to plain ASCII,
+remove zero-width characters, truncate at an embedded null byte, and strip
+surrounding whitespace and trailing dots. Normalisation SHALL use only the
+standard library and SHALL not alter the public API.
+
+> Source: `_normalize_stem()` in `src/pykaraoke/filename_parser.py`,
+> applied from `FilenameParser.parse()` after extension removal. Verified
+> by `TestUnicodeNormalisation` and `TestFieldHygiene` in
+> `tests/pykaraoke/test_filename_parser.py`.
+
+#### Scenario: Decomposed and composed forms agree
+
+- **WHEN** the same filename is presented once in NFD (decomposed) and once
+  in NFC (composed)
+- **THEN** both produce identical artist and title values
+
+#### Scenario: Unicode dash variants separate fields
+
+- **WHEN** `Artist — Title.cdg` (em dash) is parsed
+- **THEN** the artist is `Artist` and the title is `Title`
+
+- **WHEN** `Queen–Bohemian Rhapsody.kar` (en dash) is parsed in
+  `ARTIST_TITLE` mode
+- **THEN** the artist is `Queen` and the title is `Bohemian Rhapsody`
+
+#### Scenario: Full-width characters fold to ASCII
+
+- **WHEN** `Artist - Title（Live）.mp3` is parsed
+- **THEN** the title is `Title(Live)`
+
+#### Scenario: CJK characters are preserved
+
+- **WHEN** `初音ミク - 千本桜.mp3` is parsed
+- **THEN** the artist is `初音ミク` and the title is `千本桜` with no
+  character loss or transliteration
+
+#### Scenario: Windows trailing dot is removed
+
+- **WHEN** `Artist - Title. .cdg` is parsed
+- **THEN** the title is `Title` with no trailing dot
+
+#### Scenario: Embedded null byte truncates, not crashes
+
+- **WHEN** the filename contains an embedded null byte (`\x00`)
+- **THEN** the content before the null is parsed and no exception is raised
+
+#### Scenario: Zero-width characters do not contaminate fields
+
+- **WHEN** a stem contains zero-width characters (for example U+200B)
+- **THEN** they are removed before the fields are extracted
+
 ### Requirement: Space-dash-space filenames split at the first separator
 
 When the stem contains a separator of one-or-more whitespace, a hyphen, and
 one-or-more whitespace, the parser SHALL split at the **first** such
 separator only: the segment before it is the artist and everything after it —
-including any further separators — is the title.
+including any further separators — is the title. Because stems are
+normalised first, Unicode dash variants with surrounding spaces (em dash,
+en dash, full-width hyphen-minus, and friends) SHALL act as separators
+identically to the ASCII hyphen.
 
 #### Scenario: A simple space-dash-space filename
 
@@ -325,9 +387,8 @@ parse result unchanged.
 - **THEN** the artist is `Queen`
 - **AND** the title is `Bohemian Rhapsody`
 
-> Note: the parser preserves characters as-is (for example `Björk - Jóga.cdg`
-> round-trips unchanged) but does not perform Unicode normalisation. Its
-> private helpers also use partially annotated containers (`_parse_artist_title`
-> takes a bare `list`), which the project constitution's strong-typing
-> requirement would have fully annotated; tightening that is part of the
-> pending `filename-parser-edge-cases` change rather than current behaviour.
+> Note: the parser preserves non-ASCII characters as-is (for example
+> `Björk - Jóga.cdg` round-trips unchanged); normalisation is limited to
+> composition (NFC), dash/full-width folding, and field hygiene as described
+> above — there is no transliteration. Private helpers use fully annotated
+> containers (`_parse_artist_title` takes `list[str]`).

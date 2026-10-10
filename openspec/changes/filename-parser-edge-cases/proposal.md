@@ -1,8 +1,13 @@
 # Proposal: Filename Parser Edge Cases
 
-> Status: proposed — not implemented. Migrated from Spec Kit feature
-> `specs/features/001-filename-parser-edge-cases/` (2026-02-22).
-> Capability: `filename-parsing`
+> Status: core shipped 2026-10-10 (NFC composition, Unicode-dash and
+> full-width folding, field hygiene incl. trailing dots / zero-width /
+> embedded null, and the `TypeError` contract for non-string input), with
+> tests and the matching capability-spec requirements merged into
+> `openspec/specs/filename-parsing/spec.md`. Remaining tasks are the
+> unchecked boxes in [tasks.md](tasks.md).
+> Migrated from Spec Kit feature `specs/features/001-filename-parser-edge-cases/`
+> (2026-02-22). Capability: `filename-parsing`
 
 ## Intent
 
