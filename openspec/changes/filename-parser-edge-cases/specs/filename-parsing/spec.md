@@ -4,12 +4,13 @@
 > behaviour described under `## MODIFIED Requirements` and the first three
 > `## ADDED Requirements` (Canonical Unicode Normalisation, Full-Width ASCII
 > Folding, Field Hygiene) is now live and recorded in the capability spec as
-> the requirement "Stems are Unicode-normalised and hygienic". The remaining
-> ADDED requirements below either already existed under other names (Bare
-> Title, Parenthetical Title, Archive Directory) or restate existing
-> guarantees (Determinism and Safety); at archive time this delta must be
-> reconciled against `openspec/specs/filename-parsing/spec.md` rather than
-> merged blindly (task 5.5).
+> the requirements "Stems are Unicode-normalised" and "Stems are
+> field-hygienic". The remaining ADDED requirements below either already
+> existed under other names (Bare Title, Parenthetical Title, Archive
+> Directory) or restate existing guarantees (Determinism and Safety); at
+> archive time this delta must be reconciled against
+> `openspec/specs/filename-parsing/spec.md` rather than merged blindly
+> (task 5.5).
 
 ## MODIFIED Requirements
 
