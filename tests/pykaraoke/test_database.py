@@ -471,3 +471,132 @@ class TestZipMemberCache:
         lib.scan_zip("pack.zip", data)
         lib.scan_zip("pack.zip", data)
         assert len([s for s in lib.songs if s.zip_name == "pack.zip"]) == 1
+
+
+class TestReplaceScan:
+    def test_replace_clears_prior_songs_and_keeps_settings(self):
+        lib = SongLibrary()
+        lib.settings.volume = 0.5
+        lib.scan([_entry("Old - Song.cdg")])
+        lib.scan([_entry("New - Song.cdg")], replace=True)
+        assert [s.artist for s in lib.songs] == ["New"]
+        assert lib.settings.volume == 0.5
+
+    def test_default_scan_stays_additive(self):
+        lib = SongLibrary()
+        lib.scan([_entry("A - One.cdg")])
+        lib.scan([_entry("B - Two.cdg")])
+        assert len(lib.songs) == 2
+
+    def test_replace_clears_zip_expansions(self):
+        lib = SongLibrary()
+        lib.scan_zip("pack.zip", _make_zip_bytes(["Artist - Title.kar"]))
+        assert any(s.zip_name == "pack.zip" for s in lib.songs)
+        lib.scan([_entry("X - Y.cdg")], replace=True)
+        assert all(s.zip_name is None for s in lib.songs)
+
+    def test_replace_with_empty_batch_clears_library(self):
+        lib = SongLibrary()
+        lib.scan([_entry("Old - Song.cdg")])
+        result = lib.scan([], replace=True)
+        assert lib.songs == []
+        assert result == {"added": 0, "total": 0}
+
+
+class TestPrune:
+    def test_prune_removes_stale_paths(self):
+        lib = SongLibrary()
+        lib.scan([_entry("Keep - One.cdg"), _entry("Drop - Two.cdg")])
+        removed = lib.prune_songs(["keep - one.cdg"])
+        assert removed == 1
+        assert [s.artist for s in lib.songs] == ["Keep"]
+
+    def test_prune_removes_stale_zip_songs(self):
+        lib = SongLibrary()
+        lib.scan_zip("pack.zip", _make_zip_bytes(["Artist - One.kar", "Artist - Two.kar"]))
+        zip_songs = [s for s in lib.songs if s.zip_name == "pack.zip"]
+        assert len(zip_songs) == 2
+        keep_path = zip_songs[0].path
+        removed = lib.prune_songs([keep_path])
+        assert removed == 1
+        remaining = [s for s in lib.songs if s.zip_name == "pack.zip"]
+        assert [s.path for s in remaining] == [keep_path]
+
+    def test_empty_known_set_is_noop(self):
+        lib = SongLibrary()
+        lib.scan([_entry("A - One.cdg")])
+        assert lib.prune_songs([]) == 0
+        assert len(lib.songs) == 1
+
+    def test_prune_updates_zip_cache(self):
+        lib = SongLibrary()
+        lib.scan_zip("pack.zip", _make_zip_bytes(["Artist - One.kar", "Artist - Two.kar"]))
+        keep = next(s for s in lib.songs if s.zip_name == "pack.zip").path
+        lib.prune_songs([keep])
+        lib.scan([_entry("Other - Song.cdg")])  # triggers rebuild from cache
+        assert len([s for s in lib.songs if s.zip_name == "pack.zip"]) == 1
+
+
+class TestExportImport:
+    def test_envelope_shape(self):
+        import json
+
+        lib = SongLibrary()
+        lib.scan([_entry("Queen - Bohemian Rhapsody.cdg")])
+        payload = json.loads(lib.export_json())
+        assert payload["schema"] == 1
+        assert payload["library"] == lib.to_dict()
+
+    def test_round_trip(self):
+        lib = SongLibrary()
+        lib.settings.folders = ["D:/Karaoke"]
+        lib.settings.volume = 0.4
+        lib.scan([_entry("Queen - Bohemian Rhapsody.cdg", path="root/Queen - Bohemian Rhapsody.cdg")])
+        restored = SongLibrary()
+        result = restored.import_json(lib.export_json())
+        assert result == {"ok": True}
+        assert [s.to_dict() for s in restored.songs] == [s.to_dict() for s in lib.songs]
+        assert restored.settings.folders == ["D:/Karaoke"]
+        assert restored.settings.volume == 0.4
+
+    def test_bare_dict_accepted(self):
+        import json
+
+        lib = SongLibrary()
+        lib.scan([_entry("A - B.cdg")])
+        restored = SongLibrary()
+        assert restored.import_json(json.dumps(lib.to_dict())) == {"ok": True}
+        assert len(restored.songs) == 1
+
+    def test_malformed_json_leaves_state_intact(self):
+        lib = SongLibrary()
+        lib.scan([_entry("A - B.cdg")])
+        result = lib.import_json("not json {")
+        assert result["ok"] is False
+        assert "error" in result
+        assert len(lib.songs) == 1
+
+    def test_unrecognised_schema_rejected(self):
+        import json
+
+        lib = SongLibrary()
+        lib.scan([_entry("A - B.cdg")])
+        payload = json.dumps({"format": "pykaraoke-ng-library", "schema": 99, "library": {}})
+        result = lib.import_json(payload)
+        assert result["ok"] is False
+        assert len(lib.songs) == 1
+
+    def test_unknown_library_version_rejected(self):
+        import json
+
+        lib = SongLibrary()
+        lib.scan([_entry("A - B.cdg")])
+        result = lib.import_json(json.dumps({"version": 99, "songs": [], "settings": {}}))
+        assert result["ok"] is False
+        assert len(lib.songs) == 1
+
+    def test_non_object_payload_rejected(self):
+        lib = SongLibrary()
+        lib.scan([_entry("A - B.cdg")])
+        assert lib.import_json("[1, 2, 3]")["ok"] is False
+        assert len(lib.songs) == 1
