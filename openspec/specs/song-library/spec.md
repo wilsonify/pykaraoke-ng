@@ -276,12 +276,10 @@ The library SHALL persist and losslessly restore the settings `folders`,
 The settings panel SHALL expose `file_name_type` as a labelled control
 offering every supported naming convention — including the spaced
 disc-track mode — SHALL persist the selected value with the other settings,
-SHALL apply it to the next library scan, and SHALL restore the selection
-after a restart.
+SHALL apply it to the next scan, and restore it after a restart.
 
-> Source: the `#setting-naming` control in `src/web/index.html`, wired
-> through `refreshSettings()` and `set_settings({file_name_type})`.
-> Verified by `TestSettings` in `tests/pykaraoke/test_webapp.py`.
+> Source: the `#setting-naming` control in `src/web/index.html`; verified
+> by `TestSettings`.
 
 #### Scenario: Selecting the spaced disc-track mode
 
@@ -304,9 +302,7 @@ matches the include list (or the include list is empty) and does not match
 the exclude list; exclude wins.
 
 > Source: `SongLibrary._name_allowed()` and `_pattern_match()` in
-> `src/pykaraoke/database.py`; applied in `scan()`, `scan_zip()`, and
-> `_make_song()`. Verified by `TestPatternFilters` in
-> `tests/pykaraoke/test_database.py`.
+> `src/pykaraoke/database.py`; verified by `TestPatternFilters`.
 
 #### Scenario: Exclude a vocal version
 
@@ -357,9 +353,8 @@ SHALL be retrievable and clearable by the caller and SHALL never influence
 which songs are added.
 
 > Source: `SongLibrary._report()`, `scan_report()`, and
-> `clear_scan_report()` in `src/pykaraoke/database.py`; categories are
-> defined by `REPORT_CATEGORIES`. Verified by `TestScanReport` in
-> `tests/pykaraoke/test_database.py`.
+> `clear_scan_report()` in `src/pykaraoke/database.py`; verified by
+> `TestScanReport`.
 
 #### Scenario: A mixed batch reports every category
 
@@ -422,9 +417,8 @@ a rebuild does not require re-reading archive bytes and does not silently
 drop zip songs. Restoring a persisted library SHALL rebuild the cache from
 the restored zip songs.
 
-> Source: `SongLibrary._zip_cache` in `src/pykaraoke/database.py` (written
-> by `scan_zip()`, consumed by `_rebuild()`, repopulated by `from_dict()`).
-> Verified by `TestZipMemberCache` in `tests/pykaraoke/test_database.py`.
+> Source: `SongLibrary._zip_cache` in `src/pykaraoke/database.py`;
+> verified by `TestZipMemberCache`.
 
 #### Scenario: Rebuild keeps zip songs
 
@@ -446,13 +440,10 @@ the restored zip songs.
 
 The library SHALL support a replace-scan that clears previously scanned
 loose files and zip expansions before applying the new batch, while leaving
-`Settings` untouched. The default (non-replace) scan SHALL remain additive
-so existing callers keep their accumulated behaviour.
+`Settings` untouched. The default (non-replace) scan SHALL remain additive.
 
 > Source: `SongLibrary.scan(files, replace=…)` in
-> `src/pykaraoke/database.py` (replace clears `_files`, `_zip_cache`, and
-> `songs` before the normal apply path). Verified by `TestReplaceScan` in
-> `tests/pykaraoke/test_database.py`.
+> `src/pykaraoke/database.py`; verified by `TestReplaceScan`.
 
 #### Scenario: Replace-scan relocates a library
 
@@ -516,12 +507,10 @@ envelope or a bare serialised library dictionary, validating the payload
 and schema version before applying. A recognised, valid payload SHALL
 atomically replace the in-memory library; malformed JSON, an unrecognised
 schema, or an invalid library SHALL leave the existing library unchanged
-and SHALL report a structured error rather than a partial state.
+and report a structured error.
 
-> Source: `SongLibrary.import_json()` in `src/pykaraoke/database.py`
-> (validates schema and library version, builds a fresh library, then
-> swaps state in one step). Verified by `TestExportImport` in
-> `tests/pykaraoke/test_database.py`.
+> Source: `SongLibrary.import_json()` in `src/pykaraoke/database.py`;
+> verified by `TestExportImport`.
 
 #### Scenario: Export/import round-trip
 
