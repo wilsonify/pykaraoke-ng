@@ -55,9 +55,7 @@ class MidiFile:
         lyrics = []
         if self.lyrics is not None:
             for syl in self.lyrics.list:
-                lyrics.append(
-                    {"ms": syl.ms, "text": syl.text, "type": syl.type, "line": syl.line}
-                )
+                lyrics.append({"ms": syl.ms, "text": syl.text, "type": syl.type, "line": syl.line})
         return {
             "lyrics": lyrics,
             "notes": [list(n) for n in self.notes],
@@ -378,36 +376,50 @@ def _compute_note_bounds(midifile):
     return earliest_note_ms or 0, last_note_ms or 0
 
 
-def _collect_notes(midifile):
-    """Pair note-on/off events and convert them to absolute times in ms."""
-    ts = MidiTimestamp(midifile)
-    raw = []  # (start_ms, end_ms, channel, note, velocity)
+def _merge_track_programs(midifile, track) -> None:
+    """Fold one track's per-channel programs into the file-level map."""
+    for ch, program in track.programs.items():
+        midifile.programs.setdefault(ch, program)
 
-    for track in midifile.track_list:
-        for ch, program in track.programs.items():
-            midifile.programs.setdefault(ch, program)
-        # FIFO queue of unmatched note-ons per (channel, note).
-        pending: dict[tuple[int, int], list[tuple[int, int]]] = {}  # key -> [(click, vel)]
-        for click_on, channel, note, velocity in track.note_ons:
-            pending.setdefault((channel, note), []).append((click_on, velocity))
-        for click_off, channel, note in track.note_offs:
-            queue = pending.get((channel, note))
-            if not queue:
-                continue
-            click_on, velocity = queue.pop(0)
-            ts.advance_to_click(click_on)
-            start_ms = int(ts.ms)
-            ts.advance_to_click(click_off)
-            end_ms = int(ts.ms)
-            raw.append((start_ms, end_ms, channel, note, velocity))
 
-    # Notes left without a note-off are given a short default duration.
+def _pair_track_notes(track, ts, raw: list) -> None:
+    """Pair one track's note-on/off events into (start, end, ch, note, vel)."""
+    # FIFO queue of unmatched note-ons per (channel, note).
+    pending: dict[tuple[int, int], list[tuple[int, int]]] = {}  # key -> [(click, vel)]
+    for click_on, channel, note, velocity in track.note_ons:
+        pending.setdefault((channel, note), []).append((click_on, velocity))
+    for click_off, channel, note in track.note_offs:
+        queue = pending.get((channel, note))
+        if not queue:
+            continue
+        click_on, velocity = queue.pop(0)
+        ts.advance_to_click(click_on)
+        start_ms = int(ts.ms)
+        ts.advance_to_click(click_off)
+        end_ms = int(ts.ms)
+        raw.append((start_ms, end_ms, channel, note, velocity))
+
+
+def _append_unmatched_notes(midifile, ts, raw: list) -> None:
+    """Notes left without a note-off get a short default duration."""
     for track in midifile.track_list:
         for click_on, channel, note, velocity in track.note_ons:
             ts.advance_to_click(click_on)
             start_ms = int(ts.ms)
             if not any(r[0] == start_ms and r[2] == channel and r[3] == note for r in raw):
                 raw.append((start_ms, start_ms + 250, channel, note, velocity))
+
+
+def _collect_notes(midifile):
+    """Pair note-on/off events and convert them to absolute times in ms."""
+    ts = MidiTimestamp(midifile)
+    raw = []  # (start_ms, end_ms, channel, note, velocity)
+
+    for track in midifile.track_list:
+        _merge_track_programs(midifile, track)
+        _pair_track_notes(track, ts, raw)
+
+    _append_unmatched_notes(midifile, ts, raw)
 
     raw.sort(key=lambda n: n[0])
     midifile.notes = [[s, ch, note, vel, max(0, e - s)] for s, e, ch, note, vel in raw]
@@ -580,12 +592,7 @@ def _meta_sequencer_specific(filehdl, track_desc, midifile):
 
 
 def _is_lyric_text(text):
-    return (
-        " SYX" not in text
-        and "Track-" not in text
-        and "%-" not in text
-        and "%+" not in text
-    )
+    return " SYX" not in text and "Track-" not in text and "%-" not in text and "%+" not in text
 
 
 def _read_and_discard_var(filehdl):
@@ -630,58 +637,62 @@ _META_EVENT_HANDLERS = {
 }
 
 
+def _channel_note_off(filehdl, track_desc, channel):
+    """Record a note-off event; returns the consumed data length."""
+    packet = filehdl.read(2)
+    if len(packet) == 2:
+        note = packet[0] & 0x7F
+        track_desc.note_offs.append((track_desc.total_clicks_from_start, channel, note))
+    track_desc.last_note_click = track_desc.total_clicks_from_start
+    return 2
+
+
+def _channel_note_on(filehdl, track_desc, channel):
+    """Record a note-on event (velocity 0 means note off)."""
+    packet = filehdl.read(2)
+    if len(packet) == 2:
+        note = packet[0] & 0x7F
+        velocity = packet[1] & 0x7F
+        if velocity == 0:
+            track_desc.note_offs.append((track_desc.total_clicks_from_start, channel, note))
+        else:
+            track_desc.note_ons.append(
+                (track_desc.total_clicks_from_start, channel, note, velocity)
+            )
+    if track_desc.first_note_click is None:
+        track_desc.first_note_click = track_desc.total_clicks_from_start
+    track_desc.last_note_click = track_desc.total_clicks_from_start
+    return 2
+
+
+def _channel_two_byte_data(filehdl):
+    """Skip key after-touch / control change / pitch wheel (2-byte data)."""
+    filehdl.read(2)
+    return 2
+
+
+def _channel_program_data(filehdl, track_desc, channel, high_nibble):
+    """Record a program change / channel after-touch (1-byte data)."""
+    packet = filehdl.read(1)
+    if high_nibble == 0xC0 and packet:
+        track_desc.programs[channel] = packet[0] & 0x7F
+    return 1
+
+
 def _process_channel_event(filehdl, track_desc, event_type):
     high_nibble = event_type & 0xF0
     channel = event_type & 0x0F
 
     if high_nibble == 0x80:
-        # Note off
-        packet = filehdl.read(2)
-        if len(packet) == 2:
-            note = packet[0] & 0x7F
-            track_desc.note_offs.append(
-                (track_desc.total_clicks_from_start, channel, note)
-            )
-        track_desc.last_note_click = track_desc.total_clicks_from_start
-        return 2
-
+        return _channel_note_off(filehdl, track_desc, channel)
     if high_nibble == 0x90:
-        # Note on (velocity 0 means note off)
-        packet = filehdl.read(2)
-        if len(packet) == 2:
-            note = packet[0] & 0x7F
-            velocity = packet[1] & 0x7F
-            if velocity == 0:
-                track_desc.note_offs.append(
-                    (track_desc.total_clicks_from_start, channel, note)
-                )
-            else:
-                track_desc.note_ons.append(
-                    (track_desc.total_clicks_from_start, channel, note, velocity)
-                )
-        if track_desc.first_note_click is None:
-            track_desc.first_note_click = track_desc.total_clicks_from_start
-        track_desc.last_note_click = track_desc.total_clicks_from_start
-        return 2
-
+        return _channel_note_on(filehdl, track_desc, channel)
     if high_nibble in (0xA0, 0xB0, 0xE0):
-        # Key after-touch / Control change / Pitch wheel (2-byte data)
-        filehdl.read(2)
-        return 2
-
+        return _channel_two_byte_data(filehdl)
     if high_nibble in (0xC0, 0xD0):
-        # Program change / Channel after-touch (1-byte data)
-        packet = filehdl.read(1)
-        if high_nibble == 0xC0 and packet:
-            track_desc.programs[channel] = packet[0] & 0x7F
-        return 1
-
+        return _channel_program_data(filehdl, track_desc, channel, high_nibble)
     if event_type == 0xF0:
         return _process_sysex_f0(filehdl)
-
-    if event_type == 0xF7:
-        return _read_and_discard_var(filehdl)
-
     return _read_and_discard_var(filehdl)
 
 
@@ -711,5 +722,3 @@ def var_length(filehdl):
         else:
             return (0, 0)
     return (converted_int, bytes_read)
-
-
