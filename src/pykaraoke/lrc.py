@@ -54,7 +54,8 @@ def _parse_meta(stripped: str) -> tuple[str, str] | None:
         return None
     key, sep, value = stripped[1:-1].partition(":")
     if not sep or "]" in value or _META_KEY_RE.match(key) is None:
-        return None    return key.lower(), value.strip()
+        return None
+    return key.lower(), value.strip()
 
 
 # Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
