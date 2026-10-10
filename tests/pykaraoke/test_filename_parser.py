@@ -198,6 +198,93 @@ class TestParseZipPath:
 
 
 # ===========================================================================
+# Disc-track spaced naming mode (file_name_type = 4, issue #14)
+# ===========================================================================
+
+
+class TestDiscTrackSpaced:
+    parser = _parser(FileNameType.DISC_TRACK_SPACED)
+
+    @pytest.mark.parametrize(
+        "filepath, disc, track, artist, title",
+        [
+            (
+                "CB30055-15 - Switchfoot - Stars.cdg",
+                "CB30055",
+                "15",
+                "Switchfoot",
+                "Stars",
+            ),
+            (
+                "CB5056-03-06 - Al Green - Let's Stay Together.cdg",
+                "CB5056-03",
+                "06",
+                "Al Green",
+                "Let's Stay Together",
+            ),
+            (
+                "SC3448-03 - All-American Rejects - Dirty Little Secret.cdg",
+                "SC3448",
+                "03",
+                "All-American Rejects",
+                "Dirty Little Secret",
+            ),
+            (
+                "SC1-01 - Artist - Title - Radio Edit.cdg",
+                "SC1",
+                "01",
+                "Artist",
+                "Title - Radio Edit",
+            ),
+            ("PHM0512-08 - Switchfoot - Stars.kar", "PHM0512", "08", "Switchfoot", "Stars"),
+        ],
+    )
+    def test_issue_14_examples(self, filepath, disc, track, artist, title):
+        result = self.parser.parse(filepath)
+        assert result.disc == disc
+        assert result.track == track
+        assert result.artist == artist
+        assert result.title == title
+
+    def test_plain_space_dash_name_falls_back(self):
+        result = self.parser.parse("Artist - Title.cdg")
+        assert result.artist == "Artist"
+        assert result.title == "Title"
+        assert result.disc == ""
+        assert result.track == ""
+
+    def test_unspaced_stem_degrades_to_title_only(self):
+        result = self.parser.parse("CB30055-15-Switchfoot-Stars.cdg")
+        assert result.artist == ""
+        assert result.disc == ""
+        assert result.track == ""
+
+    def test_prefix_without_hyphen_falls_back(self):
+        result = self.parser.parse("Something - Artist - Title.cdg")
+        assert result.artist == "Something"
+        assert result.title == "Artist - Title"
+        assert result.disc == ""
+        assert result.track == ""
+
+    def test_zip_member_uses_spaced_mode(self):
+        result = self.parser.parse_zip_path(
+            "PHM - Pop/PHM0512/PHM0512-08 - Switchfoot - Stars.kar"
+        )
+        assert result.disc == "PHM0512"
+        assert result.track == "08"
+        assert result.artist == "Switchfoot"
+        assert result.title == "Stars"
+
+    def test_spaced_mode_is_integer_four(self):
+        assert int(FileNameType.DISC_TRACK_SPACED) == 4
+
+    def test_other_modes_unchanged(self):
+        default = _parser().parse("CB30055-15 - Switchfoot - Stars.cdg")
+        assert default.artist == "CB30055-15"
+        assert default.title == "Switchfoot - Stars"
+
+
+# ===========================================================================
 # ParsedSong dataclass tests
 # ===========================================================================
 
