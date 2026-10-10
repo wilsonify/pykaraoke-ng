@@ -84,18 +84,16 @@ earlier dots in the stem intact.
 - **THEN** the artist is `Artist`
 - **AND** the title is `Title`
 
-### Requirement: Stems are Unicode-normalised and hygienic
+### Requirement: Stems are Unicode-normalised
 
-Before any pattern is detected, the parser SHALL normalise the filename
-stem: compose it to Unicode NFC, fold Unicode typographic dash variants to
-the ASCII hyphen, fold full-width ASCII (U+FF01–U+FF5E) to plain ASCII,
-remove zero-width characters, truncate at an embedded null byte, and strip
-surrounding whitespace and trailing dots. Normalisation SHALL use only the
-standard library and SHALL not alter the public API.
+Before any pattern is detected, the parser SHALL compose the filename stem
+to Unicode NFC, fold Unicode typographic dash variants to the ASCII hyphen,
+and fold full-width ASCII (U+FF01–U+FF5E) to plain ASCII, so macOS (NFD)
+and Windows/Linux (NFC) libraries parse identically. Normalisation SHALL
+use only the standard library and SHALL not alter the public API.
 
 > Source: `_normalize_stem()` in `src/pykaraoke/filename_parser.py`,
-> applied from `FilenameParser.parse()` after extension removal. Verified
-> by `TestUnicodeNormalisation` and `TestFieldHygiene` in
+> applied from `parse()`. Verified by `TestUnicodeNormalisation` in
 > `tests/pykaraoke/test_filename_parser.py`.
 
 #### Scenario: Decomposed and composed forms agree
@@ -123,6 +121,16 @@ standard library and SHALL not alter the public API.
 - **WHEN** `初音ミク - 千本桜.mp3` is parsed
 - **THEN** the artist is `初音ミク` and the title is `千本桜` with no
   character loss or transliteration
+
+### Requirement: Stems are field-hygienic
+
+Before any pattern is detected, the parser SHALL remove zero-width
+characters, truncate the stem at an embedded null byte, and strip
+surrounding whitespace and trailing dots, so invisible or Windows-invalid
+characters never contaminate the artist or title.
+
+> Source: `_normalize_stem()` in `src/pykaraoke/filename_parser.py`.
+> Verified by `TestFieldHygiene` in `tests/pykaraoke/test_filename_parser.py`.
 
 #### Scenario: Windows trailing dot is removed
 
