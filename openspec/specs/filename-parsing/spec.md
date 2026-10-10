@@ -196,15 +196,14 @@ identically to the ASCII hyphen.
 When the stem contains no space-dash-space separator, the parser SHALL fall
 back to the legacy convention named by the parser's `file_name_type`, one of
 `DISC_TRACK_ARTIST_TITLE`, `DISCTRACK_ARTIST_TITLE`, `DISC_ARTIST_TITLE`, or
-`ARTIST_TITLE` (the default). When `file_name_type` is `DISC_TRACK_SPACED`, a
-stem that contains a spaced separator is instead parsed by the spaced
-convention (see "Disc-track spaced naming mode" below). The convention is a
-persisted user setting, so the same library can be re-parsed under a
-different scheme.
+`ARTIST_TITLE` (the default). The convention is a persisted user setting, so
+the same library can be re-parsed under a different scheme. (When
+`file_name_type` is `DISC_TRACK_SPACED`, a stem that contains a spaced
+separator is instead parsed by the spaced convention.)
 
 > Source: `FilenameParser._parse_legacy()` in
-> `src/pykaraoke/filename_parser.py:190` and the `file_name_type` field in
-> `Settings` (`src/pykaraoke/database.py:105`).
+> `src/pykaraoke/filename_parser.py`; `Settings.file_name_type` in
+> `src/pykaraoke/database.py`.
 
 #### Scenario: Disc-Track-Artist-Title
 
