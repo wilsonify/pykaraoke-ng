@@ -141,6 +141,9 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+markers = [
+    "slow: long-running performance checks (deselect with '-m \"not slow\"')",
+]
 addopts = [
     "-ra",
     "-q",
