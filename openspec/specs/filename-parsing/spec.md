@@ -20,9 +20,9 @@ and desktop builds.
 > characters are removed, embedded null bytes truncate the stem, and
 > surrounding whitespace plus Windows trailing dots are stripped — so
 > macOS (NFD) and Windows/Linux (NFC) libraries parse identically. See
-> "Stems are Unicode-normalised and hygienic" below. The remaining work of
-> the `openspec/changes/filename-parser-edge-cases/` change (bulk-parse
-> performance test) is tracked there.
+> "Stems are Unicode-normalised" and "Stems are field-hygienic" below. The
+> remaining work of the `openspec/changes/filename-parser-edge-cases/`
+> change (bulk-parse performance test) is tracked there.
 
 ## Requirements
 
@@ -92,9 +92,8 @@ and fold full-width ASCII (U+FF01–U+FF5E) to plain ASCII, so macOS (NFD)
 and Windows/Linux (NFC) libraries parse identically. Normalisation SHALL
 use only the standard library and SHALL not alter the public API.
 
-> Source: `_normalize_stem()` in `src/pykaraoke/filename_parser.py`,
-> applied from `parse()`. Verified by `TestUnicodeNormalisation` in
-> `tests/pykaraoke/test_filename_parser.py`.
+> Source: `_normalize_stem()` in `src/pykaraoke/filename_parser.py`;
+> verified by `TestUnicodeNormalisation`.
 
 #### Scenario: Decomposed and composed forms agree
 
@@ -196,13 +195,9 @@ identically to the ASCII hyphen.
 When the stem contains no space-dash-space separator, the parser SHALL fall
 back to the legacy convention named by the parser's `file_name_type`, one of
 `DISC_TRACK_ARTIST_TITLE`, `DISCTRACK_ARTIST_TITLE`, `DISC_ARTIST_TITLE`, or
-`ARTIST_TITLE` (the default). The convention is a persisted user setting, so
-the same library can be re-parsed under a different scheme. (When
-`file_name_type` is `DISC_TRACK_SPACED`, a stem that contains a spaced
-separator is instead parsed by the spaced convention.)
+`ARTIST_TITLE` (the default). The convention is a persisted user setting.
 
-> Source: `FilenameParser._parse_legacy()` in
-> `src/pykaraoke/filename_parser.py`; `Settings.file_name_type` in
+> Source: `FilenameParser._parse_legacy()`; `Settings.file_name_type` in
 > `src/pykaraoke/database.py`.
 
 #### Scenario: Disc-Track-Artist-Title
@@ -227,14 +222,14 @@ separator is instead parsed by the spaced convention.)
 
 ### Requirement: Disc-track spaced naming mode
 
-When `file_name_type` is `DISC_TRACK_SPACED`, the parser SHALL recognise stems of the form `DISC-TRACK - ARTIST - TITLE` in which the spaces around the separating dashes are required: it SHALL split the stem at the first space-dash-space separator, treat the prefix as a disc-track part separated into disc and track at the last hyphen inside the prefix, and split the remainder at its first space-dash-space separator into artist and title.
+When `file_name_type` is `DISC_TRACK_SPACED`, the parser SHALL recognise
+stems of the form `DISC-TRACK - ARTIST - TITLE`, splitting at the first
+space-dash-space separator, separating the prefix into disc and track at
+its last hyphen, and splitting the remainder at its first space-dash-space
+separator into artist and title.
 
 > Source: `FilenameParser._parse_disc_track_spaced()` in
-> `src/pykaraoke/filename_parser.py:161`, dispatched from
-> `FilenameParser.parse()` (`src/pykaraoke/filename_parser.py:102`);
-> `FileNameType.DISC_TRACK_SPACED = 4` at
-> `src/pykaraoke/filename_parser.py:33`. Verified by
-> `tests/pykaraoke/test_filename_parser.py:205` (`TestDiscTrackSpaced`).
+> `src/pykaraoke/filename_parser.py`; verified by `TestDiscTrackSpaced`.
 
 #### Scenario: Issue #14 example parses correctly
 
@@ -242,6 +237,7 @@ When `file_name_type` is `DISC_TRACK_SPACED`, the parser SHALL recognise stems o
   `DISC_TRACK_SPACED`
 - **THEN** the disc is `CB30055`, the track is `15`, the artist is
   `Switchfoot`, and the title is `Stars`
+- **AND** spaces around the separating dashes are required
 
 #### Scenario: The last hyphen in the prefix separates disc from track
 
@@ -275,14 +271,20 @@ When `file_name_type` is `DISC_TRACK_SPACED`, the parser SHALL recognise stems o
 - **THEN** the disc is `PHM0512`, the track is `08`, the artist is
   `Switchfoot`, and the title is `Stars`
 
-### Requirement: Spaced disc-track fallback and setting value
+#### Scenario: The setting accepts integer value 4
 
-When the stem has no spaced separator, or the disc-track prefix has no hyphen, `DISC_TRACK_SPACED` SHALL fall back to ordinary space-dash and best-effort legacy parsing rather than mis-attributing the artist. The mode SHALL apply to zip member paths and be accepted as the integer value `4` by the `file_name_type` setting.
+- **WHEN** `file_name_type` is set to the integer `4`
+- **THEN** the parser operates in `DISC_TRACK_SPACED` mode
 
-> Source: fallback branches in `_parse_disc_track_spaced()`
-> (`src/pykaraoke/filename_parser.py:161`) and the `_parse_legacy()`
-> fall-through (`src/pykaraoke/filename_parser.py:190`); integer value
-> asserted at `tests/pykaraoke/test_filename_parser.py:278`.
+### Requirement: Spaced disc-track fallback
+
+When the stem has no spaced separator, the disc-track prefix has no hyphen
+or yields an empty disc or track, or the remainder yields no artist or
+title, `DISC_TRACK_SPACED` SHALL fall back to the ordinary space-dash and
+best-effort legacy parsing rather than mis-attributing the artist.
+
+> Source: fallback branches of `_parse_disc_track_spaced()` and the
+> `_parse_legacy()` fall-through in `src/pykaraoke/filename_parser.py`.
 
 #### Scenario: An unspaced stem degrades to best-effort parsing
 
