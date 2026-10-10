@@ -589,7 +589,7 @@ class SongLibrary:
             }
         try:
             new_lib = SongLibrary.from_dict(lib_data)
-        except Exception as exc:  # noqa: BLE001 - report, never raise
+        except Exception as exc:  # report, never raise
             return {"ok": False, "error": f"invalid library: {exc}"}
         # Atomic swap: build fully, then copy state over in one step.
         self.songs = new_lib.songs
@@ -621,12 +621,52 @@ class SongLibrary:
         return lib
 
 
+_WS_CHARS = " \t\n\r\f\v"
+
+
+def _is_ws(ch: str) -> bool:
+    """Whether *ch* matches ``\\s`` (ASCII whitespace or non-ASCII space)."""
+    return ch in _WS_CHARS or (ord(ch) > 127 and ch.isspace())
+
+
+def _strip_track_prefix(s: str) -> str:
+    """Drop a leading ``NN - `` / ``NN. `` / ``NN) `` track marker, if any."""
+    i = 0
+    while i < len(s) and s[i].isdigit():
+        i += 1
+    if not i:
+        return s
+    j = i
+    while j < len(s) and _is_ws(s[j]):
+        j += 1
+    if j >= len(s) or s[j] not in "-.)":
+        return s
+    k = j + 1
+    while k < len(s) and _is_ws(s[k]):
+        k += 1
+    return s[k:]
+
+
+def _strip_karaoke_suffix(s: str) -> str:
+    """Drop one trailing ``karaoke``/``instrumental`` suffix with separators."""
+    for suffix in ("karaoke", "instrumental"):
+        if s.endswith(suffix):
+            head = s[: -len(suffix)]
+            while head and (head[-1] == "-" or _is_ws(head[-1])):
+                head = head[:-1]
+            return head
+    return s
+
+
 def _normalize_stem(stem: str) -> str:
-    """Lowercase *stem*, dropping track numbers, suffixes and punctuation."""
-    s = stem.lower()
-    s = re.sub(r"^\d+\s*[-.)]\s*", "", s)
-    s = re.sub(r"[-\s]*(karaoke|instrumental)$", "", s)
-    return re.sub(r"[^a-z0-9]+", "", s)
+    """Lowercase *stem*, dropping track numbers, suffixes and punctuation.
+
+    Plain string operations replace three ``re.sub`` calls: the
+    ``[-\\s]*(karaoke|instrumental)$`` pattern backtracks on trailing
+    separator runs, and ``[^a-z0-9]+`` rescans on every punctuation run.
+    """
+    s = _strip_karaoke_suffix(_strip_track_prefix(stem.lower()))
+    return "".join(ch for ch in s if "a" <= ch <= "z" or "0" <= ch <= "9")
 
 
 class _EmptyParsed:
