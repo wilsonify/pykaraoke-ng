@@ -140,6 +140,48 @@ class TestSettings:
         assert songs[0]["disc"] == "CB30055"
 
 
+class TestScanReportAPI:
+    def test_report_after_mixed_scan(self):
+        app = KaraokeApp()
+        app.scan_files(
+            [
+                {"name": "notes.txt", "path": "notes.txt", "size": 1},
+                {"name": "A - B.cdg", "path": "A - B.cdg", "size": 0},
+            ]
+        )
+        report = app.scan_report()
+        assert report["counts"]["unsupported"] == 1
+        assert report["entries"] == [{"category": "unsupported", "path": "notes.txt"}]
+
+    def test_clearing(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "notes.txt", "path": "notes.txt", "size": 1}])
+        assert app.scan_report()["counts"]["unsupported"] == 1
+        empty = app.clear_scan_report()
+        assert empty["counts"]["unsupported"] == 0
+        assert empty["entries"] == []
+        assert app.scan_report()["entries"] == []
+
+
+class TestPatternSettingsAPI:
+    def test_patterns_round_trip_and_apply(self):
+        app = KaraokeApp()
+        updated = app.set_settings({"exclude_patterns": ["*_(vocal)_*"]})
+        assert updated["exclude_patterns"] == ["*_(vocal)_*"]
+        assert app.get_settings()["exclude_patterns"] == ["*_(vocal)_*"]
+        app.scan_files(
+            [
+                {"name": "Song - Artist_(Vocal)_.cdg",
+                 "path": "Song - Artist_(Vocal)_.cdg", "size": 0},
+                {"name": "Plain - Song.cdg", "path": "Plain - Song.cdg", "size": 0},
+            ]
+        )
+        songs = app.library_songs()["songs"]
+        assert len(songs) == 1
+        assert songs[0]["title"] == "Song"
+        assert app.scan_report()["counts"]["filtered"] == 1
+
+
 class TestCdg:
     def test_open_update_close(self):
         app = KaraokeApp()
@@ -256,3 +298,59 @@ class TestInvalidData:
     def test_scan_zip_invalid_bytes(self):
         app = KaraokeApp()
         assert app.scan_zip("x.zip", None)["added"] == 0
+
+
+class TestRelocationAPI:
+    def test_replace_scan(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "Old - Song.cdg", "path": "Old - Song.cdg", "size": 0}])
+        app.scan_files(
+            [{"name": "New - Song.cdg", "path": "New - Song.cdg", "size": 0}],
+            replace=True,
+        )
+        songs = app.library_songs()["songs"]
+        assert len(songs) == 1
+        assert songs[0]["artist"] == "New"
+
+    def test_default_stays_additive(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "A - One.cdg", "path": "A - One.cdg", "size": 0}])
+        app.scan_files([{"name": "B - Two.cdg", "path": "B - Two.cdg", "size": 0}])
+        assert len(app.library_songs()["songs"]) == 2
+
+    def test_prune(self):
+        app = KaraokeApp()
+        app.scan_files(
+            [
+                {"name": "Keep - One.cdg", "path": "Keep - One.cdg", "size": 0},
+                {"name": "Drop - Two.cdg", "path": "Drop - Two.cdg", "size": 0},
+            ]
+        )
+        result = app.prune_songs(["keep - one.cdg"])
+        assert result["pruned"] == 1
+        assert result["total"] == 1
+        assert len(app.library_songs()["songs"]) == 1
+
+    def test_prune_empty_is_noop(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "A - B.cdg", "path": "A - B.cdg", "size": 0}])
+        assert app.prune_songs([])["pruned"] == 0
+        assert len(app.library_songs()["songs"]) == 1
+
+
+class TestImportExportAPI:
+    def test_round_trip_through_page(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "Queen - Bohemian Rhapsody.cdg",
+                         "path": "Queen - Bohemian Rhapsody.cdg", "size": 0}])
+        payload = app.export_json()
+        assert app.import_json(payload) == {"ok": True}
+        assert len(app.library_songs()["songs"]) == 1
+
+    def test_corrupt_payload(self):
+        app = KaraokeApp()
+        app.scan_files([{"name": "A - B.cdg", "path": "A - B.cdg", "size": 0}])
+        result = app.import_json("not json")
+        assert result["ok"] is False
+        assert "error" in result
+        assert len(app.library_songs()["songs"]) == 1
