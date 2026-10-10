@@ -54,6 +54,7 @@ are linked, not duplicated:
 | [Engine API](../reference/engine-api.md) | web-engine-api |
 | [Build system](../contributing/build-system.md) | build-system |
 | [Contributing](../contributing/index.md) | project-governance |
+| [Original PyKaraoke issue coverage](original-pykaraoke-issues.md) | song-library, filename-parsing, playback, web-engine-api |
 
 Internal change-management artifacts (the contents of `openspec/changes/`) are
 intentionally **not** published here — they are working documents. Completed
