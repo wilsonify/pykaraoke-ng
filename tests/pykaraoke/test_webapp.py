@@ -203,7 +203,8 @@ class TestCdg:
         app.cdg_update(key, 0)
         app.cdg_seek(key, 1000)
         upd = app.cdg_update(key, 1000)
-        assert upd is not None and len(upd["tiles"]) == 24
+        assert upd is not None
+        assert len(upd["tiles"]) == 24
 
     def test_cdg_packet_count(self):
         app = KaraokeApp()

@@ -315,8 +315,9 @@ class TestParsedSong:
 class TestInputValidation:
     @pytest.mark.parametrize("bad", [None, 42, b"bytes.cdg", ["list.cdg"]])
     def test_non_string_raises_type_error(self, bad):
+        parser = _parser()
         with pytest.raises(TypeError):
-            _parser().parse(bad)
+            parser.parse(bad)
 
 
 # ===========================================================================

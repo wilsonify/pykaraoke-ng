@@ -260,7 +260,8 @@ class TestDecode:
         # The unknown instruction changes nothing: only the initial
         # blank frame is produced, then the decoder is clean.
         upd = dec.update()
-        assert upd is not None and upd["border"] is None
+        assert upd is not None
+        assert upd["border"] is None
         assert dec.update() is None
 
     def test_short_final_packet_ignored(self):
@@ -268,5 +269,6 @@ class TestDecode:
         dec = CdgDecoder(_packet(CDG_INST_MEMORY_PRESET, bytes([0]))[:20])
         dec.process_until(10)
         upd = dec.update()
-        assert upd is not None and upd["border"] is None
+        assert upd is not None
+        assert upd["border"] is None
         assert dec.update() is None

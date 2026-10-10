@@ -325,6 +325,8 @@ class TestDuetFixture:
         assert [s["part"] for s in line1] == ["b"] * 5
         # Lines the .elrc could not time keep their own syllables and tag.
         line3 = [s for s in merged if s["line"] == 3]
-        assert len(line3) == 1 and "part" not in line3[0]
+        assert len(line3) == 1
+        assert "part" not in line3[0]
         line5 = [s for s in merged if s["line"] == 5]
-        assert len(line5) == 4 and [s["part"] for s in line5] == ["a"] * 4
+        assert len(line5) == 4
+        assert [s["part"] for s in line5] == ["a"] * 4
