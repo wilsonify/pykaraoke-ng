@@ -35,8 +35,8 @@ if __name__ == "__main__":
     # Dev-only static server bound to loopback (127.0.0.1); it serves the same
     # public web assets as `python -m http.server` and carries no secrets, so
     # plain HTTP is intentional. TLS would only add cert management to the
-    # tauri.conf.json beforeDevCommand flow. NOSONAR documents that this is a
-    # reviewed, accepted use of http.server (S5332).
-    http.server.ThreadingHTTPServer(  # NOSONAR S5332
+    # tauri.conf.json beforeDevCommand flow. This is a reviewed, accepted
+    # use of http.server without TLS (Sonar S5332).
+    http.server.ThreadingHTTPServer(  # NOSONAR
         ("127.0.0.1", PORT), NoCacheHandler
     ).serve_forever()
