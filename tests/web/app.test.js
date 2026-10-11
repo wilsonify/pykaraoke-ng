@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
-import { loadApp } from './load-app.mjs';
-
-const {
+import {
   buildLyricLines,
   CDG_HEIGHT,
   CDG_WIDTH,
@@ -23,7 +25,7 @@ const {
   songLabel,
   writeTileRgba,
   ZOOM_SCALES,
-} = await loadApp();
+} from '../../src/web/src/helpers.js';
 
 describe('formatTime', () => {
   it('formats minutes and seconds', () => {
@@ -260,8 +262,8 @@ describe('computeNoteTimeline', () => {
   });
 
   it('enforces a minimum note duration', () => {
-    const timeline = computeNoteTimeline([[0, 0, 60, 80, 5]], {});
-    expect(timeline[0].endMs - timeline[0].startMs).toBeGreaterThanOrEqual(40);
+    const timeline = computeNoteTimeline([[0, 0, 60, 80, 5]], {})[0];
+    expect(timeline.endMs - timeline.startMs).toBeGreaterThanOrEqual(40);
   });
 });
 
@@ -376,5 +378,44 @@ describe('zoom scales', () => {
     expect(ZOOM_SCALES.int).toBe(1);
     expect(ZOOM_SCALES.full).toBe(1.5);
     expect(ZOOM_SCALES.soft).toBe(2);
+  });
+});
+
+describe('settings panel: naming convention select', () => {
+  // The select's values must match the engine's FileNameType enum in
+  // src/pykaraoke/filename_parser.py (0=DISC_TRACK_ARTIST_TITLE ...
+  // 4=DISC_TRACK_SPACED); a previous revision shifted the labels by one.
+  const htmlPath = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'src',
+    'web',
+    'src',
+    'index.html.ejs',
+  );
+  const html = readFileSync(htmlPath, 'utf8');
+
+  it('maps each option value to the correct convention label', () => {
+    const select = html.match(/<select id="setting-naming">([\s\S]*?)<\/select>/);
+    expect(select).toBeTruthy();
+    const options = [...select[1].matchAll(/<option value="(\d+)">([^<]+)<\/option>/g)].map(
+      (m) => [m[1], m[2]],
+    );
+    expect(options).toEqual([
+      ['0', 'Disc Track - Artist - Title'],
+      ['1', 'DiscTrack - Artist - Title'],
+      ['2', 'Disc - Artist - Title'],
+      ['3', 'Artist - Title'],
+      ['4', 'Disc-Track - Artist - Title (spaced)'],
+    ]);
+  });
+
+  it('offers exactly the five engine conventions', () => {
+    const namingBlock = html.match(/<select id="setting-naming">([\s\S]*?)<\/select>/)[1];
+    const namingValues = [...namingBlock.matchAll(/<option value="(\d+)">/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(namingValues).toEqual([0, 1, 2, 3, 4]);
   });
 });
