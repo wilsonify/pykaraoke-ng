@@ -64,8 +64,20 @@ class TestLegacyDiscTrackArtistTitle:
         "filepath, disc, track, artist, title",
         [
             ("SC1234-05-John Doe-My Song.cdg", "SC1234", "05", "John Doe", "My Song"),
-            ("SC1234-05-The Rolling Stones-Paint It Black.cdg", "SC1234", "05", "The Rolling Stones", "Paint It Black"),
-            ("SC1234-05-Artist-Title-With-Dashes.cdg", "SC1234", "05", "Artist", "Title-With-Dashes"),
+            (
+                "SC1234-05-The Rolling Stones-Paint It Black.cdg",
+                "SC1234",
+                "05",
+                "The Rolling Stones",
+                "Paint It Black",
+            ),
+            (
+                "SC1234-05-Artist-Title-With-Dashes.cdg",
+                "SC1234",
+                "05",
+                "Artist",
+                "Title-With-Dashes",
+            ),
         ],
     )
     def test_four_part_parsing(self, filepath, disc, track, artist, title):
@@ -269,9 +281,7 @@ class TestDiscTrackSpaced:
         assert result.track == ""
 
     def test_zip_member_uses_spaced_mode(self):
-        result = self.parser.parse_zip_path(
-            "PHM - Pop/PHM0512/PHM0512-08 - Switchfoot - Stars.kar"
-        )
+        result = self.parser.parse_zip_path("PHM - Pop/PHM0512/PHM0512-08 - Switchfoot - Stars.kar")
         assert result.disc == "PHM0512"
         assert result.track == "08"
         assert result.artist == "Switchfoot"
@@ -339,7 +349,7 @@ class TestUnicodeNormalisation:
 
     @pytest.mark.parametrize(
         "dash",
-        ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212", "\uFF0D", "\uFE58"],
+        ["\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2015", "\u2212", "\uff0d", "\ufe58"],
     )
     def test_unicode_dash_variants_fold_to_separator(self, dash):
         # Unspaced dashes fold to the ASCII hyphen, so the legacy
@@ -454,7 +464,9 @@ class TestDegradedInputs:
     def test_spaced_mode_empty_title_falls_back(self):
         # Direct helper call: an empty title after the second separator is
         # a defensive fallback in _parse_disc_track_spaced.
-        result = _parser(FileNameType.DISC_TRACK_SPACED)._parse_disc_track_spaced("CB1-15 - Artist - ")
+        result = _parser(FileNameType.DISC_TRACK_SPACED)._parse_disc_track_spaced(
+            "CB1-15 - Artist - "
+        )
         assert result.artist == "CB1-15"
         assert result.title == "Artist -"
 
@@ -464,9 +476,9 @@ class TestBulkPerformance:
     def test_ten_thousand_filenames_parse_quickly(self):
         import time
 
-        names = [
-            f"Artist{i} - Title {i}.cdg" for i in range(5000)
-        ] + [f"SC{i:04d}-{i % 100:02d}-Some Artist-Song {i}.kar" for i in range(5000)]
+        names = [f"Artist{i} - Title {i}.cdg" for i in range(5000)] + [
+            f"SC{i:04d}-{i % 100:02d}-Some Artist-Song {i}.kar" for i in range(5000)
+        ]
         parser = _parser(FileNameType.DISC_TRACK_ARTIST_TITLE)
         start = time.perf_counter()
         for name in names:
