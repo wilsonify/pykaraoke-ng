@@ -1440,20 +1440,22 @@ if (isBrowser) {
   }
 
   function deleteQueueItemKey(e, inInput) {
-    if (e.key !== 'Delete' || inInput || state.selectedQueue < 0) return;
+    if (e.key !== 'Delete' || inInput || state.selectedQueue < 0) return false;
     e.preventDefault();
     removeQueueItem(state.selectedQueue);
+    return true;
   }
 
   function reorderQueueKey(e, inInput) {
-    if (!e.altKey || inInput) return;
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    if (!e.altKey || inInput) return false;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
     e.preventDefault();
     if (state.selectedQueue < 0) {
       notify('Click a queued song first, then use Alt+↑ / Alt+↓ to move it.', { kind: 'info' });
-      return;
+      return true;
     }
     moveQueueItem(state.selectedQueue, e.key === 'ArrowUp' ? -1 : 1);
+    return true;
   }
 
   function previousSongKey(e, inInput) {
