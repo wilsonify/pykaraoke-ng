@@ -100,11 +100,14 @@ jobs:
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies via lockfile
-        run: uv sync --frozen --extra dev --extra test
+        # --no-build: install wheels only; building sdists would execute
+        # third-party setup scripts. The project itself is still installed
+        # editable (uv always builds editable requirements).
+        run: uv sync --frozen --no-build --extra dev --extra test
 
       - name: Run Python unit tests with coverage
         run: |
-          uv run --frozen pytest tests/pykaraoke/ \
+          uv run --frozen --no-build pytest tests/pykaraoke/ \
             --cov=src/pykaraoke \
             --cov-report=xml:coverage.xml \
             --cov-report=html:htmlcov \
@@ -140,8 +143,11 @@ jobs:
       # runs the UI logic tests against it (vitest, no browser needed).
       - name: Run frontend unit tests
         working-directory: tests/web
+        # --ignore-scripts: vitest/esbuild run from the installed files;
+        # no dependency install script is needed (npm still installs the
+        # @esbuild/* platform binary via optionalDependencies).
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm test
 
   unit-tests-rust:
@@ -208,8 +214,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       # Pin the CLI: the spec schema and validator evolve between releases.
+      # --ignore-scripts: the published CLI ships prebuilt dist/ + bin, so no
+      # install hook is needed for it to run.
       - name: Install OpenSpec CLI (pinned)
-        run: npm install -g @fission-ai/openspec@1.14.1
+        run: npm install -g --ignore-scripts @fission-ai/openspec@1.14.1
 
       - name: Validate specs and changes
         run: openspec validate --all --strict
@@ -359,9 +367,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       # The Tauri CLI comes from the project's own devDependencies (v2).
+      # --ignore-scripts: the lockfile contains no install scripts, so the
+      # CLI runs straight from the installed files.
       - name: Install Tauri CLI
         working-directory: src/runtimes/tauri
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # Python builds the engine wheel and downloads the Pyodide/PyScript
       # runtime that src/web/index.html loads (src/scripts/build-web.py).
