@@ -9,9 +9,7 @@ class TestParseLrc:
     def test_basic_timed_line(self):
         parsed = parse_lrc("[00:12.34]Hello world\n")
         assert parsed is not None
-        assert parsed["lyrics"] == [
-            {"ms": 12340, "text": "Hello world", "type": 0, "line": 0}
-        ]
+        assert parsed["lyrics"] == [{"ms": 12340, "text": "Hello world", "type": 0, "line": 0}]
 
     def test_millisecond_fraction(self):
         parsed = parse_lrc("[01:02.345]three digits\n")
@@ -22,8 +20,15 @@ class TestParseLrc:
         assert parsed["lyrics"][0]["ms"] == 5_500
 
     def test_meta_tags(self):
-        parsed = parse_lrc("[ti:Inside Out]\n[ar:Tom and the Back Roads]\n[al:Album]\n[length:03:45]\n[00:10.00]go\n")
-        assert parsed["meta"] == {"ti": "Inside Out", "ar": "Tom and the Back Roads", "al": "Album", "length": "03:45"}
+        parsed = parse_lrc(
+            "[ti:Inside Out]\n[ar:Tom and the Back Roads]\n[al:Album]\n[length:03:45]\n[00:10.00]go\n"
+        )
+        assert parsed["meta"] == {
+            "ti": "Inside Out",
+            "ar": "Tom and the Back Roads",
+            "al": "Album",
+            "length": "03:45",
+        }
         assert parsed["duration_ms"] == 3 * 60_000 + 45_000
 
     def test_meta_tags_case_insensitive(self):
@@ -80,9 +85,7 @@ class TestParseLrc:
 
     def test_consecutive_word_tags_skip_empty_text(self):
         parsed = parse_lrc("[00:01.00]<00:01.50><00:02.00>only here\n")
-        assert parsed["lyrics"] == [
-            {"ms": 2000, "text": "only here", "type": 0, "line": 0}
-        ]
+        assert parsed["lyrics"] == [{"ms": 2000, "text": "only here", "type": 0, "line": 0}]
 
     def test_repeated_line_timestamps_expand_words(self):
         # A repeated line is emitted once per line timestamp; word tags
@@ -102,9 +105,7 @@ class TestParseLrc:
     def test_malformed_tag_stays_literal(self):
         # <foo> is not a valid word tag; the line falls back to line timing.
         parsed = parse_lrc("[00:01.00]hi <foo> there\n")
-        assert parsed["lyrics"] == [
-            {"ms": 1000, "text": "hi <foo> there", "type": 0, "line": 0}
-        ]
+        assert parsed["lyrics"] == [{"ms": 1000, "text": "hi <foo> there", "type": 0, "line": 0}]
 
 
 class TestParseElrc:
@@ -115,9 +116,7 @@ class TestParseElrc:
         return [(s["ms"], s["text"]) for s in lyrics]
 
     def test_words_align_to_their_line(self):
-        parsed = parse_lrc(
-            "[00:01.00]Hello brave new world\n[00:05.00]Second line here\n"
-        )
+        parsed = parse_lrc("[00:01.00]Hello brave new world\n[00:05.00]Second line here\n")
         elrc = (
             "[00:01.00]Hello brave new world\n"  # line header: whole line
             "[00:01.20]Hello\n[00:01.70]brave\n[00:02.20]new\n[00:02.90]world\n"
@@ -139,9 +138,7 @@ class TestParseElrc:
         # "gamma" is not the next letters of the line: timing never shifts
         # onto the wrong word, and the rest still aligns.
         parsed = parse_lrc("[00:01.00]alpha beta\n")
-        merged = parse_elrc(
-            "[00:01.10]gamma\n[00:01.20]alpha\n[00:01.60]beta\n", parsed["lyrics"]
-        )
+        merged = parse_elrc("[00:01.10]gamma\n[00:01.20]alpha\n[00:01.60]beta\n", parsed["lyrics"])
         assert self._words(merged) == [(1200, "alpha"), (1600, "beta")]
 
     def test_untimed_line_keeps_its_own_syllables(self):
@@ -166,9 +163,7 @@ class TestParseElrc:
         # shifted identically so both stay aligned.
         parsed = parse_lrc("[offset:500]\n[00:10.00]alpha beta\n")
         offset = parse_offset(parsed["meta"])
-        merged = parse_elrc(
-            "[00:10.20]alpha\n[00:10.60]beta\n", parsed["lyrics"], offset_ms=offset
-        )
+        merged = parse_elrc("[00:10.20]alpha\n[00:10.60]beta\n", parsed["lyrics"], offset_ms=offset)
         assert self._words(merged) == [(9700, "alpha"), (10100, "beta")]
 
     def test_unmatched_token_keeps_its_text_and_time_order(self):
@@ -201,8 +196,7 @@ class TestParseElrc:
         # The chorus is stamped twice; the word timing keeps the first pass.
         parsed = parse_lrc("[00:09.00][00:15.00]Repeat chorus line\n")
         merged = parse_elrc(
-            "[00:09.00]Repeat chorus line\n"
-            "[00:09.40]Repeat\n[00:10.10]chorus\n[00:10.60]line\n",
+            "[00:09.00]Repeat chorus line\n[00:09.40]Repeat\n[00:10.10]chorus\n[00:10.60]line\n",
             parsed["lyrics"],
         )
         assert [(s["line"], s["ms"], s["text"]) for s in merged] == [
@@ -222,7 +216,7 @@ class TestParseDuet:
             ("[A]", "a"),
             ("[b]", "b"),
             ("[ab]", "ab"),
-            ("[ba]", "ab"),   # the mirror of a shared line
+            ("[ba]", "ab"),  # the mirror of a shared line
             ("[AB]", "ab"),
         ],
     )
@@ -233,10 +227,7 @@ class TestParseDuet:
 
     def test_part_per_line(self):
         parsed = parse_lrc(
-            "[00:01.00][a]first\n"
-            "[00:05.00][b]second\n"
-            "[00:09.00][ab]shared\n"
-            "[00:13.00]solo\n"
+            "[00:01.00][a]first\n[00:05.00][b]second\n[00:09.00][ab]shared\n[00:13.00]solo\n"
         )
         assert [(s["line"], s.get("part")) for s in parsed["lyrics"]] == [
             (0, "a"),
@@ -295,11 +286,7 @@ class TestParseDuet:
         assert "parts" not in parse_lrc("[00:01.00][b]hi\n")
 
     def test_elrc_merge_keeps_part_tags(self):
-        parsed = parse_lrc(
-            "[pa:Alice]\n"
-            "[00:01.00][a]Hello world\n"
-            "[00:05.00][b]Second line\n"
-        )
+        parsed = parse_lrc("[pa:Alice]\n[00:01.00][a]Hello world\n[00:05.00][b]Second line\n")
         merged = parse_elrc(
             "[00:01.00]Hello world\n[00:01.20]Hello\n[00:01.70]world\n"
             "[00:05.00]Second line\n[00:05.30]Second\n[00:05.80]line\n",
