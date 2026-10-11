@@ -39,3 +39,5 @@ site/
 .freebuff/
 # Extracted from src/web/index.html by tests/web/load-app.mjs
 tests/web/.extracted/
+
+node_modules/
