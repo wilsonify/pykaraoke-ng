@@ -78,13 +78,14 @@ def _split_space_dash(stem: str) -> list[str]:
         i = stem.find("-", i + 1)
     return [stem]
 
+
 # Typographic dash variants treated as ASCII hyphen equivalents:
 # hyphen, non-breaking, figure, en, em, horizontal bar, minus sign,
 # small em-dash, full-width hyphen-minus, and modifier letter plus sign.
-_UNICODE_DASH_RE = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFF0D\u02D7]")
+_UNICODE_DASH_RE = re.compile("[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\ufe58\uff0d\u02d7]")
 
 # Invisible zero-width characters stripped from stems.
-_ZERO_WIDTH_RE = re.compile("[\u200B\u200C\u200D\u2060\uFEFF]")
+_ZERO_WIDTH_RE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 
 # Full-width ASCII range (U+FF01..U+FF5E) folds by subtracting 0xFEE0.
 _FULLWIDTH_OFFSET = 0xFEE0
@@ -93,7 +94,7 @@ _FULLWIDTH_OFFSET = 0xFEE0
 def _fold_fullwidth(stem: str) -> str:
     """Fold full-width ASCII variants (U+FF01..U+FF5E) to plain ASCII."""
     return "".join(
-        chr(ord(ch) - _FULLWIDTH_OFFSET) if "\uFF01" <= ch <= "\uFF5E" else ch for ch in stem
+        chr(ord(ch) - _FULLWIDTH_OFFSET) if "\uff01" <= ch <= "\uff5e" else ch for ch in stem
     )
 
 
