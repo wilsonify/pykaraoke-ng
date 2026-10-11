@@ -1,6 +1,5 @@
 """Tests for pykaraoke.cdg — the pure CD+G decoder."""
 
-
 from pykaraoke.cdg import (
     CDG_COMMAND,
     CDG_DISPLAY_HEIGHT,
@@ -8,9 +7,12 @@ from pykaraoke.cdg import (
     CDG_FULL_HEIGHT,
     CDG_FULL_WIDTH,
     CDG_INST_BORDER_PRESET,
+    CDG_INST_DEF_TRANSP_COL,
     CDG_INST_LOAD_COL_TBL_0_7,
+    CDG_INST_LOAD_COL_TBL_8_15,
     CDG_INST_MEMORY_PRESET,
     CDG_INST_SCROLL_COPY,
+    CDG_INST_SCROLL_PRESET,
     CDG_INST_TILE_BLOCK,
     CDG_INST_TILE_BLOCK_XOR,
     TILE_HEIGHT,
@@ -82,6 +84,12 @@ def _scroll_copy(h_s_cmd, v_s_cmd, h_offset=0, v_offset=0, colour=0) -> bytes:
     h_scroll = ((h_s_cmd & 0x03) << 4) | (h_offset & 0x07)
     v_scroll = ((v_s_cmd & 0x03) << 4) | (v_offset & 0x0F)
     return _packet(CDG_INST_SCROLL_COPY, bytes([colour, h_scroll, v_scroll]))
+
+
+def _scroll_preset(h_s_cmd, v_s_cmd, h_offset=0, v_offset=0, colour=0) -> bytes:
+    h_scroll = ((h_s_cmd & 0x03) << 4) | (h_offset & 0x07)
+    v_scroll = ((v_s_cmd & 0x03) << 4) | (v_offset & 0x0F)
+    return _packet(CDG_INST_SCROLL_PRESET, bytes([colour, h_scroll, v_scroll]))
 
 
 # ---------------------------------------------------------------------------
@@ -190,11 +198,7 @@ class TestDecode:
         assert px(0, 6, 0) == (255, 0, 0)
 
     def test_border_preset(self):
-        data = (
-            _load_colour_table([(0, 0, 0), (0, 0, 255)])
-            + _memory_preset(0)
-            + _border_preset(1)
-        )
+        data = _load_colour_table([(0, 0, 0), (0, 0, 255)]) + _memory_preset(0) + _border_preset(1)
         dec = CdgDecoder(data)
         dec.process_until(10)
         assert dec.get_border_colour() == (0, 0, 255)
@@ -272,3 +276,170 @@ class TestDecode:
         assert upd is not None
         assert upd["border"] is None
         assert dec.update() is None
+
+    def test_non_command_packet_ignored(self):
+        # Sub-code without the CDG_COMMAND bits is skipped entirely.
+        p = bytearray(_packet(CDG_INST_MEMORY_PRESET, bytes([3])))
+        p[0] = 0x00
+        dec = CdgDecoder(bytes(p))
+        dec.process_until(1)
+        assert dec.get_border_colour() is None
+
+    def test_memory_preset_same_colour_is_noop(self):
+        # A repeated preset with the same colour skips the full-screen fill.
+        dec = CdgDecoder(_memory_preset(2) + _memory_preset(2))
+        dec.process_until(2)
+        assert dec.preset_colour_index == 2
+        assert dec.update() is not None  # first preset dirtied everything
+
+    def test_border_preset_same_colour_is_noop(self):
+        dec = CdgDecoder(_border_preset(5) + _border_preset(5))
+        dec.process_until(2)
+        assert dec.border_colour_index == 5
+
+    def test_def_transp_col(self):
+        dec = CdgDecoder(_packet(CDG_INST_DEF_TRANSP_COL, bytes([0x0B])))
+        dec.process_until(1)
+        assert dec.transparent_colour == 0x0B
+
+    def test_load_col_tbl_8_15(self):
+        data = bytearray(16)
+        data[0:2] = _colour_pair(0, 255, 255, 255)  # entry 8 -> index 8
+        dec = CdgDecoder(_packet(CDG_INST_LOAD_COL_TBL_8_15, bytes(data)))
+        dec.process_until(1)
+        assert dec.colour_table[8] == (255, 255, 255)
+
+    def test_scroll_preset_fills_with_colour(self):
+        # Draw a red block, scroll-preset left by 6: the vacated edge is
+        # filled with the scroll colour (white), not a copy of old pixels.
+        data = (
+            _load_colour_table([(255, 255, 255), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(54, 12, 0, 1, [0b111111] * 12)
+            + _scroll_preset(h_s_cmd=2, v_s_cmd=0, colour=0)
+        )
+        dec = CdgDecoder(data)
+        dec.process_until(10)
+        upd = dec.update()
+        tiles = {(t["x"], t["y"]): t for t in upd["tiles"]}
+
+        def px(tx, x_off, y_off):
+            t = tiles[(tx, 0)]
+            i = (y_off * TILE_WIDTH + x_off) * 3
+            return tuple(t["data"][i : i + 3])
+
+        assert px(0, 42, 0) == (255, 0, 0)  # shifted-in content
+        # The rightmost columns were filled with the scroll colour (0=white).
+        assert px(5, 47, 0) == (255, 255, 255)
+
+    def test_scroll_right_by_command_one(self):
+        # h_s_cmd=1 means shift the other direction (-unit).
+        data = (
+            _load_colour_table([(0, 0, 0), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(6, 12, 0, 1, [0b111111] * 12)  # red at tile 0
+            + _scroll_copy(h_s_cmd=1, v_s_cmd=0)  # scroll right by 6
+        )
+        dec = CdgDecoder(data)
+        dec.process_until(10)
+        upd = dec.update()
+        tiles = {(t["x"], t["y"]): t for t in upd["tiles"]}
+
+        def px(tx, x_off, y_off):
+            t = tiles[(tx, 0)]
+            i = (y_off * TILE_WIDTH + x_off) * 3
+            return tuple(t["data"][i : i + 3])
+
+        # Content moved from x=6..12 to x=12..18 (tile 0, x_off 6..11).
+        assert px(0, 6, 0) == (255, 0, 0)
+        assert px(0, 0, 0) == (0, 0, 0)
+
+    def test_scroll_offset_change_marks_all_dirty(self):
+        # Changing the 1-pixel offsets (without a full-cell scroll) must
+        # mark every tile dirty.
+        dec = CdgDecoder(b"")
+        dec.update()  # clear the initial dirty mask
+        assert dec.update() is None
+        dec.process_until(1)  # offset-only scroll: h_offset 0 -> 5
+        dec._process_packet(_scroll_copy(h_s_cmd=0, v_s_cmd=0, h_offset=5))
+        upd = dec.update()
+        assert upd is not None
+        assert len(upd["tiles"]) == 24
+
+    def test_scroll_no_op_when_offsets_unchanged_and_zero_pixels(self):
+        dec = CdgDecoder(_scroll_copy(h_s_cmd=0, v_s_cmd=0))
+        dec.process_until(1)
+        # Nothing changed; the initial dirty mask is the only update.
+        upd = dec.update()
+        assert upd is not None
+        assert dec.update() is None
+
+    def test_scroll_columns_shifts_rows(self):
+        # A vertical copy scroll shifts the full-height column; the block
+        # moves down by 12 pixels within the framebuffer.
+        data = (
+            _load_colour_table([(0, 0, 0), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(6, 12, 0, 1, [0b111111] * 12)  # red at y=12..23
+            + _scroll_copy(h_s_cmd=0, v_s_cmd=1)  # scroll down by 12
+        )
+        dec = CdgDecoder(data)
+        dec.process_until(10)
+        w = CDG_FULL_WIDTH
+        assert dec.pixels[24 * w + 6] == 1  # shifted block at y=24
+        assert dec.pixels[12 * w + 6] == 0  # vacated row gets old border
+
+    def test_scroll_columns_preset_fills(self):
+        # Vertical preset scroll fills the vacated edge with the colour.
+        data = (
+            _load_colour_table([(0, 0, 0), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(6, 12, 0, 1, [0b111111] * 12)  # red at y=12..23
+            + _scroll_preset(h_s_cmd=0, v_s_cmd=1, colour=1)  # down, fill red
+        )
+        dec = CdgDecoder(data)
+        dec.process_until(10)
+        w = CDG_FULL_WIDTH
+        assert dec.pixels[0 * w + 6] == 1  # fill colour at the top edge
+        assert dec.pixels[24 * w + 6] == 1  # shifted block at y=24
+        assert dec.pixels[12 * w + 6] == 0  # vacated visible row
+
+    def test_tile_block_ignored_when_bit_set(self):
+        # data[1] bit 0x20 means "ignore this command".
+        dec = CdgDecoder(_tile_block(6, 12, 0, 1, [0b111111] * 12))
+        dec._process_packet(_packet(CDG_INST_TILE_BLOCK, bytes([0, 0x20]) + bytes(14)))
+        # No tile was drawn; the decoder stays on the initial blank frame.
+        assert dec.updated_tiles == 0xFFFFFFFF
+
+    def test_tile_block_clamped_to_bounds(self):
+        # Out-of-bounds origins are clamped, not drawn off-screen.
+        dec = CdgDecoder(b"")
+        data = bytearray(16)
+        data[2] = 0x1F  # y index 31 -> 372, clamps to 204
+        data[3] = 0x3F  # x index 63 -> 378, clamps to 294
+        dec._process_packet(_packet(CDG_INST_TILE_BLOCK, bytes(data)))
+        x, y = dec._clamp_tile_origin(bytes(data))
+        assert (x, y) == (CDG_FULL_WIDTH - 6, CDG_FULL_HEIGHT - 12)
+
+    def test_mark_tile_dirty_skips_out_of_range(self):
+        # Tiles beyond the visible grid are silently skipped.
+        dec = CdgDecoder(b"")
+        dec.update()
+        dec._mark_tile_dirty(CDG_FULL_WIDTH + 100, CDG_FULL_HEIGHT + 100)
+        assert dec.updated_tiles == 0
+
+    def test_update_returns_only_dirty_tiles(self):
+        # After a clean update, a single tile block dirties one tile; the
+        # update loop skips the rest.
+        data = (
+            _load_colour_table([(0, 0, 0), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(6, 12, 0, 1, [0b111111] * 12)
+        )
+        dec = CdgDecoder(data)
+        dec.process_until(10)
+        dec.update()  # consume the preset's full-screen dirty mask
+        dec._process_packet(_tile_block(6, 12, 0, 1, [0b111111] * 12))
+        upd = dec.update()
+        assert upd is not None
+        assert [(t["x"], t["y"]) for t in upd["tiles"]] == [(0, 0)]
