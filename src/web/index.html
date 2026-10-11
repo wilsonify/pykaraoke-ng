@@ -79,11 +79,16 @@ html, body {
   background: var(--bg-elevated);
 }
 .filters summary { cursor: pointer; color: var(--text-dim); font-weight: 600; }
+/* A <fieldset> so the format filters are a native group; the UA border,
+   padding and min-width are reset to keep the row's original geometry. */
 .filter-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
   flex-wrap: wrap;
 }
 .kind-filter {
@@ -107,13 +112,14 @@ html, body {
 
 /* ── Song lists ────────────────────────────────────────────────────── */
 .section-label {
+  margin: 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
   font-weight: 600;
 }
-.section-header { display: flex; justify-content: space-between; align-items: center; }
+.section-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 
 .song-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
 
@@ -161,10 +167,12 @@ html, body {
   padding: 8px;
   position: relative;
 }
+/* A <figure> so the CD+G surface has native semantics; UA margin reset. */
 #cdg-view {
   display: flex;
   justify-content: center;
   max-width: 100%;
+  margin: 0;
 }
 #cdg-canvas {
   image-rendering: pixelated;
@@ -215,12 +223,16 @@ html, body {
 .song-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .song-artist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* A <fieldset> so the transport is a native control group; UA chrome reset. */
 .player-controls {
   display: flex;
   gap: 6px;
   align-items: center;
   justify-content: center;
-  margin-top: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
 }
 .btn-control {
   width: 34px;
@@ -296,6 +308,8 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
 }
 .settings-row {
   display: flex;
@@ -306,33 +320,26 @@ html, body {
      overflowing the panel. */
   flex-wrap: wrap;
 }
-.settings-row label { flex: 1 1 auto; }
-.settings-row select,
-.settings-row input[type="text"] {
+.settings-row label { flex: 1 1 auto; display: flex; align-items: center; gap: 4px; }
+.settings-row select {
   flex: 1 1 8em;
   min-width: 0;
   max-width: 100%;
-}
-.settings-row select {
   background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 4px 6px;
 }
+.settings-row input[type="text"] {
+  flex: 1 1 8em;
+  min-width: 0;
+  max-width: 100%;
+}
 
 .muted { color: var(--text-dim); }
 
-/* ── Panels, section headers, state chips ──────────────────────────── */
-.section-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.section-label {
-  margin: 0;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  font-weight: 600;
-}
+/* ── Panels and state chips ────────────────────────────────────────── */
 .panel { display: flex; flex-direction: column; gap: 5px; }
 .count-badge { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 .state-chip {
@@ -382,7 +389,9 @@ html, body {
 .manage .hint { margin-top: 5px; }
 
 /* ── Scan diagnostics ──────────────────────────────────────────────── */
+/* An <output>, not a <p>, so keep the paragraph's 1em block margins. */
 .scan-summary {
+  margin: 1em 0;
   font-size: 11px;
   color: var(--text-dim);
   border-left: 2px solid var(--accent);
@@ -410,7 +419,6 @@ summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.song-row.selected { background: var(--bg-elevated); border-color: var(--accent); }
 .song-row.selected .song-row-title::before { content: "▸ "; color: var(--accent); }
 .song-row.playing { border-color: var(--ok); }
 .song-row.playing .song-row-title::before { content: "▶ "; color: var(--ok); }
@@ -454,7 +462,6 @@ summary:focus-visible {
 .volume-row .row-label { font-size: 11px; color: var(--text-dim); }
 
 /* ── Settings groups ───────────────────────────────────────────────── */
-.settings-panel { max-height: 55vh; overflow-y: auto; }
 .settings-head { display: flex; align-items: center; justify-content: space-between; }
 .settings-group { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; }
 .settings-group + .settings-group { border-top: 1px solid var(--border); padding-top: 8px; }
@@ -472,7 +479,6 @@ summary:focus-visible {
   letter-spacing: 0.06em;
   color: var(--text-dim);
 }
-.settings-row label { display: flex; align-items: center; gap: 4px; }
 .settings-actions { display: flex; gap: 6px; align-items: center; }
 .shortcuts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 11px; }
 .shortcuts kbd {
@@ -512,7 +518,7 @@ summary:focus-visible {
       <section id="library-section" class="panel" aria-labelledby="library-heading">
         <div class="section-header">
           <h2 id="library-heading" class="section-label">Library</h2>
-          <span id="library-count" class="count-badge" role="status" aria-live="polite">No songs yet</span>
+          <output id="library-count" class="count-badge">No songs yet</output>
         </div>
         <details id="library-manage" class="manage">
           <summary>Manage library</summary>
@@ -525,7 +531,7 @@ summary:focus-visible {
           <p id="library-folders" class="hint"></p>
           <p id="replace-hint" class="hint" hidden></p>
         </details>
-        <p id="scan-summary" class="scan-summary" hidden role="status"></p>
+        <output id="scan-summary" class="scan-summary" hidden></output>
         <button id="scan-issues" class="chip" hidden aria-expanded="false" aria-controls="scan-details"></button>
         <div id="scan-details" class="scan-details" hidden aria-label="Scan details"></div>
       </section>
@@ -536,19 +542,19 @@ summary:focus-visible {
           <input type="text" id="search-input" list="search-results" placeholder="Search title or artist…  ( / to focus, Esc to clear )" autocomplete="off" aria-label="Search songs by title, artist, or file name" aria-describedby="results-hint" />
           <datalist id="search-results"></datalist>
         </div>
-        <div class="filter-row" role="group" aria-label="Filter results by format">
+        <fieldset class="filter-row" aria-label="Filter results by format">
           <span class="hint">Format</span>
           <label class="kind-filter"><input type="checkbox" id="filter-cdg" checked /> CDG</label>
           <label class="kind-filter"><input type="checkbox" id="filter-kar" checked /> KAR/MID</label>
           <label class="kind-filter"><input type="checkbox" id="filter-mpg" checked /> MPG</label>
           <label class="kind-filter"><input type="checkbox" id="filter-lrc" checked /> LRC</label>
-        </div>
+        </fieldset>
         <div class="section-header">
           <h2 id="results-heading" class="section-label">Songs</h2>
           <span id="results-count" class="count-badge"></span>
         </div>
         <p id="results-hint" class="hint" hidden></p>
-        <div id="results-list" class="song-list" role="listbox" aria-labelledby="results-heading"></div>
+        <ul id="results-list" class="song-list" aria-labelledby="results-heading"></ul>
         <div id="results-empty" class="empty-state" hidden></div>
       </section>
 
@@ -556,14 +562,14 @@ summary:focus-visible {
       <section class="panel player-section" aria-labelledby="now-playing-heading">
         <div class="section-header">
           <h2 id="now-playing-heading" class="section-label">Now Playing</h2>
-          <span id="playback-state" class="state-chip" data-state="idle" role="status" aria-live="polite">Nothing loaded</span>
+          <output id="playback-state" class="state-chip" data-state="idle">Nothing loaded</output>
         </div>
         <div id="stage" class="stage" aria-label="Karaoke stage">
-          <!-- The canvas is HTML interactive content, so the image role and
-               its name live on the non-interactive wrapper instead. -->
-          <div id="cdg-view" role="img" aria-label="CD+G graphics for the current song">
+          <!-- The canvas is HTML interactive content, so it carries no role and
+               the description lives on the <figure> around it. -->
+          <figure id="cdg-view" aria-label="CD+G graphics for the current song">
             <canvas id="cdg-canvas" width="576" height="384"></canvas>
-          </div>
+          </figure>
           <div id="lyrics" class="lyrics"></div>
           <div id="video-slot"></div>
           <div id="stage-empty" class="stage-empty">Pick a song to start singing</div>
@@ -572,14 +578,14 @@ summary:focus-visible {
           <div id="current-song-title" class="song-title">—</div>
           <div id="current-song-artist" class="song-artist muted"></div>
         </div>
-        <div class="player-controls" role="group" aria-label="Playback controls">
+        <fieldset class="player-controls" aria-label="Playback controls">
           <button id="prev-btn" class="btn-control" title="Restart, or play the previous song (Ctrl+↑)" aria-label="Previous song">⏮</button>
           <button id="rewind-btn" class="btn-control" title="Skip back 5 seconds" aria-label="Rewind 5 seconds">⏪</button>
           <button id="play-btn" class="btn-control btn-play" title="Play or pause (Space)" aria-label="Play">▶</button>
           <button id="stop-btn" class="btn-control" title="Stop playback and unload the song" aria-label="Stop playback">⏹</button>
           <button id="ff-btn" class="btn-control" title="Skip forward 5 seconds" aria-label="Forward 5 seconds">⏩</button>
           <button id="next-btn" class="btn-control" title="Play the next queued song (Ctrl+→)" aria-label="Next song">⏭</button>
-        </div>
+        </fieldset>
         <div class="progress-row">
           <input type="range" id="progress-slider" min="0" max="1000" value="0" step="1" aria-label="Song position" />
           <span class="time-display"><span id="time-current">0:00</span> / <span id="time-total">0:00</span></span>
@@ -605,9 +611,9 @@ summary:focus-visible {
     </main>
 
     <!-- Fixed bottom: feedback + status -->
-    <div id="notices" class="notices" role="status" aria-live="polite" hidden></div>
+    <output id="notices" class="notices" hidden></output>
     <footer class="status-bar">
-      <span id="status-message" role="status" aria-live="polite">Starting…</span>
+      <output id="status-message">Starting…</output>
       <span id="engine-status" class="muted" title="Engine details">Loading engine…</span>
     </footer>
   </div>
@@ -684,10 +690,10 @@ summary:focus-visible {
       </div>
     </details>
 
-    <p id="settings-rescan-note" class="hint" hidden role="status">
+    <output id="settings-rescan-note" class="hint" hidden>
       These changes take effect the next time the library is scanned.
       <button id="settings-rescan-btn" class="btn btn-secondary btn-sm" type="button">Rescan library now</button>
-    </p>
+    </output>
 
     <section class="settings-group" aria-labelledby="settings-shortcuts-heading">
       <h3 id="settings-shortcuts-heading" class="settings-group-title">Keyboard shortcuts</h3>
