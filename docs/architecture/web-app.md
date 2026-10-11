@@ -35,13 +35,13 @@ and a fixed status bar (see the
 ├── header.app-header        fixed top: title · Add Folder · Settings
 ├── main.main-column         the only scrollable region
 │   ├── details#library-filters   library / rescan
-│   ├── section.search-section    #search-input + kind filters
-│   ├── section.results-section   #results-list  (role=listbox)
+│   ├── section.search-section    #search-input + kind filter fieldset
+│   ├── section.results-section   #results-list  (<ul> of <li> song rows)
 │   ├── section.player-section    #stage (canvas · #lyrics · video slot)
 │   │                             #current-song-title / artist
-│   │                             .player-controls (prev/replay/play/stop/ff/next)
+│   │                             fieldset.player-controls (prev/replay/play/stop/ff/next)
 │   │                             #progress-slider · #volume-slider
-│   └── section.queue-section     #queue-list  (role=list)
+│   └── section.queue-section     #queue-list   (<ul> of <li> queue rows)
 └── footer.status-bar        fixed bottom: status message · engine status
 
 #settings-panel (outside #app)   inline collapsible settings — no modal
@@ -49,8 +49,17 @@ and a fixed status bar (see the
 ```
 
 The stage holds all three playback surfaces: a `<canvas id="cdg-canvas">` for
-CD+G, `<div id="lyrics">` for LRC/MIDI lyrics, and a `#video-slot` for MPEG
-video. Only one is active at a time.
+CD+G (wrapped in `<figure id="cdg-view">`, which carries the description),
+`<div id="lyrics">` for LRC/MIDI lyrics, and a `#video-slot` for MPEG video.
+Only one is active at a time.
+
+Where HTML has a native element for a role, the markup uses the element rather
+than the role: the live regions (`#library-count`, `#scan-summary`,
+`#playback-state`, `#notices`, `#status-message`, `#settings-rescan-note`) are
+`<output>`, the format filters and the transport are `<fieldset>`s, the two
+song lists are `<ul>`s of `<li>` rows, and the CD+G surface is a `<figure>`.
+The keyboard-selected row is marked with `aria-current`, since the rows are
+list items rather than listbox options.
 
 ## JavaScript ↔ Python boundary
 
