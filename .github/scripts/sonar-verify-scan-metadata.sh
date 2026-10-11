@@ -8,7 +8,7 @@
 set -uo pipefail
 
 if [[ ! -f .scannerwork/report-task.txt ]]; then
-  echo "::error::.scannerwork/report-task.txt not found — SonarQube Scan did not complete successfully. Check the 'SonarQube Scan' step logs above."
+  echo "::error::.scannerwork/report-task.txt not found — SonarQube Scan did not complete successfully. Check the 'SonarQube Scan' step logs above." >&2
   ls -la .scannerwork/ || true
   exit 1
 fi
