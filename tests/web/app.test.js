@@ -845,13 +845,14 @@ describe('index.html: wiring contract with app.js', () => {
     }
   });
 
-  it('names the CD+G surface without giving the canvas a role', () => {
-    // <canvas> is interactive content, so it must not carry a non-interactive
-    // role; the description belongs on the wrapper around it.
-    const view = /<div id="cdg-view"[^>]*>/.exec(html);
-    expect(view, 'missing the #cdg-view wrapper').toBeTruthy();
-    expect(view[0]).toContain('role="img"');
+  it('names the CD+G surface with a figure and no role on the canvas', () => {
+    // <canvas> is HTML interactive content, so it must not carry a
+    // non-interactive role; the native <figure> around it carries the name,
+    // which is also the element the role="img" would have imitated.
+    const view = /<figure id="cdg-view"[^>]*>/.exec(html);
+    expect(view, 'missing the #cdg-view figure').toBeTruthy();
     expect(view[0]).toContain('aria-label=');
+    expect(view[0]).not.toContain('role=');
     const canvas = (html.match(/<canvas[^>]*>/g) || []).find((tag) =>
       tag.includes('id="cdg-canvas"'),
     );
@@ -867,6 +868,61 @@ describe('index.html: wiring contract with app.js', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('uses the native element instead of an ARIA role that has one', () => {
+    // status/group/listbox/img/list/option all have native equivalents, and
+    // every one of them is now the element itself rather than a role.
+    const tags = html.match(/<[a-z][^>]*>/gi) || [];
+    const offenders = tags.filter((tag) =>
+      /role="(img|status|group|listbox|list|option|presentation|none|document|heading)"/.test(tag),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the live regions and control groups as native elements', () => {
+    for (const id of [
+      'library-count',
+      'scan-summary',
+      'playback-state',
+      'notices',
+      'status-message',
+      'settings-rescan-note',
+    ]) {
+      const output = new RegExp(`<output[^>]*id="${id}"`);
+      expect(output.test(html), `#${id} should be an <output>`).toBe(true);
+    }
+    expect(html).toMatch(/<fieldset class="filter-row"/);
+    expect(html).toMatch(/<fieldset class="player-controls"/);
+    expect(html).toMatch(/<ul id="results-list"/);
+    expect(html).toMatch(/<figure id="cdg-view"/);
+  });
+
+  it('marks the selected row with aria-current, not a listbox option', () => {
+    // The rows are list items, so "selected" is aria-current; aria-selected
+    // and role="option" are only valid inside a listbox.
+    expect(appJs).toContain("const row = document.createElement('li')");
+    expect(appJs).not.toContain("setAttribute('role'");
+    expect(appJs).not.toContain('aria-selected');
+    expect(appJs).toContain("row.setAttribute('aria-current', 'true')");
+  });
+
+  it('declares each stylesheet selector only once', () => {
+    const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
+    expect(style, 'missing the inline stylesheet').toBeTruthy();
+    const css = style[1].replace(/\/\*[\s\S]*?\*\//g, '');
+    const selectors = [];
+    for (const block of css.matchAll(/(?:^|\})\s*([^{}]+)\{/g)) {
+      for (const sel of block[1].split(',')) {
+        const name = sel.trim().replace(/\s+/g, ' ');
+        if (name) selectors.push(name);
+      }
+    }
+    expect(selectors.length).toBeGreaterThan(100);
+    const counts = new Map();
+    for (const sel of selectors) counts.set(sel, (counts.get(sel) || 0) + 1);
+    const duplicates = [...counts].filter(([, n]) => n > 1).map(([sel]) => sel);
+    expect(duplicates).toEqual([]);
+  });
+
   it('marks the settings that need a rescan next to their labels', () => {
     for (const id of [
       'setting-zips',
@@ -875,7 +931,7 @@ describe('index.html: wiring contract with app.js', () => {
       'setting-include-patterns',
       'setting-exclude-patterns',
     ]) {
-      const block = new RegExp(`<div class="settings-row">([\\s\\S]*?)id="${id}"`).exec(html);
+      const block = new RegExp(String.raw`<div class="settings-row">([\s\S]*?)id="${id}"`).exec(html);
       expect(block, `missing settings row for #${id}`).toBeTruthy();
       expect(block[1]).toContain('rescan');
     }
