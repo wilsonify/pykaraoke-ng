@@ -3,15 +3,16 @@
 How PyKaraoke-NG is assembled and packaged on Windows, macOS, and Linux — and
 the rules that keep those builds working on every CI runner.
 
-[← Development](index.md) · [Architecture overview](../architecture/overview.md)
+[← Development](./index.md) · [Architecture overview](../architecture/overview.md)
 
 ---
 
 ## What a build produces
 
-There is no front-end build step: `src/web/index.html` is the whole
-application. A build produces the two things that file needs at runtime, and
-Tauri then embeds the whole `src/web/` tree into the desktop installers:
+The front end is now a small webpack project under `src/web/`, but the
+*shape* of the application on disk is almost the same as before: a single
+`index.html` that references a stylesheet, a JS bundle, the PyScript runtime,
+and the Pyodide interpreter, plus an inline Python bridge.
 
 ```text
 src/pykaraoke/                      pure-stdlib Python engine
@@ -19,26 +20,43 @@ src/pykaraoke/                      pure-stdlib Python engine
         │  python src/scripts/build-web.py
         ▼
 src/web/
-├── index.html                      the application (checked in)
-├── _wheel/pykaraoke_ng-*.whl       engine wheel        (generated, git-ignored)
+├── dist/                           production build (generated, git-ignored)
+│   ├── index.html                  the application page
+│   ├── style.css                   extracted CSS
+│   └── app.js                      extracted JS bundle
+├── src/
+│   ├── index.html                  source of truth for the page structure
+│   ├── webpack.config.cjs          webpack configuration (CommonJS, runs in node_modules)
+│   ├── styles.css                   CSS, extracted to dist/style.css by webpack
+│   ├── main.js                     entry module: startup + top-level DOM wiring
+│   ├── helpers.js                  pure helpers (exported for tests)
+│   ├── store.js                    state + persistence helpers
+│   ├── bridge.js                   engine-bridge wrapper
+│   ├── bootstrap.js                boot sequence (restore state, wire UI, start)
+│   ├── ui/
+│   │   ├── wire-ui.js              top-level DOM wiring
+│   │   ├── commands.js             keyboard shortcut handlers
+│   │   ├── render.js               rendering helpers (library count, scan summary,
+│   │   │                           results, queue, status, playing, zoom)
+│   │   └── playback.js             file access, scanning, playback, transport,
+│   │   │                           CDG stage, lyrics, and the MidiSynth class
+│   │   └── commands.js             keyboard shortcut handlers
+│   └── lib/
+│       ├── format-time.js
+│       ├── debounce.js
+│       ├── sorting.js
+│       ├── filtering.js
+│       └── snapshots.js
+├── _wheel/                         engine wheel        (generated, git-ignored)
 └── _assets/
     ├── pyodide/                    vendored runtime    (generated, git-ignored)
     └── pyscript/                   vendored runtime    (generated, git-ignored)
-        │
-        │  npx tauri build   (frontendDist → src/web/)
-        ▼
-src/runtimes/tauri/src-tauri/target/release/bundle/   deb / NSIS / dmg
 ```
 
-The engine wheel is built with `--no-deps` and declares no runtime
-dependencies, so the packaged application works fully offline.
-
-!!! note "The authoritative rules"
-    The binding requirements live in the
-    [build-system specification](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/build-system/spec.md).
-    This page is the practical companion.
-
----
+The PyScript bridge (`<script type="py">` in the page) is prose extracted
+from `src/web/index.html` into `src/web/src/pyscript-bridge.raw`; the webpack
+configuration embeds it verbatim into the built `index.html` so the production
+page is identical to the old monolithic page.
 
 ## Building
 
@@ -55,6 +73,16 @@ PyScript into `src/web/_assets/`. Run it before serving the page by hand:
 python -m http.server 18000 --directory src/web
 ```
 
+### Build the frontend (webpack)
+
+```bash
+cd src/web
+npx webpack --config webpack.config.cjs --mode production
+```
+
+This produces `src/web/dist/index.html`, `style.css`, and `app.js`. No
+frontend dependency tree is committed other than `package-lock.json`.
+
 ### Build the desktop app
 
 ```bash
@@ -65,13 +93,9 @@ npx tauri build --bundles dmg    # macOS
 npx tauri build --bundles deb    # Linux
 ```
 
-`beforeBuildCommand` runs `build-web.py` for you, so you do not have to
-regenerate the assets first. Output lands in
-`src/runtimes/tauri/src-tauri/target/release/bundle/`.
-
-For a running comparison, see [Quick start](../getting-started/quickstart.md).
-
----
+`beforeBuildCommand` runs `build-web.py` *and* the webpack production build,
+so you do not have to regenerate the assets or the JS bundle first. Output
+lands in `src/runtimes/tauri/src-tauri/target/release/bundle/`.
 
 ## Tauri hooks and their working directory
 
@@ -80,130 +104,127 @@ from `src-tauri/`. That single fact has caused every path bug in this build.
 
 | Hook | Value | Effect |
 |------|-------|--------|
-| `beforeBuildCommand` | `npm run build` → `python ../../scripts/build-web.py` | Rebuild the wheel and vendor the runtime into `src/web/` |
+| `beforeBuildCommand` | `python ../../scripts/build-web.py && cd ../.. && npm run build` | Rebuild the wheel, vendor the runtime, then run the webpack production build |
 | `beforeDevCommand` | `python ../../scripts/serve-web.py 18000` | Serve `src/web/` for `devUrl` |
-| `frontendDist` | `../../../web` | What Tauri embeds; expressed relative to `src-tauri/` |
+| `devUrl` | `http://localhost:18000` | Where the Tauri dev window loads from |
+| `frontendDist` | `../../../web/dist` | What Tauri embeds; expressed relative to `src-tauri/` |
 
 ```text
 src/runtimes/tauri/          ← CWD for both hooks
-├── package.json             ← "build": python ../../scripts/build-web.py
+├── package.json             ← "build": python ../../scripts/build-web.py && cd ../.. && npm run build
 └── src-tauri/               ← the Rust project
-    ├── tauri.conf.json      ← frontendDist: ../../../web
+    ├── tauri.conf.json      ← frontendDist: ../../../web/dist
     ├── Cargo.toml
     └── build.rs
 ```
 
-From `src/runtimes/tauri/`, the scripts are two levels up
-(`../../scripts/...`); from `src-tauri/`, the checkout root and the web
-directory are three levels up (`../../../`). When a hook or package script
-moves, recompute **every** relative path from the new working directory before
-pushing.
+From `src/runtimes/tauri/`, the scripts are two levels up (`../../scripts/...`);
+from `src-tauri/`, the checkout root and the web *distribution* directory are
+three levels up (`../../../web/dist`). When a hook or package script moves,
+recompute **every** relative path from the new working directory before pushing.
 
----
+## Development workflow
 
-## Cross-platform command rules
-
-Shared build configuration — `tauri.conf.json`, CI `run:` blocks, and package
-scripts — executes on every platform. It must not assume a POSIX shell.
-
-!!! warning "Prohibited in shared build configuration"
-    `bash -c '...'`, `rm -rf`, `cp`, `mv`, `mkdir -p`, and `export VAR=val` do
-    not work on the Windows runner. Hardcoded forward-slash paths are fragile
-    too.
-
-| Need | Cross-platform solution |
-|------|-------------------------|
-| Build logic (wheel + asset vendoring) | `python src/scripts/build-web.py` using stdlib `pathlib` |
-| Build logic that belongs to Rust | `build.rs` |
-| Path construction | `pathlib` (Python) or `PathBuf::join()` (Rust) |
-| A genuinely platform-specific step | Guard it, e.g. `if: matrix.platform == 'linux'` |
-
-If a step needs conditional logic, file copying, or path building, put that
-logic in a cross-platform script rather than in shared shell syntax.
-
----
-
-## Generated assets stay out of Git
-
-`src/web/_wheel/` and `src/web/_assets/` are build outputs and are ignored by
-Git. Never commit them, and never hand-edit them — the next build overwrites
-them.
-
-A fresh checkout has no `_wheel/` or `_assets/`, so a page opened before the
-first build loads but never starts the engine. The remedy is always the same:
-run `src/scripts/build-web.py`.
-
----
-
-## Local validation checklist
-
-Run these before pushing any build-system change:
+The Tauri dev command serves the *source* tree, not the webpack output:
 
 ```bash
-# 1. Regenerate the wheel + vendored runtime from the correct CWD
-cd src/runtimes/tauri && npm run build
-
-# 2. Confirm the artifacts landed in src/web/
-ls src/web/_wheel src/web/_assets
-
-# 3. Fast Rust check (no full compile)
-cd src/runtimes/tauri/src-tauri && cargo check
+cd src/runtimes/tauri
+npm ci
+npx tauri dev
 ```
 
-When the change touches the CI workflow itself, reproduce the build stage
-locally with [act](https://github.com/nektos/act):
+`beforeDevCommand` starts `python ../../scripts/serve-web.py 18000`, which
+serves `src/web/` (including the inline `index.html`, `_assets/`, and `_wheel/`)
+on `http://localhost:18000`. Edit `src/web/src/*.js`, `styles.css`, or
+`index.html` and reload the window — there is no dev rebuild step.
+
+If you want to see the webpack output locally, build it and then serve the
+distribution directory:
 
 ```bash
-act -j build --workflows .github/workflows/ci-cd.yml \
-  -P ubuntu-latest=catthehacker/ubuntu:act-22.04 \
-  --matrix platform:linux --no-cache-server
+cd src/web
+npx webpack --config webpack.config.cjs --mode production
+python src/scripts/serve-web.py 18000
 ```
 
----
+That serves `src/web/dist/`, which is what Tauri embeds in the production
+build. The dev server does **not** serve `dist/` during `tauri dev`.
 
-## CI build matrix
+### The PyScript bridge
 
-The `build` stage fans out across three runners and produces one installer per
-platform. `fail-fast: false` means one platform failing does not suppress the
-others.
-
-| Platform | Runner | Bundle | Artifact |
-|----------|--------|--------|----------|
-| Linux | `ubuntu-latest` | `deb` | `tauri-linux-x86_64` |
-| Windows | `windows-latest` | `nsis` | `tauri-windows-x86_64` |
-| macOS | `macos-latest` | `dmg` | `tauri-macos-aarch64` |
-
-Each runner installs the Tauri CLI with `npm ci`, sets up Python for the wheel,
-and runs `npx tauri build --bundles <bundle>` — which triggers
-`beforeBuildCommand` and rebuilds the assets as part of the build.
-
-### Test the effect, not the command text
-
-Build-configuration tests must assert on what a command **produces**, never on
-the literal string it contains.
+The inline Python bridge is the only Python in the page. It builds one
+`pykaraoke.webapp.KaraokeApp` and publishes a single JSON-friendly dispatcher:
 
 ```python
-# WRONG — breaks the moment the command is refactored
-assert "build-web" in before_build_command
+app = KaraokeApp()
 
-# RIGHT — verify the artifacts the hook must produce
-subprocess.run(hook, cwd=tauri_root, check=True)
-assert list(web_dir.glob("_wheel/*.whl"))
-assert (web_dir / "_assets" / "pyscript" / "core.js").exists()
+def api(name, *args):
+    return getattr(app, name)(*[_to_py(a) for a in args])
+
+window.pykaraoke_api = api
 ```
 
----
+That text lives in two places:
 
-## Lessons learned
+- `src/web/index.html` — the source of truth (the page you edit).
+- `src/web/src/pyscript-bridge.raw` — the same text extracted into its own
+  file so the webpack configuration can embed it verbatim into the built
+  `index.html`.
 
-Every rule on this page exists because breaking it broke CI.
+If you change the bridge, change it in `src/web/index.html` first, then copy
+the updated text into `pyscript-bridge.raw` and rebuild so the production page
+stays in sync.
 
-| Date | What broke | Root cause | Resolution |
-|------|-----------|------------|------------|
-| 2026-02-27 | All three platform builds | `beforeBuildCommand` used `bash -c` with four-level paths while Tauri ran it from `src/runtimes/tauri/` (three levels) | Fixed the hook's assumed working directory and path depth |
-| 2026-02-28 | Windows build | `bash -c '...'` is unavailable on the Windows runner | Moved the build logic out of the shell into a cross-platform Python script |
-| 2026-02-28 | Build-configuration tests | Tests asserted `"backend" in before_build_command`, which broke on refactor | Tests now run the hook and assert on the artifacts it produces |
-| 2026-10-07 | `tauri dev` | `beforeDevCommand` used the wrong path depth after the scripts directory moved | Corrected the relative path to `../../scripts/serve-web.py` |
+## Testing
 
-The deeper lesson: **always confirm which directory is the actual CWD** before
-writing a relative path, and prefer a cross-platform script over shell syntax.
+### Python
+
+```bash
+uv run pytest tests/pykaraoke/ -v              # unit tests
+uv run pytest tests/pykaraoke/ --cov --cov-report=html
+uv run pytest tests/pykaraoke/test_cdg.py -v   # single file
+```
+
+### Frontend
+
+```bash
+cd tests/web
+npm ci
+npm test
+```
+
+The vitest suite no longer extracts the script out of `src/web/index.html`;
+the tests import the extracted modules directly from `src/web/src/`. Keeping
+those modules green is part of every change.
+
+### Rust
+
+```bash
+cd src/runtimes/tauri/src-tauri
+cargo test
+```
+
+### Everything
+
+```bash
+cd src/runtimes/tauri
+./../../scripts/run-tests.sh          # pytest + vitest
+```
+
+## Code Quality
+
+```bash
+uv run ruff check .             # lint
+uv run ruff check . --fix       # auto-fix
+uv run ruff format .            # format
+```
+
+## Editing rules
+
+- Keep `src/web/src/` as the place where JS/CSS/HTML responsibilities are
+  separated: page structure in `index.html`, CSS in `styles.css`, JS modules
+  in `src/web/src/`.
+- Keep `src/pykaraoke/` untouched by the frontend refactor; engine work
+  belongs there and must stay **stdlib-only** so it runs under Pyodide.
+- Changes that touch extracted logic must keep `tests/web` green.
+- Do not add frontend dependencies unless there is a concrete, documented need.
