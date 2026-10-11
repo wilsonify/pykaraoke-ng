@@ -25,7 +25,7 @@ if [[ ${host_url} == "https://sonarcloud.io" || ${host_url} == "https://sonarclo
 elif [[ -n ${host_url} ]]; then
   echo "Sonar host type: self-hosted SonarQube Server (value hidden)"
 else
-  echo "::warning::SONAR_HOST_URL is empty."
+  echo "::warning::SONAR_HOST_URL is empty." >&2
 fi
 host_base="$(printf '%s' "${host_url}" | sed -nE 's#^[a-zA-Z]+://[^/]+#&#p')"
 
@@ -34,16 +34,16 @@ grep -v '^[[:space:]]*#' sonar-project.properties | grep -v '^[[:space:]]*$' || 
 
 echo "--- Coverage inputs expected by sonar-project.properties ---"
 if ! ls -la coverage.xml pytest-junit.xml; then
-  echo "::warning::coverage inputs missing (scan may warn/fail on coverage)."
+  echo "::warning::coverage inputs missing (scan may warn/fail on coverage)." >&2
 fi
 
 failed=0
 if [[ -z ${token} ]]; then
-  echo "::error::SONAR_TOKEN is empty. Set the SONAR_TOKEN secret."
+  echo "::error::SONAR_TOKEN is empty. Set the SONAR_TOKEN secret." >&2
   failed=1
 fi
 if [[ -z ${host_url} ]]; then
-  echo "::error::Sonar host URL is empty. Set the SONARQUBE_HOST_URL secret."
+  echo "::error::Sonar host URL is empty. Set the SONARQUBE_HOST_URL secret." >&2
   failed=1
 fi
 if [[ ${failed} -ne 0 ]]; then
@@ -53,7 +53,7 @@ fi
 # A pasted secret with a stray space/newline authenticates as garbage and the
 # scanner fails with HTTP 403. Catch that here with a clear message.
 if printf '%s' "${token}" | grep -q '[[:space:]]'; then
-  echo "::error::SONAR_TOKEN contains whitespace (often a stray space/newline from copy-paste). Re-paste the secret with no extra characters."
+  echo "::error::SONAR_TOKEN contains whitespace (often a stray space/newline from copy-paste). Re-paste the secret with no extra characters." >&2
   exit 1
 fi
 
@@ -66,10 +66,10 @@ if [[ -n ${host_base} ]]; then
   if printf '%s' "${validate_out}" | grep -q '"valid":true'; then
     echo "Token check: server reports the token is valid."
   elif printf '%s' "${validate_out}" | grep -q '"valid":false'; then
-    echo "::error::Sonar server rejected SONAR_TOKEN (api/authentication/validate returned valid:false). Generate a new token with Execute Analysis permission and update the SONAR_TOKEN secret."
+    echo "::error::Sonar server rejected SONAR_TOKEN (api/authentication/validate returned valid:false). Generate a new token with Execute Analysis permission and update the SONAR_TOKEN secret." >&2
     exit 1
   else
-    echo "::warning::Token validation inconclusive (no valid:true/false in response). Continuing; the scan step will surface auth errors."
+    echo "::warning::Token validation inconclusive (no valid:true/false in response). Continuing; the scan step will surface auth errors." >&2
   fi
 fi
 
