@@ -1,0 +1,33 @@
+/* PyKaraoke NG — slim sidebar DJ panel
+   (see openspec/specs/ux-slim-sidebar/spec.md). */
+
+:root {
+  --bg: #14151a;
+  --bg-elevated: #1c1e25;
+  --bg-input: #101116;
+  --border: #2c2f3a;
+  --text: #e8e9ed;
+  --text-dim: #9aa0ae;
+  --accent: #e8b64c;
+  --accent-strong: #ffd173;
+  --danger: #e06c75;
+  --ok: #7ec699;
+  --radius: 6px;
+  /* Duet parts (generic singer ids): blue = A, green = B, violet = shared. */
+  --part-a: #6cb6ff;
+  --part-a-lit: #a9d4ff;
+  --part-b: #7ec699;
+  --part-b-lit: #a9e3c0;
+  --part-ab: #c39bff;
+  --part-ab-lit: #ddc8ff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
