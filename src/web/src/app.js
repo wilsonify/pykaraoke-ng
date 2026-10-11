@@ -293,37 +293,14 @@ if (isBrowser) {
     setBusy(true);
     setStatus(replace ? 'Replacing the library…' : 'Scanning library…');
     try {
-      // Keep a basename index (lowercased) for audio/zip lookup.
-      for (const e of entries) {
-        const base = e.name.toLowerCase();
-        if (!state.pathByBase.has(base)) state.pathByBase.set(base, e.path);
-      }
-      if (!tauriCore) {
-        for (const file of window.__pickedFiles || []) {
-          const path = file.webkitRelativePath || file.name;
-          state.files.set(path, file);
-          const base = file.name.toLowerCase();
-          if (!state.pathByBase.has(base)) state.pathByBase.set(base, path);
-        }
-        window.__pickedFiles = [];
-      }
+      indexPickedPaths(entries);
       const result = callApi('scan_files', entries, replace);
       const zips = await scanZips(entries);
       await refreshSettings();
       await refreshLibraryViews();
       renderScanReport();
       persist();
-      const total = state.libraryCount;
-      const headline = `${replace ? 'Library replaced' : 'Library scan complete'} — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`;
-      setStatus(headline);
-      if (zips.failed) {
-        notify(`${formatCount(zips.failed)} ZIP archive${zips.failed === 1 ? '' : 's'} could not be opened.`, { kind: 'warn' });
-      }
-      notify(scanView ? scanView.summary : headline, {
-        kind: scanView?.severity === 'warn' ? 'warn' : 'info',
-        actionLabel: scanView ? 'See details' : '',
-        onAction: scanView ? openScanDetails : null,
-      });
+      announceScan(replace, zips);
       return result;
     } catch (err) {
       console.error(err);
@@ -333,6 +310,48 @@ if (isBrowser) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Point one (lowercased) basename at the path it came from. */
+  function addPathIndex(name, path) {
+    const base = name.toLowerCase();
+    if (!state.pathByBase.has(base)) state.pathByBase.set(base, path);
+  }
+
+  /**
+   * Index the scanned entries — plus the File objects the browser handed us —
+   * by basename, so companion audio and archive lookups can resolve a path.
+   */
+  function indexPickedPaths(entries) {
+    for (const e of entries) addPathIndex(e.name, e.path);
+    if (tauriCore) return;
+    for (const file of window.__pickedFiles || []) {
+      const path = file.webkitRelativePath || file.name;
+      state.files.set(path, file);
+      addPathIndex(file.name, path);
+    }
+    window.__pickedFiles = [];
+  }
+
+  /** Notice options for the last scan summary, with the route back to details. */
+  function scanNoticeOptions() {
+    if (!scanView) return { kind: 'info' };
+    return {
+      kind: scanView.severity === 'warn' ? 'warn' : 'info',
+      actionLabel: 'See details',
+      onAction: openScanDetails,
+    };
+  }
+
+  /** The status line and notices that close out a scan. */
+  function announceScan(replace, zips) {
+    const total = state.libraryCount;
+    const headline = `${replace ? 'Library replaced' : 'Library scan complete'} — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`;
+    setStatus(headline);
+    if (zips.failed) {
+      notify(`${formatCount(zips.failed)} ZIP archive${zips.failed === 1 ? '' : 's'} could not be opened.`, { kind: 'warn' });
+    }
+    notify(scanView ? scanView.summary : headline, scanNoticeOptions());
   }
 
   async function scanZips(entries) {
@@ -841,7 +860,7 @@ if (isBrowser) {
     const el = $('notices');
     el.hidden = true;
     el.textContent = '';
-    el.removeAttribute('data-kind');
+    delete el.dataset.kind;
   }
 
   /** Non-blocking feedback, with an optional one-click action (Undo, Retry). */
