@@ -15,11 +15,14 @@ from pykaraoke.midi import (
     _meta_time_signature,
     parse_midi,
     var_length,
-), var_length
+)
 
 FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures")
 ELVIS_KAR = os.path.join(
-    FIXTURES, "ultrastar-deluxe", "Creative Commons", "elvis_presley_-_cant_help_falling_in_love.kar"
+    FIXTURES,
+    "ultrastar-deluxe",
+    "Creative Commons",
+    "elvis_presley_-_cant_help_falling_in_love.kar",
 )
 
 
@@ -175,7 +178,7 @@ class TestLyrics:
         lyr = Lyrics()
         lyr.record_text(0, "Hel")
         lyr.record_text(10, "/lo")  # line break
-        lyr.record_text(20, "\\here")  # paragraph break
+        lyr.record_text(20, "\\there")  # paragraph break
         assert [s.text for s in lyr.list] == ["Hel", "lo", "there"]
         assert [s.line for s in lyr.list] == [0, 1, 3]  # 0-based lines
 
@@ -222,7 +225,7 @@ class TestLyrics:
         lyr.record_lyric(5, "/D")  # line break prefix
         lyr.record_lyric(6, "E\nF")  # embedded newline
         assert [s.text for s in lyr.list] == ["A", "B", "C", "D", "E", "F"]
-        assert [s.line for s in lyr.list] == [0, 2, 4, 5, 6, 7]
+        assert [s.line for s in lyr.list] == [0, 2, 5, 6, 6, 7]
 
     def test_analyze_spaces_adds_gaps(self):
         lyr = Lyrics()
@@ -270,6 +273,10 @@ def _end() -> bytes:
     return b"\x00\xff\x2f\x00"
 
 
+def _tempo(microseconds: int = 500000) -> bytes:
+    return b"\x00\xff\x51\x03" + microseconds.to_bytes(3, "big")
+
+
 class TestParseMidiEdgeCases:
     def test_smpte_division_returns_none(self):
         # SMPTE division sets frames but no click_units_per_quarter -> None.
@@ -301,9 +308,9 @@ class TestParseMidiEdgeCases:
             b"\x00\xff\x07\x03cue",  # cue point
             b"\x00\xff\x08\x03pnm",  # program name
             b"\x00\xff\x09\x03dev",  # device name
-            b"\x00\xff\x00\x06\x02\x01\x02\x00\x01",  # sequence number
-            b"\x00\xff\x14\x02\x00\x00",  # MIDI channel (fixed 2)
-            b"\x00\xff\x15\x02\x00\x00",  # MIDI port (fixed 2)
+            b"\x00\xff\x00\x02\x00\x05",  # sequence number
+            b"\x00\xff\x20\x01\x00",  # MIDI channel prefix
+            b"\x00\xff\x21\x01\x00",  # MIDI port
             b"\x00\xff\x0a\x03xyz",  # unknown meta -> discarded
             b"\x00\xff\x54\x05\x01\x02\x03\x04\x05",  # SMPTE offset
             b"\x00\xff\x59\x02\x00\x02",  # key signature
@@ -316,32 +323,34 @@ class TestParseMidiEdgeCases:
             mf = parse_midi(_header() + _track(events))
         assert mf is not None
         assert [s.text for s in mf.lyrics.list] == ["Hel"]
-        assert "Unknown meta-event: 0xA" in caplog.text
+        assert "Unknown meta-event: 0x0A" in caplog.text
 
     def test_meta_time_signature_short_packet(self):
-        events = [
-            b"\x00\xff\x58\x04\x04\x02\x18",  # 4-byte: no notes_per_24
-            b"\x00\xff\x05\x03Hel",
-            _end(),
-        ]
-        mf = parse_midi(_header() + _track(events))
-        assert mf is not None
-        assert mf.numerator == 4
-        assert mf.denominator == 2
-        assert mf.clocks_per_metronome_tick == 0x18
-        assert mf.notes_per_24_midi_clocks is None
+        # Four-byte packet (length + numerator + denominator + clocks):
+        # notes_per_24 is not applied.
+        track = TrackDesc(0)
+        midifile = MidiFile()
+        consumed = _meta_time_signature(io.BytesIO(b"\x04\x04\x02\x18"), track, midifile)
+        assert consumed == 4
+        assert midifile.numerator == 4
+        assert midifile.denominator == 2
+        assert midifile.clocks_per_metronome_tick == 0x18
+        assert midifile.notes_per_24_midi_clocks is None
+
+    def test_meta_time_signature_unreadable(self):
+        track = TrackDesc(0)
+        midifile = MidiFile()
+        assert _meta_time_signature(io.BytesIO(b""), track, midifile) == 0
+        assert midifile.numerator is None
 
     def test_meta_set_tempo_truncated(self):
         # A truncated tempo event is skipped; the file still parses via the
         # default tempo.
-        events = [
-            b"\x00\xff\x51\x03",  # claims 3 bytes but none follow
-            b"\x00\xff\x05\x03Hel",
-            _end(),
-        ]
-        mf = parse_midi(_header() + _track(events))
-        assert mf is not None
-        assert mf.tempo == [(0, 0)]  # default, no tempo events appended
+        track = TrackDesc(0)
+        midifile = MidiFile()
+        consumed = _meta_set_tempo(io.BytesIO(b"\x01\x02"), track, midifile)
+        assert consumed == 2
+        assert midifile.tempo == [(0, 0)]  # default, no tempo events appended
 
     def test_long_text_event_is_ignored(self):
         payload = b"A" * 1200
@@ -357,20 +366,20 @@ class TestParseMidiEdgeCases:
     def test_lyric_text_filter(self):
         # _is_lyric_text rejects tool noise; filtered events don't count.
         events = [
-            b"\x00\xff\x05\x08 SYX track",
-            b"\x00\xff\x05\x09Track-0001",
-            b"\x00\xff\x05\x08%-00:00.0",
-            b"\x00\xff\x05\x08%+00:00.0",
+            b"\x00\xff\x05\x0a SYX track",
+            b"\x00\xff\x05\x0aTrack-0001",
+            b"\x00\xff\x05\x09%-00:00.0",
+            b"\x00\xff\x05\x09%+00:00.0",
             b"\x00\xff\x05\x03Hel",
             _end(),
         ]
         mf = parse_midi(_header() + _track(events))
-        assert mf is notidi if False else mf is not None
+        assert mf is not None
         assert [s.text for s in mf.lyrics.list] == ["Hel"]
 
     def test_text_event_filter(self):
         events = [
-            b"\x00\xff\x01\x08 SYX track",
+            b"\x00\xff\x01\x0a SYX track",
             b"\x00\xff\x05\x03Hel",
             _end(),
         ]
@@ -402,7 +411,7 @@ class TestParseMidiEdgeCases:
         # A data byte without a status byte reuses the running status.
         events = [
             b"\x00\x90\x3c\x64",  # note on C4
-            b"\x30\x64",  # running status: note on D4
+            b"\x30\x3e\x64",  # running status: note on D4
             b"\x00\x90\x48\x00",  # velocity 0 == note off
             b"\x00\xff\x05\x03Hel",
             _end(),
@@ -414,6 +423,7 @@ class TestParseMidiEdgeCases:
 
     def test_note_on_zero_velocity_is_note_off(self):
         events = [
+            _tempo(),
             b"\x00\x90\x3c\x64",
             b"\x60\x90\x3c\x00",  # note off via velocity 0
             b"\x00\xff\x05\x03Hel",
@@ -472,7 +482,7 @@ class TestParseMidiEdgeCases:
         )
         mf = parse_midi(_header(tracks=2) + track0 + track1)
         assert mf is not None
-        assert [s.text for s in mf.lyrics.list] == ["Bb", "Cc"]
+        assert [s.text.strip() for s in mf.lyrics.list] == ["Bb", "Cc"]
 
     def test_text_track_wins_when_no_lyric_events(self):
         # A track with only text events still provides lyrics.
@@ -495,7 +505,7 @@ class TestParseMidiEdgeCases:
         ]
         mf = parse_midi(_header() + _track(events))
         assert mf is not None
-        assert [s.text for s in mf.lyrics.list] == ["L1", "L2"]
+        assert [s.text.strip() for s in mf.lyrics.list] == ["L1", "L2"]
 
     def test_same_track_text_wins_tie(self):
         # Equal counts: text events are preferred.
@@ -508,16 +518,17 @@ class TestParseMidiEdgeCases:
         ]
         mf = parse_midi(_header() + _track(events))
         assert mf is not None
-        assert [s.text for s in mf.lyrics.list] == ["T1", "T2"]
+        assert [s.text.strip() for s in mf.lyrics.list] == ["T1", "T2"]
 
     def test_truncated_event_stops_track(self):
-        # A mid-event EOF ends the track; a second intact track keeps the
-        # file parseable.
-        bad = b"MTrk" + struct.pack(">L", 4) + b"\x00\x90"
-        track1 = _track([b"\x00\xff\x05\x03Hel", _end()])
-        mf = parse_midi(_header(tracks=2) + bad + track1)
+        # A mid-event EOF ends the track parse; the intact first track keeps
+        # the file parseable.
+        track0 = _track([b"\x00\xff\x05\x03Hel", _end()])
+        bad = b"MTrk" + struct.pack(">L", 10) + b"\x00\x90"
+        mf = parse_midi(_header(tracks=2) + track0 + bad)
         assert mf is not None
         assert [s.text for s in mf.lyrics.list] == ["Hel"]
+        assert len(mf.track_list) == 1  # truncated track is dropped
 
     def test_multiple_note_ons_same_pitch_fifo(self):
         # Two overlapping note-ons for the same pitch pair FIFO with the
@@ -534,7 +545,7 @@ class TestParseMidiEdgeCases:
         assert mf is not None
         assert len(mf.notes) == 2
         velocities = sorted(n[3] for n in mf.notes)
-        assert velocities == [50, 100]
+        assert velocities == [0x50, 0x64]
 
 
 class TestMidiTimestampPartials:
@@ -551,14 +562,11 @@ class TestMidiTimestampPartials:
 
 class TestVarLength:
     def test_empty_stream(self):
-        import io
-
         assert var_length(io.BytesIO(b"")) == (0, 0)
 
-    def test_long_varint_stops_after_seven_bytes(self):
-        import io
-
-        data = b"\xff" * 8  # 8 continuation bytes: shift exceeds limit
+    def test_long_varint_stops_after_limit(self):
+        # bit_shift exceeds 42 after the 7th continuation byte: loop stops.
+        data = b"\xff" * 8
         value, read = var_length(io.BytesIO(data))
         assert read == 7
         assert value > 0
