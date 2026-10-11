@@ -934,8 +934,14 @@ describe('index.html: wiring contract with app.js', () => {
     expect(style, 'missing the inline stylesheet').toBeTruthy();
     const css = style[1].replace(/\/\*[\s\S]*?\*\//g, '');
     const selectors = [];
-    for (const block of css.matchAll(/(?:^|\})\s*([^{}]+)\{/g)) {
-      for (const sel of block[1].split(',')) {
+    // Linear scan instead of /(?:^|\})\s*([^{}]+)\{/g: split each rule
+    // block on '}' and take the selector group before the first '{'.
+    // Equivalent matches (a group holds no braces either way) with no
+    // backtracking.
+    for (const block of css.split('}')) {
+      const brace = block.indexOf('{');
+      if (brace === -1) continue;
+      for (const sel of block.slice(0, brace).split(',')) {
         const name = sel.trim().replace(/\s+/g, ' ');
         if (name) selectors.push(name);
       }
