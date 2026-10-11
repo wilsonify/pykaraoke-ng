@@ -300,8 +300,8 @@ function plural(label, count) {
  * and the per-category detail rows (paths first seen for each category).
  */
 export function describeScanReport(report, { maxDetails = 50 } = {}) {
-  const counts = (report && report.counts) || {};
-  const entries = (report && report.entries) || [];
+  const counts = report?.counts || {};
+  const entries = report?.entries || [];
   const present = (list) => list.filter((c) => Number(counts[c]) > 0);
   const problems = present(SCAN_PROBLEM_CATEGORIES);
   const info = present(SCAN_INFO_CATEGORIES);
@@ -547,15 +547,15 @@ export function describePlaybackError(message = '') {
 }
 
 export function needsRescan(patch = {}) {
-  return RESCAN_KEYS.some((key) => Object.prototype.hasOwnProperty.call(patch, key));
+  return RESCAN_KEYS.some((key) => Object.hasOwn(patch, key));
 }
 
 /** Queue position and duplicate count for one song, or an empty label. */
 export function queueBadgeFor(song, queueItems = [], currentId = null) {
-  const id = song && song.id;
+  const id = song?.id;
   const positions = [];
   queueItems.forEach((item, index) => {
-    if (item && item.id === id) positions.push(index + 1);
+    if (item?.id === id) positions.push(index + 1);
   });
   const playing = id != null && currentId != null && id === currentId;
   const parts = [];
