@@ -15,9 +15,13 @@
 # Pull requests: run full CI, but do NOT trigger the release stage.
 # Main branch pushes: run full CI + release stage.
 #
-# Required secrets:
+# Required secrets (secret name → action env var):
 #   SONAR_TOKEN          – SonarQube/SonarCloud authentication token
-#   SONARQUBE_HOST_URL   – SonarQube server URL (e.g. https://sonarcloud.io)
+#                          (mapped to env SONAR_TOKEN below)
+#   SONARQUBE_HOST_URL   – SonarQube server URL (e.g. https://sonarcloud.io
+#                          or your self-hosted URL; mapped to env SONAR_HOST_URL
+#                          below, which is the name the scan/quality-gate actions
+#                          actually read)
 name: CI/CD Pipeline
 
 on:
@@ -237,12 +241,27 @@ jobs:
         with:
           name: python-coverage
 
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
-        continue-on-error: true
+      # Fail fast with a clear message when auth/server config is missing,
+      # instead of letting the scan fail obscurely and the quality-gate step
+      # report a confusing ".scannerwork/report-task.txt does not exist".
+      # Logic lives in .github/scripts/sonar-verify-config.sh (no code in YAML).
+      - name: Verify SonarQube configuration
+        run: bash .github/scripts/sonar-verify-config.sh
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+
+      # The quality-gate action reads .scannerwork/report-task.txt produced by
+      # the scan step. Logic lives in
+      # .github/scripts/sonar-verify-scan-metadata.sh (no code in YAML).
+      - name: Verify scan metadata
+        run: bash .github/scripts/sonar-verify-scan-metadata.sh
 
       # Quality gate check — no continue-on-error: pipeline fails if gate fails.
       - name: SonarQube Quality Gate check
@@ -251,6 +270,33 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+
+      # Best-effort triage dump — runs ONLY when something above failed.
+      # Logic lives in .github/scripts/sonar-failure-diagnostics.sh (no code
+      # in YAML). Upstream job results are passed as env vars since scripts
+      # cannot read the `needs` context directly.
+      - name: SonarQube failure diagnostics
+        if: failure()
+        run: bash .github/scripts/sonar-failure-diagnostics.sh
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONARQUBE_HOST_URL }}
+          NEEDS_PYTHON_RESULT: ${{ needs.unit-tests-python.result }}
+          NEEDS_RUST_RESULT: ${{ needs.unit-tests-rust.result }}
+          NEEDS_FRONTEND_RESULT: ${{ needs.unit-tests-frontend.result }}
+          NEEDS_OPENSPEC_RESULT: ${{ needs.openspec-validation.result }}
+
+      - name: Upload SonarQube diagnostics artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-diagnostics
+          path: |
+            .scannerwork/
+            sonar-project.properties
+            coverage.xml
+            pytest-junit.xml
+          retention-days: 7
+          if-no-files-found: warn
 
   # ═══════════════════════════════════════════════════════════════════════════
   # STAGE 3: Platform Build Matrix — parallel native builds.
