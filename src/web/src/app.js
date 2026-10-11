@@ -676,6 +676,17 @@ if (isBrowser) {
     rows[state.selectedResult].scrollIntoView({ block: 'nearest' });
   }
 
+  /**
+   * Fire-and-forget async work from sync UI handlers. The callees report
+   * their own user-facing errors (status bar / toast); this only keeps a
+   * stray rejection from surfacing as an unhandledrejection.
+   */
+  function launch(promise) {
+    promise.catch((err) => {
+      console.error(err);
+    });
+  }
+
   /** Run a search (or browse the library when *raw* is empty). */
   async function runSearch(raw) {
     const query = String(raw == null ? '' : raw).trim();
@@ -699,7 +710,7 @@ if (isBrowser) {
 
   function clearSearch() {
     $('search-input').value = '';
-    runSearch('');
+    launch(runSearch(''));
   }
 
   function resetKindFilters() {
@@ -833,7 +844,7 @@ if (isBrowser) {
     renderQueue();
     renderTransport();
     persist();
-    playSong(song);
+    launch(playSong(song));
   }
 
   function clearQueue() {
@@ -1233,7 +1244,7 @@ if (isBrowser) {
   function togglePlay() {
     if (!state.current) return;
     if (state.playing) pauseMedia();
-    else if (state.playingFailed) playSong(state.current);
+    else if (state.playingFailed) launch(playSong(state.current));
     else resumeMedia();
   }
 
@@ -1285,7 +1296,7 @@ if (isBrowser) {
       renderQueue();
       renderTransport();
       persist();
-      playSong(next);
+      launch(playSong(next));
       return;
     }
     stopPlayback();
@@ -1341,7 +1352,7 @@ if (isBrowser) {
     renderQueue();
     renderTransport();
     persist();
-    playSong(next);
+    launch(playSong(next));
   }
 
   function playPrev() {
@@ -1352,7 +1363,7 @@ if (isBrowser) {
       const next = state.queue.next();
       renderQueue();
       persist();
-      playSong(next);
+      launch(playSong(next));
     }
   }
 
@@ -1376,7 +1387,7 @@ if (isBrowser) {
     if (patch.zoom !== undefined) applyZoom();
     if (patch.sort !== undefined) {
       state.browse = null; // the engine re-orders library_songs
-      runSearch(state.query);
+      launch(runSearch(state.query));
     }
     if (needsRescan(patch)) showRescanNote();
   }
@@ -1428,7 +1439,7 @@ if (isBrowser) {
     if (inInput) {
       if (e.target === searchInput) {
         e.target.value = '';
-        runSearch('');
+        launch(runSearch(''));
       }
       e.target.blur();
       return true;
@@ -1588,7 +1599,7 @@ if (isBrowser) {
     $('settings-close-btn').addEventListener('click', () => toggleSettings(false));
     $('settings-rescan-btn').addEventListener('click', () => {
       hideRescanNote();
-      rescanFolders();
+      launch(rescanFolders());
     });
     $('setting-sort').addEventListener('change', (e) => updateSettings({ sort: e.target.value }));
     $('setting-zoom').addEventListener('change', (e) => updateSettings({ cdg_zoom: e.target.value }));
@@ -1664,7 +1675,7 @@ if (isBrowser) {
   function armReplace() {
     if (replaceArmed) {
       disarmReplace();
-      replaceLibrary();
+      launch(replaceLibrary());
       return;
     }
     replaceArmed = true;
@@ -1806,7 +1817,9 @@ if (isBrowser) {
     }
 
     start() {
-      this.ctx.resume();
+      // Resuming is best-effort; a rejection here must not surface as an
+      // unhandledrejection (mirrors the close() handling below).
+      this.ctx.resume().catch(() => {});
       this.t0 = this.ctx.currentTime;
       this.nextIndex = 0;
       this.paused = false;
@@ -1950,7 +1963,7 @@ if (isBrowser) {
   // Boot.
   document.addEventListener('DOMContentLoaded', () => {
     wireUi();
-    boot();
+    launch(boot());
   });
 }
 export const app = __app;
