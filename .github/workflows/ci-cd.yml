@@ -100,14 +100,21 @@ jobs:
           key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
 
       - name: Install dependencies via lockfile
-        # --no-build: install wheels only; building sdists would execute
-        # third-party setup scripts. The project itself is still installed
-        # editable (uv always builds editable requirements).
-        run: uv sync --frozen --no-build --extra dev --extra test
+        # --no-build: install prebuilt wheels only for third-party deps;
+        # building their sdists would execute untrusted build backends.
+        # --no-binary-package pykaraoke-ng: narrow exception so uv may still
+        # build the local editable project (hatchling), which has no wheel.
+        # Without it, uv 0.4.30 errors: "`pykaraoke-ng @ editable+.` can't be
+        # installed because it is marked as `--no-build` but has no binary
+        # distribution". The exception is scoped to this package only, so no
+        # third-party source build is permitted.
+        run: uv sync --frozen --no-build --no-binary-package pykaraoke-ng --extra dev --extra test
 
       - name: Run Python unit tests with coverage
+        # Same build flags as the sync step above: uv run re-checks the env,
+        # so the editable-project exception must be repeated here.
         run: |
-          uv run --frozen --no-build pytest tests/pykaraoke/ \
+          uv run --frozen --no-build --no-binary-package pykaraoke-ng pytest tests/pykaraoke/ \
             --cov=src/pykaraoke \
             --cov-report=xml:coverage.xml \
             --cov-report=html:htmlcov \
