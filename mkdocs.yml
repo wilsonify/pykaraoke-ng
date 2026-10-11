@@ -72,7 +72,9 @@ markdown_extensions:
 
 validation:
   nav:
-    omitted_files: warn
+    # docs/archive/README.md is intentionally kept out of nav (historical
+    # stub), so a page existing outside nav is info, not a strict-build abort.
+    omitted_files: info
     not_found: warn
     absolute_links: warn
   links:
