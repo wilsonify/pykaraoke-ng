@@ -181,6 +181,18 @@ report (see "Scan reporting").
 - **AND** the scan report records the archive path as
   `unsupported_compression`
 
+#### Scenario: Traversal member names are inert
+
+Member names are used only as virtual path strings and as keys for
+in-memory member reads; the library never extracts archive contents to the
+filesystem, so names containing path separators or `..` cannot escape.
+
+- **WHEN** a zip whose member names contain `../` or `..\\` is scanned
+- **THEN** the members are added as songs and their bytes are readable
+  through the in-memory member reader
+- **AND** no file is created outside the archive's in-memory
+  representation
+
 ### Requirement: Search
 
 The library SHALL return the songs whose title, artist, or file name contains
