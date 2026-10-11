@@ -905,6 +905,30 @@ describe('index.html: wiring contract with app.js', () => {
     expect(appJs).toContain("row.setAttribute('aria-current', 'true')");
   });
 
+  it('keeps template interpolations flat', () => {
+    // A template literal inside an interpolation used to be how the engine
+    // label was built. The nested ternaries at the other reported call sites
+    // became statements, which no regex can recognise reliably (a property
+    // colon and a ternary colon look identical), so this guards the template
+    // case, walking each interpolation to its matching brace.
+    const nestedInsideInterpolation = (src) => {
+      const hits = [];
+      for (let i = src.indexOf('${'); i !== -1; i = src.indexOf('${', i + 1)) {
+        let depth = 1;
+        let j = i + 2;
+        while (j < src.length && depth > 0) {
+          if (src[j] === '{') depth += 1;
+          else if (src[j] === '}') depth -= 1;
+          j += 1;
+        }
+        const body = src.slice(i + 2, j - 1);
+        if (body.includes('`')) hits.push(body.trim().slice(0, 60));
+      }
+      return hits;
+    };
+    expect(nestedInsideInterpolation(appJs)).toEqual([]);
+  });
+
   it('declares each stylesheet selector only once', () => {
     const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
     expect(style, 'missing the inline stylesheet').toBeTruthy();
