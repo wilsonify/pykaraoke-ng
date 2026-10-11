@@ -258,6 +258,37 @@ class TestDecode:
         # So after consuming the first update, a second update is clean.
         assert dec.update() is None
 
+    def test_incremental_updates_reach_later_packets(self):
+        # The web UI drives the decoder from an animation loop: many small
+        # process_until() calls at rising times.  A block that appears later
+        # in the stream must still reach the caller (regression: comparing the
+        # packet index against the byte offset in packet_pos froze the
+        # decoder after its first advance).
+        data = (
+            _load_colour_table([(255, 255, 255), (255, 0, 0)])
+            + _memory_preset(0)
+            + _tile_block(6, 12, 0, 1, [0b111111] * 12)  # red block at ~0 ms
+            + _packet(0x00, bytes(16)) * 300  # ~1 s of silence
+            + _tile_block(6, 12, 0, 0, [0b111111] * 12)  # back to white at ~1 s
+        )
+        dec = CdgDecoder(data)
+        seen = {"red": False, "white": False}
+        for ms in range(0, 1500, 20):
+            dec.process_until(packet_index_at(ms))
+            upd = dec.update()
+            if not upd:
+                continue
+            for tile in upd["tiles"]:
+                if (tile["x"], tile["y"]) != (0, 0):
+                    continue
+                first, last = tile["data"][0:3], tile["data"][15:18]
+                if first == b"\xff\x00\x00" and last == b"\xff\x00\x00":
+                    seen["red"] = True
+                if first == b"\xff\xff\xff" and last == b"\xff\xff\xff":
+                    seen["white"] = True
+        assert seen["red"], "the first tile block should be reported"
+        assert seen["white"], "later tile blocks must still be reported as dirty"
+
     def test_unknown_instruction_ignored(self):
         dec = CdgDecoder(_packet(0x7F, bytes(16)))
         dec.process_until(1)

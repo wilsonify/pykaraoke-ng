@@ -52,6 +52,9 @@ COLOUR_TABLE_SIZE = 16
 # CDG streams carry 300 packets per second of audio.
 PACKETS_PER_SECOND = 300
 
+# Bytes per CDG packet (the stream is a flat sequence of 24-byte packets).
+PACKET_SIZE = 24
+
 _BORDER_LEFT = CDG_DISPLAY_X  # 6
 _BORDER_TOP = CDG_DISPLAY_Y  # 12
 
@@ -124,10 +127,18 @@ class CdgDecoder:
     # ------------------------------------------------------------------
 
     def process_until(self, packet_index: int) -> None:
-        """Decode all packets between the current position and *packet_index*."""
-        if packet_index <= self.packet_pos:
+        """Decode all packets between the current position and *packet_index*.
+
+        *packet_index* is a packet number (see :func:`packet_index_at`),
+        whereas ``packet_pos`` is a byte offset, so the two are reconciled
+        here: comparing them directly stops the decoder advancing as soon as
+        the byte offset overtakes the packet number, which freezes playback
+        after the first update.
+        """
+        current = self.packet_pos // PACKET_SIZE
+        if packet_index <= current:
             return
-        remaining = packet_index - self.packet_pos
+        remaining = packet_index - current
         for _ in range(remaining):
             packet = self._next_packet()
             if packet is None:
@@ -136,9 +147,9 @@ class CdgDecoder:
 
     def _next_packet(self):
         start = self.packet_pos
-        self.packet_pos += 24
-        if start + 24 <= len(self.data):
-            return self.data[start : start + 24]
+        self.packet_pos += PACKET_SIZE
+        if start + PACKET_SIZE <= len(self.data):
+            return self.data[start : start + PACKET_SIZE]
         self.packet_pos = len(self.data)
         return None
 
