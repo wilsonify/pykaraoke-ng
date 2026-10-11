@@ -7,7 +7,7 @@
 # check-quality-gate.sh. Must run from the repository root.
 set -uo pipefail
 
-if [ ! -f .scannerwork/report-task.txt ]; then
+if [[ ! -f .scannerwork/report-task.txt ]]; then
   echo "::error::.scannerwork/report-task.txt not found — SonarQube Scan did not complete successfully. Check the 'SonarQube Scan' step logs above."
   ls -la .scannerwork/ || true
   exit 1

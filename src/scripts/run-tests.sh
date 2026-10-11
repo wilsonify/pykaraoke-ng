@@ -58,6 +58,7 @@ case "$MODE" in
     engine_tests
     web_tests
     ;;
+  *) echo "unknown test mode: $MODE" >&2; exit 1 ;;
 esac
 
 echo "All requested tests passed."

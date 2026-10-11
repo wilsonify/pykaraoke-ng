@@ -38,14 +38,14 @@ ls -la .scannerwork/ || echo "(no .scannerwork directory)"
 
 echo "--- Any report-task.txt in workspace (maxdepth 4) ---"
 find . -maxdepth 4 -name 'report-task.txt' -print || true
-if [ -f .scannerwork/report-task.txt ]; then
+if [[ -f .scannerwork/report-task.txt ]]; then
   echo "--- .scannerwork/report-task.txt ---"
   cat .scannerwork/report-task.txt || true
 fi
 
 echo "--- Server reachability (no token sent) ---"
 host_base="$(printf '%s' "${host_url}" | sed -nE 's#^[a-zA-Z]+://[^/]+#&#p')"
-if [ -n "${host_base}" ]; then
+if [[ -n ${host_base} ]]; then
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "${host_base}/api/server/version" 2>&1 || true)"
   echo "GET ${host_base}/api/server/version -> ${code}"
 else
