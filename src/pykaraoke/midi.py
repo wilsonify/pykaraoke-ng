@@ -420,7 +420,9 @@ def _collect_notes(midifile):
         _merge_track_programs(midifile, track)
         _pair_track_notes(track, ts, raw)
 
-    _append_unmatched_notes(midifile, ts, raw)
+    # A fresh clock: the pairing pass left *ts* mid-stream, which would make
+    # every already-paired note look unmatched (duplicate phantom notes).
+    _append_unmatched_notes(midifile, MidiTimestamp(midifile), raw)
 
     raw.sort(key=lambda n: n[0])
     midifile.notes = [[s, ch, note, vel, max(0, e - s)] for s, e, ch, note, vel in raw]
@@ -479,13 +481,9 @@ def _process_meta_event(filehdl, track_desc, midifile):
 
 
 def _meta_sequence_number(filehdl, track_desc, midifile):
-    bytes_read = 0
-    packet = filehdl.read(2)
-    bytes_read += 2
-    type_val = packet[1] if len(packet) > 1 else 0
-    if type_val == 0x02:
-        filehdl.read(2)
-    return bytes_read
+    length, var_bytes = var_length(filehdl)
+    filehdl.read(length)
+    return var_bytes + length
 
 
 def _meta_text_event(filehdl, track_desc, midifile):
@@ -610,6 +608,11 @@ def _meta_discard_var(filehdl, event):
     return _read_and_discard_var(filehdl)
 
 
+def _meta_discard_text_var(filehdl, track_desc, midifile):
+    """Discard a variable-length text meta (marker, cue, names)."""
+    return _read_and_discard_var(filehdl)
+
+
 def _meta_fixed_discard_2(filehdl, track_desc, midifile):
     filehdl.read(2)
     return 2
@@ -622,10 +625,10 @@ _META_EVENT_HANDLERS = {
     0x03: _meta_track_title,
     0x04: _meta_instrument,
     0x05: _meta_lyric_event,
-    0x06: _read_and_discard_var,  # Marker
-    0x07: _read_and_discard_var,  # Cue point
-    0x08: _read_and_discard_var,  # Program name
-    0x09: _read_and_discard_var,  # Device name
+    0x06: _meta_discard_text_var,  # Marker
+    0x07: _meta_discard_text_var,  # Cue point
+    0x08: _meta_discard_text_var,  # Program name
+    0x09: _meta_discard_text_var,  # Device name
     0x20: _meta_fixed_discard_2,  # MIDI Channel
     0x21: _meta_fixed_discard_2,  # MIDI Port
     0x2F: _meta_end_of_track,
