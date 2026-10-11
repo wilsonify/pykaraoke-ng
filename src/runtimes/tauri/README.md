@@ -22,9 +22,11 @@ npm ci
 npm run tauri build        # or: npx tauri build
 ```
 
-`tauri.conf.json` runs `npm run build` (→ `python ../../scripts/build-web.py`)
+`tauri.conf.json`'s `beforeBuildCommand` runs `python ../../scripts/build-web.py`
 before building, so the wheel and vendored Pyodide/PyScript assets are
-recreated automatically. Output lands in `src-tauri/target/release/`.
+recreated automatically. `frontendDist` points at `../../../web`, so the
+committed `src/web/` tree (not a separate bundle) is embedded. Output lands in
+`src-tauri/target/release/`.
 
 ## Developing
 

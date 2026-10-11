@@ -4,10 +4,10 @@
   "version": "0.8.0",
   "identifier": "com.pykaraoke.ng",
   "build": {
-    "beforeBuildCommand": "python ../../scripts/build-web.py && cd ../.. && npm run build",
+    "beforeBuildCommand": "python ../../scripts/build-web.py",
     "beforeDevCommand": "python ../../scripts/serve-web.py 18000",
     "devUrl": "http://localhost:18000",
-    "frontendDist": "../../../web/dist"
+    "frontendDist": "../../../web"
   },
   "app": {
     "withGlobalTauri": true,

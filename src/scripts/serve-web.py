@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Serve the PyKaraoke web app for development.
 
-Serve ``src/web/dist/`` for the Tauri dev server with ``Cache-Control:
+Serve ``src/web/`` (the authoritative frontend root — the same tree that
+``tauri.conf.json`` ships via ``frontendDist``) with ``Cache-Control:
 no-store`` on every response, so the webview never shows a stale page.
 ``tauri.conf.json`` runs this as ``beforeDevCommand``; it can also be run
 by hand from anywhere in the repo:
 
     python src/scripts/serve-web.py [port]   (default 18000)
+
+``src/web/_assets`` (Pyodide/PyScript) and ``src/web/_wheel`` (the engine
+wheel) must exist before serving; run ``python src/scripts/build-web.py``
+first to populate them.
 """
 
 from __future__ import annotations

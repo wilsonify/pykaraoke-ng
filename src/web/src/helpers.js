@@ -42,7 +42,7 @@ export const ELRC_EXT = '.elrc';
  * Looks the key up in `state.pathByBase`.
  */
 export function companionBaseName(song, ext) {
-  const filename = String((song && song.filename) || '');
+  const filename = String(song?.filename || '');
   const stem = filename.replace(/\.[^.]+$/, '').toLowerCase();
   return stem ? `${stem}${ext}` : null;
 }
@@ -52,7 +52,7 @@ export function companionBaseName(song, ext) {
  * Mirrors the `zip!member` id that readSongBytes() splits apart.
  */
 export function companionMember(song, ext) {
-  if (!song || !song.zip_name) return null;
+  if (!song?.zip_name) return null;
   const member = String(song.id || '').split('!').slice(1).join('!');
   if (!member) return null;
   return member.replace(/\.[^./\\]+$/, ext);
@@ -163,7 +163,7 @@ export function findSyllableAt(lines, ms) {
  * from the playback loop and from tests with a fake clock.
  */
 export function highlightState(lines, ms) {
-  if (!lines || !lines.length) return { lineIdx: -1, litCount: 0 };
+  if (!lines?.length) return { lineIdx: -1, litCount: 0 };
   let lineIdx = 0;
   while (lineIdx < lines.length - 1 && lines[lineIdx + 1].ms <= ms) lineIdx++;
   const line = lines[lineIdx];

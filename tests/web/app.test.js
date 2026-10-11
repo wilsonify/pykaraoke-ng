@@ -391,13 +391,12 @@ describe('settings panel: naming convention select', () => {
     '..',
     'src',
     'web',
-    'src',
-    'index.html.ejs',
+    'index.html',
   );
   const html = readFileSync(htmlPath, 'utf8');
 
   it('maps each option value to the correct convention label', () => {
-    const select = html.match(/<select id="setting-naming">([\s\S]*?)<\/select>/);
+    const select = /<select id="setting-naming">([\s\S]*?)<\/select>/.exec(html);
     expect(select).toBeTruthy();
     const options = [...select[1].matchAll(/<option value="(\d+)">([^<]+)<\/option>/g)].map(
       (m) => [m[1], m[2]],
@@ -412,7 +411,7 @@ describe('settings panel: naming convention select', () => {
   });
 
   it('offers exactly the five engine conventions', () => {
-    const namingBlock = html.match(/<select id="setting-naming">([\s\S]*?)<\/select>/)[1];
+    const namingBlock = /<select id="setting-naming">([\s\S]*?)<\/select>/.exec(html)[1];
     const namingValues = [...namingBlock.matchAll(/<option value="(\d+)">/g)].map((m) =>
       Number(m[1]),
     );

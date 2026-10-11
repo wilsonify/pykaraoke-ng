@@ -104,7 +104,7 @@ a build-system change MUST pass those checks before it is pushed.
 #### Scenario: Validating a build change locally
 
 - **WHEN** a contributor validates a build-system change
-- **THEN** they regenerate the assets from the Tauri project root with `cd src/runtimes/tauri && npm run build`
+- **THEN** they regenerate the assets from the repo root with `python src/scripts/build-web.py`
 - **AND** confirm the wheel and vendored runtime landed in `src/web/`
 - **AND** run `cargo check` in `src/runtimes/tauri/src-tauri/`
 
