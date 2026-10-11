@@ -289,16 +289,14 @@ class SongLibrary:
         if not known:
             return 0
         self._files = {k: v for k, v in self._files.items() if k in known}
-        for key in list(self._zip_cache):
+        kept_cache: dict[str, list[dict]] = {}
+        for key, entries in self._zip_cache.items():
             kept = [
-                d
-                for d in self._zip_cache[key]
-                if str(d.get("path", "")).replace("\\", "/").lower() in known
+                d for d in entries if str(d.get("path", "")).replace("\\", "/").lower() in known
             ]
             if kept:
-                self._zip_cache[key] = kept
-            else:
-                del self._zip_cache[key]
+                kept_cache[key] = kept
+        self._zip_cache = kept_cache
         before = len(self.songs)
         self.songs = [s for s in self.songs if s.path.replace("\\", "/").lower() in known]
         return before - len(self.songs)
