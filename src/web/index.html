@@ -161,10 +161,15 @@ html, body {
   padding: 8px;
   position: relative;
 }
+#cdg-view {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+}
 #cdg-canvas {
   image-rendering: pixelated;
   max-width: 100%;
-  /* Let a zoomed canvas shrink to the column without distorting 4:3. */
+  /* Let a zoomed canvas shrink to the column without distorting its ratio. */
   height: auto;
   background: #000;
 }
@@ -554,7 +559,11 @@ summary:focus-visible {
           <span id="playback-state" class="state-chip" data-state="idle" role="status" aria-live="polite">Nothing loaded</span>
         </div>
         <div id="stage" class="stage" aria-label="Karaoke stage">
-          <canvas id="cdg-canvas" width="576" height="384" role="img" aria-label="CD+G graphics for the current song"></canvas>
+          <!-- The canvas is HTML interactive content, so the image role and
+               its name live on the non-interactive wrapper instead. -->
+          <div id="cdg-view" role="img" aria-label="CD+G graphics for the current song">
+            <canvas id="cdg-canvas" width="576" height="384"></canvas>
+          </div>
           <div id="lyrics" class="lyrics"></div>
           <div id="video-slot"></div>
           <div id="stage-empty" class="stage-empty">Pick a song to start singing</div>
