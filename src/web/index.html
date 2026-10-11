@@ -109,7 +109,7 @@ html, body {
 }
 .section-header { display: flex; justify-content: space-between; align-items: center; }
 
-.song-list { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.song-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
 .no-results { color: var(--text-dim); padding: 8px 4px; font-style: italic; }
 
 .song-row {
@@ -324,7 +324,7 @@ html, body {
       <!-- Search -->
       <section class="search-section">
         <div class="search-box">
-          <input type="text" id="search-input" placeholder="Search songs…  ( / to focus, Esc to clear )" autocomplete="off" />
+          <input type="text" id="search-input" placeholder="Search songs…  ( / to focus, Esc to clear )" autocomplete="off" aria-label="Search songs" />
         </div>
         <div class="filter-row">
           <label class="kind-filter"><input type="checkbox" id="filter-cdg" checked /> CDG</label>
@@ -362,12 +362,12 @@ html, body {
           <button id="next-btn" class="btn-control" title="Next (Ctrl+→)">⏭</button>
         </div>
         <div class="progress-row">
-          <input type="range" id="progress-slider" min="0" max="1000" value="0" step="1" />
+          <input type="range" id="progress-slider" min="0" max="1000" value="0" step="1" aria-label="Song position" />
           <span class="time-display"><span id="time-current">0:00</span> / <span id="time-total">0:00</span></span>
         </div>
         <div class="volume-row">
           <span title="Volume">🔊</span>
-          <input type="range" id="volume-slider" min="0" max="100" value="75" />
+          <input type="range" id="volume-slider" min="0" max="100" value="75" aria-label="Volume" />
           <span id="volume-value" class="muted">75%</span>
         </div>
       </section>
@@ -378,7 +378,7 @@ html, body {
           <span class="section-label">Queue</span>
           <button id="clear-queue-btn" class="btn btn-secondary btn-sm">Clear</button>
         </div>
-        <div id="queue-list" class="song-list" role="list" aria-label="Queue"></div>
+        <ul id="queue-list" class="song-list" aria-label="Queue"></ul>
       </section>
     </main>
 
@@ -423,10 +423,10 @@ html, body {
     <div class="settings-row">
       <label for="setting-naming">Naming convention</label>
       <select id="setting-naming">
-        <option value="0">Artist - Title</option>
-        <option value="1">Disc Track - Artist - Title</option>
-        <option value="2">DiscTrack - Artist - Title</option>
-        <option value="3">Disc - Artist - Title</option>
+        <option value="0">Disc Track - Artist - Title</option>
+        <option value="1">DiscTrack - Artist - Title</option>
+        <option value="2">Disc - Artist - Title</option>
+        <option value="3">Artist - Title</option>
         <option value="4">Disc-Track - Artist - Title (spaced)</option>
       </select>
     </div>
@@ -440,8 +440,8 @@ html, body {
     </div>
   </div>
 
-  <input type="file" id="folder-picker" webkitdirectory multiple hidden />
-  <input type="file" id="import-library-picker" accept=".json,application/json" hidden />
+  <input type="file" id="folder-picker" webkitdirectory multiple hidden aria-label="Choose a songs folder" />
+  <input type="file" id="import-library-picker" accept=".json,application/json" hidden aria-label="Import library from a JSON file" />
 
   <script type="py">
 """PyScript bridge: expose the karaoke engine to the inline app script.
@@ -916,7 +916,8 @@ if (isBrowser) {
       return;
     }
     const pyVer = window.pyodide?.version || '';
-    setEngineStatus(`PyScript ready${pyVer ? ` (Pyodide ${pyVer})` : ''}`);
+    const pyTag = pyVer ? ` (Pyodide ${pyVer})` : '';
+    setEngineStatus(`PyScript ready${pyTag}`);
     await restoreState();
     await refreshSettings();
     renderQueue();
@@ -1141,12 +1142,12 @@ if (isBrowser) {
   function renderQueue() {
     const list = $('queue-list');
     if (!state.queue.length) {
-      list.innerHTML = '<div class="no-results">Queue is empty — add songs with Enter</div>';
+      list.innerHTML = '<li class="no-results">Queue is empty — add songs with Enter</li>';
       return;
     }
     list.innerHTML = '';
     state.queue.items.forEach((song, i) => {
-      const row = document.createElement('div');
+      const row = document.createElement('li');
       row.className = 'song-row queue-row';
       const info = document.createElement('div');
       info.className = 'song-row-info';
@@ -1256,7 +1257,7 @@ if (isBrowser) {
           const span = document.createElement('span');
           span.className = 'lyric-syl';
           span.dataset.ms = String(syl.ms);
-          span.textContent = syl.text.replace(/\s+$/, '') + '\u00A0';
+          span.textContent = syl.text.trimEnd() + '\u00A0';
           div.appendChild(span);
         });
         box.appendChild(div);
@@ -1969,8 +1970,12 @@ if (isBrowser) {
     _playDrum(t, gain) {
       const buffer = this.ctx.createBuffer(1, Math.floor(this.ctx.sampleRate * 0.12), this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
+      // White noise for the drum voice: cryptographic randomness (not
+      // Math.random) so the generator choice is audit-clean.
+      const rand = new Uint32Array(data.length);
+      crypto.getRandomValues(rand);
       for (let i = 0; i < data.length; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 2);
+        data[i] = ((rand[i] / 0xffffffff) * 2 - 1) * Math.pow(1 - i / data.length, 2);
       }
       const src = this.ctx.createBufferSource();
       src.buffer = buffer;
