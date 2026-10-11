@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
+  BROWSE_LIMIT,
   buildLyricLines,
   CDG_HEIGHT,
   CDG_WIDTH,
@@ -12,15 +13,27 @@ import {
   companionMember,
   computeNoteTimeline,
   debounce,
+  describeEngine,
+  describePlayback,
+  describePlaybackError,
+  describeQueue,
+  describeResults,
+  describeScanReport,
   ELRC_EXT,
   escapeHtml,
   findSyllableAt,
+  formatCount,
   formatTime,
   highlightState,
+  needsRescan,
   noteToFrequency,
   PART_IDS,
   partClass,
   partLabel,
+  queueBadgeFor,
+  RESCAN_KEYS,
+  scanCategoryLabel,
+  SHORTCUTS,
   SongQueue,
   songLabel,
   writeTileRgba,
@@ -416,5 +429,472 @@ describe('settings panel: naming convention select', () => {
       Number(m[1]),
     );
     expect(namingValues).toEqual([0, 1, 2, 3, 4]);
+  });
+});
+
+describe('formatCount', () => {
+  it('adds thousands separators to counts', () => {
+    expect(formatCount(0)).toBe('0');
+    expect(formatCount(999)).toBe('999');
+    expect(formatCount(2382)).toBe('2,382');
+    expect(formatCount(1234567)).toBe('1,234,567');
+  });
+
+  it('survives strings, fractions and nonsense', () => {
+    expect(formatCount('42')).toBe('42');
+    expect(formatCount(12.7)).toBe('12');
+    expect(formatCount(undefined)).toBe('0');
+    expect(formatCount('nope')).toBe('0');
+  });
+});
+
+describe('scanCategoryLabel', () => {
+  it('labels a single file and many files', () => {
+    expect(scanCategoryLabel('unsupported', 1)).toBe('file that is not karaoke');
+    expect(scanCategoryLabel('unsupported', 2382)).toBe('files that are not karaoke');
+    expect(scanCategoryLabel('corrupt_archive', 2)).toBe('damaged ZIP archives');
+  });
+
+  it('falls back to the raw category for unknown ones', () => {
+    expect(scanCategoryLabel('mystery', 1)).toBe('mystery');
+  });
+});
+
+describe('describeScanReport', () => {
+  it('calls skipped files informational, not failures', () => {
+    const view = describeScanReport({
+      counts: { unsupported: 2382, filtered: 3 },
+      entries: [{ category: 'unsupported', path: 'movie.mp4' }],
+    });
+    expect(view.severity).toBe('info');
+    expect(view.problemCount).toBe(0);
+    expect(view.infoCount).toBe(2385);
+    expect(view.summary).toBe(
+      'Scan finished — skipped 2,382 files that are not karaoke and 3 files you filtered out',
+    );
+  });
+
+  it('leads with the problems when files genuinely failed', () => {
+    const view = describeScanReport({
+      counts: { corrupt_archive: 1, unreadable: 2, unsupported: 5 },
+      entries: [],
+    });
+    expect(view.severity).toBe('warn');
+    expect(view.problemCount).toBe(3);
+    expect(view.summary).toBe(
+      'Scan finished with 3 problems: 1 damaged ZIP archive, 2 files that could not be read',
+    );
+  });
+
+  it('says so when every file was usable', () => {
+    const view = describeScanReport({ counts: { unsupported: 0 }, entries: [] });
+    expect(view.severity).toBe('info');
+    expect(view.hasIssues).toBe(false);
+    expect(view.summary).toBe('Scan finished — every file was usable');
+    expect(view.details).toEqual([]);
+  });
+
+  it('groups paths by category, problems first', () => {
+    const view = describeScanReport({
+      counts: { unsupported: 2, corrupt_archive: 1 },
+      entries: [
+        { category: 'unsupported', path: 'a.mp4' },
+        { category: 'unsupported', path: 'b.txt' },
+        { category: 'corrupt_archive', path: 'broken.zip' },
+      ],
+    });
+    expect(view.details.map((d) => d.category)).toEqual(['corrupt_archive', 'unsupported']);
+    expect(view.details[0]).toMatchObject({
+      label: 'damaged ZIP archive',
+      count: 1,
+      paths: ['broken.zip'],
+      hidden: 0,
+    });
+    expect(view.details[1].paths).toEqual(['a.mp4', 'b.txt']);
+    expect(view.details[1].count).toBe(2);
+  });
+
+  it('truncates a long path list and reports what it hid', () => {
+    const entries = Array.from({ length: 12 }, (_, i) => ({
+      category: 'unreadable',
+      path: `f${i}.cdg`,
+    }));
+    const view = describeScanReport({ counts: { unreadable: 12 }, entries }, { maxDetails: 5 });
+    expect(view.details[0].paths).toHaveLength(5);
+    expect(view.details[0].hidden).toBe(7);
+    expect(view.details[0].count).toBe(12);
+  });
+
+  it('handles a missing report', () => {
+    const view = describeScanReport(null);
+    expect(view.hasIssues).toBe(false);
+    expect(view.details).toEqual([]);
+  });
+});
+
+describe('describeResults', () => {
+  it('invites the user to add a folder when the library is empty', () => {
+    const view = describeResults({ libraryCount: 0 });
+    expect(view.heading).toBe('Songs');
+    expect(view.count).toBe('');
+    expect(view.empty).toMatchObject({ kind: 'no-library', action: 'add-folder' });
+    expect(view.empty.title).toBe('No songs yet');
+  });
+
+  it('browses the whole library when the search box is empty', () => {
+    const view = describeResults({ libraryCount: 272, query: '', shown: 272 });
+    expect(view.heading).toBe('All songs');
+    expect(view.count).toBe('272');
+    expect(view.hint).toBe('');
+    expect(view.empty).toBeNull();
+  });
+
+  it('explains a library too large to list at once', () => {
+    const view = describeResults({ libraryCount: 2382, query: '', shown: BROWSE_LIMIT });
+    expect(view.count).toBe('300 of 2,382');
+    expect(view.hint).toBe('Showing the first 300 — type to search the rest.');
+  });
+
+  it('lists search matches with a count', () => {
+    const view = describeResults({ libraryCount: 272, query: 'queen', matched: 12, shown: 12 });
+    expect(view.heading).toBe('Results');
+    expect(view.count).toBe('12 songs');
+    expect(view.empty).toBeNull();
+
+    const single = describeResults({ libraryCount: 272, query: 'queen', matched: 1, shown: 1 });
+    expect(single.count).toBe('1 song');
+  });
+
+  it('explains that nothing matched the search', () => {
+    const view = describeResults({ libraryCount: 272, query: 'zzz', matched: 0, shown: 0 });
+    expect(view.count).toBe('None');
+    expect(view.empty.kind).toBe('no-matches');
+    expect(view.empty.title).toBe('No songs match “zzz”');
+    expect(view.empty.action).toBe('clear-search');
+  });
+
+  it('separates matches hidden by the format filters from no matches', () => {
+    const view = describeResults({ libraryCount: 272, query: 'love', matched: 12, shown: 0 });
+    expect(view.count).toBe('12 hidden');
+    expect(view.empty.kind).toBe('filtered-out');
+    expect(view.empty.title).toBe('12 match the search but not the format filters');
+    expect(view.empty.action).toBe('reset-filters');
+  });
+
+  it('tells the user when a search hit the engine limit', () => {
+    const view = describeResults({
+      libraryCount: 5000,
+      query: 'a',
+      matched: 500,
+      shown: 500,
+      limit: 500,
+    });
+    expect(view.hint).toBe('Showing the best 500 matches — add another word to narrow.');
+  });
+
+  it('treats a whitespace-only query as browsing', () => {
+    const view = describeResults({ libraryCount: 10, query: '   ', shown: 10 });
+    expect(view.heading).toBe('All songs');
+  });
+});
+
+describe('describeQueue', () => {
+  it('explains how to fill an empty queue', () => {
+    const info = describeQueue({ length: 0 });
+    expect(info.count).toBe('Empty');
+    expect(info.hint).toContain('press Enter to add it');
+  });
+
+  it('counts the queued songs and names the next one', () => {
+    expect(describeQueue({ length: 1, nextLabel: 'Song — Artist' })).toEqual({
+      count: '1 song',
+      hint: 'Up next: Song — Artist',
+    });
+    expect(describeQueue({ length: 3, nextLabel: 'A' }).count).toBe('3 songs');
+    expect(describeQueue({ length: 2, nextLabel: '' }).hint).toBe(
+      'Queue is playing out — nothing waiting.',
+    );
+  });
+});
+
+describe('describePlayback', () => {
+  it('is idle, with the transport disabled, before a song is chosen', () => {
+    const info = describePlayback({});
+    expect(info).toMatchObject({
+      state: 'idle',
+      label: 'Nothing loaded',
+      playDisabled: true,
+      stopDisabled: true,
+      seekDisabled: true,
+    });
+  });
+
+  it('offers pause, stop and seek while playing', () => {
+    const info = describePlayback({ song: { id: 's' }, playing: true });
+    expect(info).toMatchObject({
+      state: 'playing',
+      label: 'Playing',
+      playLabel: 'Pause',
+      playDisabled: false,
+      stopDisabled: false,
+      seekDisabled: false,
+    });
+  });
+
+  it('offers resume while paused', () => {
+    const info = describePlayback({ song: { id: 's' }, playing: false });
+    expect(info).toMatchObject({ state: 'paused', label: 'Paused', playLabel: 'Play' });
+  });
+
+  it('turns Play into Retry after a load failure, but cannot seek', () => {
+    const info = describePlayback({ song: { id: 's' }, playing: false, failed: true });
+    expect(info).toMatchObject({
+      state: 'error',
+      label: 'Playback failed',
+      playLabel: 'Retry',
+      playDisabled: false,
+      stopDisabled: false,
+      seekDisabled: true,
+    });
+  });
+
+  it('ignores a stale failure flag once no song is loaded', () => {
+    expect(describePlayback({ failed: true }).state).toBe('idle');
+  });
+});
+
+describe('describeEngine', () => {
+  it('says it is starting before the engine is ready', () => {
+    expect(describeEngine({}).text).toBe('Starting…');
+  });
+
+  it('reports readiness without runtime jargon in the label', () => {
+    const ready = describeEngine({ ready: true, version: 'Pyodide 0.27.2' });
+    expect(ready.text).toBe('Ready');
+    expect(ready.title).toContain('Pyodide 0.27.2');
+    expect(ready.title).not.toContain('PyScript ready');
+  });
+
+  it('states a failure plainly', () => {
+    const failed = describeEngine({ failed: true });
+    expect(failed.text).toBe('Engine unavailable');
+    expect(failed.title).toContain('Reload');
+  });
+});
+
+describe('describePlaybackError', () => {
+  it('names the missing audio file', () => {
+    expect(describePlaybackError('no audio file found for this CDG')).toContain('.mp3');
+    expect(describePlaybackError('no audio file found for this LRC')).toContain('.wav');
+  });
+
+  it('explains the zip limitations', () => {
+    expect(describePlaybackError('video inside zip is not supported')).toContain('extract');
+    expect(describePlaybackError('member not found in zip: Song.cdg')).toContain(
+      'inside the ZIP archive could not be read',
+    );
+  });
+
+  it('explains an unreadable song file', () => {
+    expect(describePlaybackError('could not parse MIDI file')).toContain('damaged');
+  });
+
+  it('passes an unknown message through unchanged', () => {
+    expect(describePlaybackError('disk on fire')).toBe('disk on fire');
+    expect(describePlaybackError('')).toBe('unknown error');
+  });
+});
+
+describe('needsRescan', () => {
+  it('flags the scan-time settings', () => {
+    for (const key of RESCAN_KEYS) {
+      expect(needsRescan({ [key]: key === 'look_inside_zips' ? false : [] })).toBe(true);
+    }
+  });
+
+  it('does not flag settings that apply immediately', () => {
+    expect(needsRescan({ volume: 0.5 })).toBe(false);
+    expect(needsRescan({ cdg_zoom: 'full' })).toBe(false);
+    expect(needsRescan({ sort: 'title' })).toBe(false);
+    expect(needsRescan({ folders: ['C:/Songs'] })).toBe(false);
+    expect(needsRescan()).toBe(false);
+  });
+});
+
+describe('queueBadgeFor', () => {
+  const song = { id: 'a', filename: 'a.cdg' };
+
+  it('is empty for a song outside the queue', () => {
+    expect(queueBadgeFor(song, [{ id: 'b' }], null)).toEqual({
+      positions: [],
+      count: 0,
+      playing: false,
+      label: '',
+    });
+  });
+
+  it('counts duplicates and gives their positions', () => {
+    const badge = queueBadgeFor(song, [{ id: 'b' }, song, { id: 'a' }], null);
+    expect(badge.positions).toEqual([2, 3]);
+    expect(badge.count).toBe(2);
+    expect(badge.label).toBe('queued ×2');
+  });
+
+  it('marks the song that is playing', () => {
+    expect(queueBadgeFor(song, [], 'a').label).toBe('playing');
+    expect(queueBadgeFor(song, [song], 'a').label).toBe('playing · queued');
+  });
+});
+
+describe('SongQueue.insert (undo remove)', () => {
+  it('puts a song back where it was', () => {
+    const queue = new SongQueue([{ id: 'a' }, { id: 'b' }, { id: 'c' }]);
+    const [removed] = queue.items.splice(1, 1);
+    queue.insert(1, removed);
+    expect(queue.items.map((s) => s.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('clamps an out-of-range index instead of losing the song', () => {
+    const queue = new SongQueue([{ id: 'a' }]);
+    queue.insert(99, { id: 'b' });
+    queue.insert(-4, { id: 'c' });
+    expect(queue.items.map((s) => s.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('fills an empty queue', () => {
+    const queue = new SongQueue();
+    queue.insert(0, { id: 'a' });
+    expect(queue.length).toBe(1);
+  });
+});
+
+describe('SHORTCUTS', () => {
+  const keysOf = (shortcut) => shortcut.keys;
+
+  it('documents the preserved bindings', () => {
+    const all = SHORTCUTS.map(keysOf).join(' | ');
+    expect(all).toContain('/');
+    expect(all).toContain('Ctrl+K');
+    expect(all).toContain('Esc');
+    expect(all).toContain('Space');
+    expect(all).toContain('Enter');
+    expect(all).toContain('↑');
+  });
+
+  it('every entry has a key label and a description', () => {
+    expect(SHORTCUTS.length).toBeGreaterThan(5);
+    for (const shortcut of SHORTCUTS) {
+      expect(shortcut.keys.trim().length).toBeGreaterThan(0);
+      expect(shortcut.description.trim().length).toBeGreaterThan(5);
+    }
+  });
+
+  it('documents the queue reorder and removal keys it implements', () => {
+    const all = SHORTCUTS.map(keysOf).join(' | ');
+    expect(all).toContain('Alt+↑');
+    expect(all).toContain('Delete');
+  });
+});
+
+describe('index.html: wiring contract with app.js', () => {
+  const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'web');
+  const html = readFileSync(resolve(webDir, 'index.html'), 'utf8');
+  const appJs = readFileSync(resolve(webDir, 'src', 'app.js'), 'utf8');
+
+  // Ids the app looks up through a literal $('...') call, plus the ones it
+  // iterates over in small lists (disabled-while-busy, format filters, ...).
+  const literalIds = [...appJs.matchAll(/\$\('([a-z0-9-]+)'\)/g)].map((m) => m[1]);
+  const listedIds = [
+    'add-folder-btn',
+    'scan-library-btn',
+    'replace-library-btn',
+    'export-library-btn',
+    'import-library-btn',
+    'filter-cdg',
+    'filter-kar',
+    'filter-mpg',
+    'filter-lrc',
+    'settings-rescan-btn',
+  ];
+  const ids = [...new Set([...literalIds, ...listedIds])];
+
+  it('provides every element id app.js looks up', () => {
+    expect(ids.length).toBeGreaterThan(40);
+    expect(ids.filter((id) => !html.includes(`id="${id}"`))).toEqual([]);
+  });
+
+  it('gives icon-only controls an accessible name', () => {
+    for (const id of [
+      'play-btn',
+      'stop-btn',
+      'prev-btn',
+      'next-btn',
+      'rewind-btn',
+      'ff-btn',
+      'settings-btn',
+      'settings-close-btn',
+      'search-input',
+      'volume-slider',
+      'progress-slider',
+      'cdg-canvas',
+      'folder-picker',
+      'import-library-picker',
+    ]) {
+      const tag = new RegExp(`<[^>]*id="${id}"[^>]*>`).exec(html);
+      expect(tag, `missing element #${id}`).toBeTruthy();
+      expect(tag[0], `#${id} needs an aria-label`).toContain('aria-label=');
+    }
+  });
+
+  it('marks the settings that need a rescan next to their labels', () => {
+    for (const id of [
+      'setting-zips',
+      'setting-exclude',
+      'setting-naming',
+      'setting-include-patterns',
+      'setting-exclude-patterns',
+    ]) {
+      const block = new RegExp(`<div class="settings-row">([\\s\\S]*?)id="${id}"`).exec(html);
+      expect(block, `missing settings row for #${id}`).toBeTruthy();
+      expect(block[1]).toContain('rescan');
+    }
+  });
+
+  it('keeps the rescan note and the shortcuts list in the settings panel', () => {
+    expect(html).toContain('id="settings-rescan-note"');
+    expect(html).toContain('id="shortcuts-list"');
+    // The note lives inside the panel, next to the controls it explains.
+    const panel = /id="settings-panel"[\s\S]*?<script type="py">/.exec(html)[0];
+    expect(panel).toContain('id="settings-rescan-note"');
+    expect(panel).toContain('id="shortcuts-list"');
+  });
+
+  it('exposes the region hooks the app writes into', () => {
+    for (const hook of [
+      'results-list',
+      'results-count',
+      'results-hint',
+      'results-empty',
+      'scan-issues',
+      'scan-details',
+      'queue-count',
+      'queue-hint',
+      'playback-state',
+      'notices',
+      'status-message',
+      'engine-status',
+      'library-count',
+      'library-folders',
+      'replace-hint',
+      'engine-detail',
+    ]) {
+      expect(html, `missing #${hook}`).toContain(`id="${hook}"`);
+    }
+  });
+
+  it('keeps the no-results placeholder out of the markup and CSS', () => {
+    // Empty states are rendered by the app with specific wording; a static
+    // placeholder would fight with them.
+    expect(appJs).not.toContain('no-results');
   });
 });

@@ -86,7 +86,13 @@ html, body {
   margin-top: 6px;
   flex-wrap: wrap;
 }
-.kind-filter { display: inline-flex; gap: 4px; align-items: center; color: var(--text-dim); }
+.kind-filter {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 24px;
+  color: var(--text-dim);
+}
 
 .search-box input {
   width: 100%;
@@ -110,7 +116,6 @@ html, body {
 .section-header { display: flex; justify-content: space-between; align-items: center; }
 
 .song-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
-.no-results { color: var(--text-dim); padding: 8px 4px; font-style: italic; }
 
 .song-row {
   display: flex;
@@ -159,6 +164,8 @@ html, body {
 #cdg-canvas {
   image-rendering: pixelated;
   max-width: 100%;
+  /* Let a zoomed canvas shrink to the column without distorting 4:3. */
+  height: auto;
   background: #000;
 }
 .stage-empty { color: var(--text-dim); font-style: italic; }
@@ -238,12 +245,27 @@ html, body {
   cursor: pointer;
   padding: 5px 10px;
   font-size: 12px;
+  /* Every button keeps a 24 px target (WCAG 2.5.8). */
+  min-height: 24px;
 }
 .btn:hover { border-color: var(--accent); }
 .btn-primary { background: var(--accent); color: #1a1408; border-color: var(--accent); font-weight: 600; }
 .btn-primary:hover { background: var(--accent-strong); }
-.btn-sm { padding: 3px 8px; font-size: 11px; }
-.btn-icon { padding: 2px 6px; font-size: 12px; background: transparent; }
+.btn-sm { padding: 4px 9px; font-size: 11px; }
+.btn-icon {
+  /* Icon-only controls keep a 24 px touch/click target (WCAG 2.5.8). */
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 12px;
+  background: transparent;
+}
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { border-color: var(--danger); background: var(--bg-input); }
+.song-row .tag { flex: none; }
+.queue-section .empty-state { list-style: none; }
+.notices[data-kind="info"] { color: var(--text); }
+#status-message[data-kind="error"] { color: var(--danger); }
 
 /* ── Status bar ────────────────────────────────────────────────────── */
 .status-bar {
@@ -275,6 +297,16 @@ html, body {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  /* Narrow windows: wrap the control under its label instead of
+     overflowing the panel. */
+  flex-wrap: wrap;
+}
+.settings-row label { flex: 1 1 auto; }
+.settings-row select,
+.settings-row input[type="text"] {
+  flex: 1 1 8em;
+  min-width: 0;
+  max-width: 100%;
 }
 .settings-row select {
   background: var(--bg-input);
@@ -285,6 +317,169 @@ html, body {
 }
 
 .muted { color: var(--text-dim); }
+
+/* ── Panels, section headers, state chips ──────────────────────────── */
+.section-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.section-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.panel { display: flex; flex-direction: column; gap: 5px; }
+.count-badge { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.state-chip {
+  font-size: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.state-chip[data-state="playing"] { color: var(--ok); border-color: var(--ok); }
+.state-chip[data-state="paused"] { color: var(--accent); border-color: var(--accent); }
+.state-chip[data-state="error"] { color: var(--danger); border-color: var(--danger); }
+.hint { margin: 0; font-size: 11px; color: var(--text-dim); }
+.tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+.chip {
+  align-self: flex-start;
+  min-height: 24px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+
+/* ── Library management (progressive disclosure) ───────────────────── */
+.manage {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 4px 8px;
+}
+.manage > summary { cursor: pointer; font-size: 11px; color: var(--text-dim); }
+.manage-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.manage .hint { margin-top: 5px; }
+
+/* ── Scan diagnostics ──────────────────────────────────────────────── */
+.scan-summary {
+  font-size: 11px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+}
+.scan-summary[data-severity="warn"] { border-left-color: var(--danger); }
+.scan-details {
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 6px 6px 2px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.scan-details ul { margin: 0; padding-left: 16px; }
+.scan-details li { word-break: break-all; margin-bottom: 2px; }
+.scan-details .scan-category { color: var(--text); font-weight: 600; }
+
+/* ── Song rows: selected / queued / playing ────────────────────────── */
+.song-row:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.song-row.selected { background: var(--bg-elevated); border-color: var(--accent); }
+.song-row.selected .song-row-title::before { content: "▸ "; color: var(--accent); }
+.song-row.playing { border-color: var(--ok); }
+.song-row.playing .song-row-title::before { content: "▶ "; color: var(--ok); }
+.song-row-actions { display: flex; gap: 2px; flex: none; }
+.queue-position {
+  flex: none;
+  min-width: 1.2em;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.queue-row.current { border-color: var(--ok); }
+
+/* ── Empty states / notices ────────────────────────────────────────── */
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.empty-state .empty-title { color: var(--text); display: block; margin-bottom: 2px; }
+.empty-state .btn { margin-top: 6px; }
+.notices {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-input);
+  font-size: 11px;
+}
+.notices[data-kind="error"] { color: var(--danger); }
+.notices[data-kind="warn"] { color: var(--accent); }
+.notices .btn { margin-left: auto; }
+
+/* ── Transport availability ────────────────────────────────────────── */
+.btn-control[disabled] { opacity: 0.4; cursor: not-allowed; border-color: var(--border); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.volume-row .row-label { font-size: 11px; color: var(--text-dim); }
+
+/* ── Settings groups ───────────────────────────────────────────────── */
+.settings-panel { max-height: 55vh; overflow-y: auto; }
+.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings-group { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; }
+.settings-group + .settings-group { border-top: 1px solid var(--border); padding-top: 8px; }
+.settings-group-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.settings-group > summary {
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.settings-row label { display: flex; align-items: center; gap: 4px; }
+.settings-actions { display: flex; gap: 6px; align-items: center; }
+.shortcuts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 11px; }
+.shortcuts kbd {
+  font: inherit;
+  font-size: 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  background: var(--bg-input);
+  white-space: nowrap;
+}
+.shortcuts span { color: var(--text-dim); }
   </style>
   <link rel="stylesheet" href="/_assets/pyscript/core.css" />
   <script type="module" src="/_assets/pyscript/core.js"></script>
@@ -297,148 +492,200 @@ html, body {
   </py-config>
 
   <div id="app">
-    <!-- Fixed top: search + library -->
+    <!-- Fixed top: title + primary actions -->
     <header class="app-header">
       <span class="app-title">🎤 PyKaraoke NG</span>
       <div class="header-actions">
-        <button id="add-folder-btn" class="btn btn-primary btn-sm" title="Add a songs folder">＋ Folder</button>
-        <button id="settings-btn" class="btn btn-icon" title="Settings">⚙️</button>
+        <button id="add-folder-btn" class="btn btn-primary btn-sm" title="Add a folder of karaoke files">Add folder</button>
+        <button id="settings-btn" class="btn btn-icon" title="Settings and keyboard shortcuts" aria-label="Settings and keyboard shortcuts" aria-expanded="false" aria-controls="settings-panel">⚙️</button>
       </div>
     </header>
 
     <main class="main-column">
 
-      <!-- Library / scan -->
-      <details id="library-filters" class="filters">
-        <summary>Library</summary>
-        <div class="filter-row">
-          <button id="scan-library-btn" class="btn btn-secondary btn-sm">Rescan folders</button>
-          <button id="replace-library-btn" class="btn btn-secondary btn-sm">Replace library</button>
-          <button id="export-library-btn" class="btn btn-secondary btn-sm">Export</button>
-          <button id="import-library-btn" class="btn btn-secondary btn-sm">Import</button>
-          <span id="library-count" class="muted"></span>
+      <!-- 1. Library -->
+      <section id="library-section" class="panel" aria-labelledby="library-heading">
+        <div class="section-header">
+          <h2 id="library-heading" class="section-label">Library</h2>
+          <span id="library-count" class="count-badge" role="status" aria-live="polite">No songs yet</span>
         </div>
-        <div id="scan-summary" class="muted" hidden></div>
-      </details>
+        <details id="library-manage" class="manage">
+          <summary>Manage library</summary>
+          <div class="manage-actions">
+            <button id="scan-library-btn" class="btn btn-secondary btn-sm" title="Re-read your folders and add any new songs">Rescan library</button>
+            <button id="replace-library-btn" class="btn btn-secondary btn-sm" title="Clear the song list, then re-read your folders">Replace library</button>
+            <button id="export-library-btn" class="btn btn-secondary btn-sm" title="Download the song list as JSON">Export</button>
+            <button id="import-library-btn" class="btn btn-secondary btn-sm" title="Load a previously exported song list">Import</button>
+          </div>
+          <p id="library-folders" class="hint"></p>
+          <p id="replace-hint" class="hint" hidden></p>
+        </details>
+        <p id="scan-summary" class="scan-summary" hidden role="status"></p>
+        <button id="scan-issues" class="chip" hidden aria-expanded="false" aria-controls="scan-details"></button>
+        <div id="scan-details" class="scan-details" hidden aria-label="Scan details"></div>
+      </section>
 
-      <!-- Search -->
-      <section class="search-section">
+      <!-- 2. Search, filters and results -->
+      <section class="panel search-section" aria-labelledby="results-heading">
         <div class="search-box">
-          <input type="text" id="search-input" list="search-results" placeholder="Search songs…  ( / to focus, Esc to clear )" autocomplete="off" aria-label="Search songs" />
+          <input type="text" id="search-input" list="search-results" placeholder="Search title or artist…  ( / to focus, Esc to clear )" autocomplete="off" aria-label="Search songs by title, artist, or file name" aria-describedby="results-hint" />
           <datalist id="search-results"></datalist>
         </div>
-        <div class="filter-row">
+        <div class="filter-row" role="group" aria-label="Filter results by format">
+          <span class="hint">Format</span>
           <label class="kind-filter"><input type="checkbox" id="filter-cdg" checked /> CDG</label>
           <label class="kind-filter"><input type="checkbox" id="filter-kar" checked /> KAR/MID</label>
           <label class="kind-filter"><input type="checkbox" id="filter-mpg" checked /> MPG</label>
           <label class="kind-filter"><input type="checkbox" id="filter-lrc" checked /> LRC</label>
         </div>
+        <div class="section-header">
+          <h2 id="results-heading" class="section-label">Songs</h2>
+          <span id="results-count" class="count-badge"></span>
+        </div>
+        <p id="results-hint" class="hint" hidden></p>
+        <div id="results-list" class="song-list" role="listbox" aria-labelledby="results-heading"></div>
+        <div id="results-empty" class="empty-state" hidden></div>
       </section>
 
-      <!-- Results -->
-      <section class="results-section">
-        <div class="section-label">Results</div>
-        <div id="results-list" class="song-list" aria-label="Search results"></div>
-      </section>
-
-      <!-- Now playing / stage -->
-      <section class="player-section">
-        <div class="section-label">Now Playing</div>
-        <div id="stage" class="stage">
-          <canvas id="cdg-canvas" width="576" height="384"></canvas>
+      <!-- 3. Now playing -->
+      <section class="panel player-section" aria-labelledby="now-playing-heading">
+        <div class="section-header">
+          <h2 id="now-playing-heading" class="section-label">Now Playing</h2>
+          <span id="playback-state" class="state-chip" data-state="idle" role="status" aria-live="polite">Nothing loaded</span>
+        </div>
+        <div id="stage" class="stage" aria-label="Karaoke stage">
+          <canvas id="cdg-canvas" width="576" height="384" role="img" aria-label="CD+G graphics for the current song"></canvas>
           <div id="lyrics" class="lyrics"></div>
           <div id="video-slot"></div>
-          <div id="stage-empty" class="stage-empty">No song loaded</div>
+          <div id="stage-empty" class="stage-empty">Pick a song to start singing</div>
         </div>
         <div class="now-playing-info">
           <div id="current-song-title" class="song-title">—</div>
           <div id="current-song-artist" class="song-artist muted"></div>
         </div>
-        <div class="player-controls">
-          <button id="prev-btn" class="btn-control" title="Previous (Ctrl+↑)">⏮</button>
-          <button id="rewind-btn" class="btn-control" title="Rewind 5s">⏪</button>
-          <button id="play-btn" class="btn-control btn-play" title="Play / Pause (Space)">▶</button>
-          <button id="stop-btn" class="btn-control" title="Stop">⏹</button>
-          <button id="ff-btn" class="btn-control" title="Forward 5s">⏩</button>
-          <button id="next-btn" class="btn-control" title="Next (Ctrl+→)">⏭</button>
+        <div class="player-controls" role="group" aria-label="Playback controls">
+          <button id="prev-btn" class="btn-control" title="Restart, or play the previous song (Ctrl+↑)" aria-label="Previous song">⏮</button>
+          <button id="rewind-btn" class="btn-control" title="Skip back 5 seconds" aria-label="Rewind 5 seconds">⏪</button>
+          <button id="play-btn" class="btn-control btn-play" title="Play or pause (Space)" aria-label="Play">▶</button>
+          <button id="stop-btn" class="btn-control" title="Stop playback and unload the song" aria-label="Stop playback">⏹</button>
+          <button id="ff-btn" class="btn-control" title="Skip forward 5 seconds" aria-label="Forward 5 seconds">⏩</button>
+          <button id="next-btn" class="btn-control" title="Play the next queued song (Ctrl+→)" aria-label="Next song">⏭</button>
         </div>
         <div class="progress-row">
           <input type="range" id="progress-slider" min="0" max="1000" value="0" step="1" aria-label="Song position" />
           <span class="time-display"><span id="time-current">0:00</span> / <span id="time-total">0:00</span></span>
         </div>
         <div class="volume-row">
-          <span title="Volume">🔊</span>
+          <span class="row-label" aria-hidden="true">🔊</span>
+          <label class="row-label" for="volume-slider">Volume</label>
           <input type="range" id="volume-slider" min="0" max="100" value="75" aria-label="Volume" />
           <span id="volume-value" class="muted">75%</span>
         </div>
       </section>
 
-      <!-- Queue -->
-      <section class="queue-section">
+      <!-- 4. Queue -->
+      <section class="panel queue-section" aria-labelledby="queue-heading">
         <div class="section-header">
-          <span class="section-label">Queue</span>
-          <button id="clear-queue-btn" class="btn btn-secondary btn-sm">Clear</button>
+          <h2 id="queue-heading" class="section-label">Queue</h2>
+          <span id="queue-count" class="count-badge">Empty</span>
+          <button id="clear-queue-btn" class="btn btn-secondary btn-sm" title="Remove every queued song">Clear</button>
         </div>
-        <ul id="queue-list" class="song-list" aria-label="Queue"></ul>
+        <p id="queue-hint" class="hint"></p>
+        <ul id="queue-list" class="song-list" aria-labelledby="queue-heading"></ul>
       </section>
     </main>
 
-    <!-- Fixed bottom: status -->
+    <!-- Fixed bottom: feedback + status -->
+    <div id="notices" class="notices" role="status" aria-live="polite" hidden></div>
     <footer class="status-bar">
-      <span id="status-message">Loading engine…</span>
-      <span id="engine-status" class="muted">PyScript: connecting</span>
+      <span id="status-message" role="status" aria-live="polite">Starting…</span>
+      <span id="engine-status" class="muted" title="Engine details">Loading engine…</span>
     </footer>
   </div>
 
   <!-- Settings (inline collapsible, no modal per UX spec) -->
-  <div id="settings-panel" class="settings-panel" hidden>
-    <div class="settings-row">
-      <label for="setting-sort">Sort library by</label>
-      <select id="setting-sort">
-        <option value="filename">Filename</option>
-        <option value="title">Title</option>
-        <option value="artist">Artist</option>
-      </select>
+  <div id="settings-panel" class="settings-panel" hidden aria-labelledby="settings-heading">
+    <div class="settings-head">
+      <h2 id="settings-heading" class="section-label" tabindex="-1">Settings</h2>
+      <button id="settings-close-btn" class="btn btn-icon" aria-label="Close settings" title="Close settings">✕</button>
     </div>
-    <div class="settings-row">
-      <label for="setting-zoom">CDG zoom</label>
-      <select id="setting-zoom">
-        <option value="quick">Quick (0.75×)</option>
-        <option value="int">Normal (1×)</option>
-        <option value="full">Large (1.5×)</option>
-        <option value="soft">Full (2×)</option>
-      </select>
-    </div>
-    <div class="settings-row">
-      <label for="setting-zips">Look inside .zip files</label>
-      <input type="checkbox" id="setting-zips" checked />
-    </div>
-    <div class="settings-row">
-      <label for="setting-exclude">Hide songs without artist</label>
-      <input type="checkbox" id="setting-exclude" />
-    </div>
-    <div class="settings-row">
-      <label for="setting-derive">Derive song info from filename</label>
-      <input type="checkbox" id="setting-derive" checked />
-    </div>
-    <div class="settings-row">
-      <label for="setting-naming">Naming convention</label>
-      <select id="setting-naming">
-        <option value="0">Disc Track - Artist - Title</option>
-        <option value="1">DiscTrack - Artist - Title</option>
-        <option value="2">Disc - Artist - Title</option>
-        <option value="3">Artist - Title</option>
-        <option value="4">Disc-Track - Artist - Title (spaced)</option>
-      </select>
-    </div>
-    <div class="settings-row">
-      <label for="setting-include-patterns">Include patterns (comma separated)</label>
-      <input type="text" id="setting-include-patterns" placeholder="e.g. CB*.cdg" />
-    </div>
-    <div class="settings-row">
-      <label for="setting-exclude-patterns">Exclude patterns (comma separated)</label>
-      <input type="text" id="setting-exclude-patterns" placeholder="e.g. *(vocal)*" />
-    </div>
+
+    <section class="settings-group" aria-labelledby="settings-library-heading">
+      <h3 id="settings-library-heading" class="settings-group-title">Library and scanning</h3>
+      <div class="settings-row">
+        <label for="setting-sort">Sort songs by</label>
+        <select id="setting-sort">
+          <option value="filename">File name</option>
+          <option value="title">Title</option>
+          <option value="artist">Artist</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label for="setting-zips">Search inside ZIP archives <span class="tag">rescan</span></label>
+        <input type="checkbox" id="setting-zips" checked />
+      </div>
+      <div class="settings-row">
+        <label for="setting-exclude">Hide songs without an artist <span class="tag">rescan</span></label>
+        <input type="checkbox" id="setting-exclude" />
+      </div>
+    </section>
+
+    <section class="settings-group" aria-labelledby="settings-metadata-heading">
+      <h3 id="settings-metadata-heading" class="settings-group-title">Song names</h3>
+      <div class="settings-row">
+        <label for="setting-naming">Filename format <span class="tag">rescan</span></label>
+        <select id="setting-naming">
+          <option value="0">Disc Track - Artist - Title</option>
+          <option value="1">DiscTrack - Artist - Title</option>
+          <option value="2">Disc - Artist - Title</option>
+          <option value="3">Artist - Title</option>
+          <option value="4">Disc-Track - Artist - Title (spaced)</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <label for="setting-derive">Extract title and artist from filenames</label>
+        <input type="checkbox" id="setting-derive" checked />
+      </div>
+      <p class="hint">Artist and title are read from file names; the format above chooses how.</p>
+    </section>
+
+    <section class="settings-group" aria-labelledby="settings-playback-heading">
+      <h3 id="settings-playback-heading" class="settings-group-title">Playback and display</h3>
+      <div class="settings-row">
+        <label for="setting-zoom">CD+G zoom</label>
+        <select id="setting-zoom">
+          <option value="quick">Quick (0.75×)</option>
+          <option value="int">Normal (1×)</option>
+          <option value="full">Large (1.5×)</option>
+          <option value="soft">Full (2×)</option>
+        </select>
+      </div>
+    </section>
+
+    <details class="settings-group" id="settings-advanced">
+      <summary>Advanced file filters</summary>
+      <p class="hint">Patterns are matched against file names (<code>*</code> and <code>?</code> allowed). An empty include list means “allow every file”; excludes always win.</p>
+      <div class="settings-row">
+        <label for="setting-include-patterns">Include files matching <span class="tag">rescan</span></label>
+        <input type="text" id="setting-include-patterns" placeholder="e.g. CB*.cdg" aria-label="Include files matching these patterns, comma separated" />
+      </div>
+      <div class="settings-row">
+        <label for="setting-exclude-patterns">Exclude files matching <span class="tag">rescan</span></label>
+        <input type="text" id="setting-exclude-patterns" placeholder="e.g. *(vocal)*" aria-label="Exclude files matching these patterns, comma separated" />
+      </div>
+    </details>
+
+    <p id="settings-rescan-note" class="hint" hidden role="status">
+      These changes take effect the next time the library is scanned.
+      <button id="settings-rescan-btn" class="btn btn-secondary btn-sm" type="button">Rescan library now</button>
+    </p>
+
+    <section class="settings-group" aria-labelledby="settings-shortcuts-heading">
+      <h3 id="settings-shortcuts-heading" class="settings-group-title">Keyboard shortcuts</h3>
+      <div id="shortcuts-list" class="shortcuts"></div>
+    </section>
+
+    <p id="engine-detail" class="hint"></p>
   </div>
 
   <input type="file" id="folder-picker" webkitdirectory multiple hidden aria-label="Choose a songs folder" />

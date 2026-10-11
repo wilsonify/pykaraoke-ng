@@ -11,7 +11,7 @@
 // which runs only when a DOM exists.  index.html loads this module and the
 // same file is served in both development and production.
 
-import { CDG_WIDTH, CDG_HEIGHT, ZOOM_SCALES, formatTime, debounce, escapeHtml, songLabel, KIND_BADGE, ELRC_EXT, companionBaseName, companionMember, SongQueue, partClass, partLabel, buildLyricLines, highlightState, computeNoteTimeline, writeTileRgba } from './helpers.js';
+import { CDG_WIDTH, CDG_HEIGHT, ZOOM_SCALES, formatTime, debounce, songLabel, KIND_BADGE, ELRC_EXT, companionBaseName, companionMember, SongQueue, partClass, partLabel, buildLyricLines, highlightState, computeNoteTimeline, writeTileRgba, formatCount, BROWSE_LIMIT, describeScanReport, describeResults, describeQueue, describePlayback, describeEngine, describePlaybackError, needsRescan, queueBadgeFor, SHORTCUTS } from './helpers.js';
 
 let __app = null;
 
@@ -25,6 +25,7 @@ if (isBrowser) {
   const $ = (id) => document.getElementById(id);
 
   const tauriCore = window.__TAURI__?.core; // {invoke, convertFileSrc} (withGlobalTauri)
+  const SEARCH_LIMIT = 500; // most matches the engine returns for one query
 
   // Engine bridge
   function callApi(name, ...args) {
@@ -46,8 +47,14 @@ if (isBrowser) {
     settings: { volume: 0.75, sort: 'filename', zoom: 'int', lookInsideZips: true },
     files: new Map(),       // browser mode: relative path -> File
     pathByBase: new Map(),  // lowercased basename -> loadable path (both modes)
-    results: [],
+    results: [],            // current match set: search hits, or the browse slice
+    query: '',              // active search text ('' = browsing the library)
     selectedResult: -1,
+    selectedQueue: -1,      // queue row the keyboard acts on (-1 = the song list)
+    browse: null,           // cached first BROWSE_LIMIT songs (null = stale)
+    libraryCount: 0,
+    playingFailed: false,   // last load failed; Play becomes Retry
+    busy: false,            // a scan is running: library actions are disabled
     current: null,          // Song being played
     playing: false,
     durationMs: 0,
@@ -179,19 +186,32 @@ if (isBrowser) {
   }
 
   async function boot() {
-    setStatus('Loading engine (Pyodide)…');
+    setStatus('Starting…');
+    setEngineStatus(describeEngine({ ready: false }));
+    renderShortcuts();
     const ready = await waitFor(() => typeof window.pykaraoke_api === 'function', 120000);
     if (!ready) {
-      setStatus('Engine failed to load — check the browser console');
+      setEngineStatus(describeEngine({ failed: true }));
+      setStatus('Karaoke engine unavailable', { kind: 'error' });
+      notify('The karaoke engine did not load. Reload the window to try again.', {
+        kind: 'error',
+        timeout: 0,
+      });
       return;
     }
     const pyVer = window.pyodide?.version || '';
-    const pyTag = pyVer ? ` (Pyodide ${pyVer})` : '';
-    setEngineStatus(`PyScript ready${pyTag}`);
+    setEngineStatus(describeEngine({ ready: true, version: pyVer ? `Pyodide ${pyVer}` : '' }));
+    $('engine-detail').textContent = `Engine: ${pyVer ? `Pyodide ${pyVer}` : 'PyScript'} · runs offline in this window`;
     await restoreState();
     await refreshSettings();
     renderQueue();
-    setStatus(tauriCore ? 'Ready — desktop filesystem' : 'Ready — add a folder to scan');
+    renderTransport();
+    const total = state.libraryCount;
+    setStatus(
+      total
+        ? `Ready — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'} in the library`
+        : 'Ready — add a folder to scan',
+    );
   }
 
   async function restoreState() {
@@ -205,7 +225,7 @@ if (isBrowser) {
     } catch (err) {
       console.warn('restore failed', err);
     }
-    renderLibraryCount();
+    await refreshLibraryViews();
   }
 
   async function refreshSettings() {
@@ -232,6 +252,7 @@ if (isBrowser) {
     $('setting-include-patterns').value = state.settings.includePatterns.join(', ');
     $('setting-exclude-patterns').value = state.settings.excludePatterns.join(', ');
     applyZoom();
+    renderLibraryFolders();
   }
 
   function persist() {
@@ -247,123 +268,324 @@ if (isBrowser) {
   }
 
   // ── Scanning ───────────────────────────────────────────────────────
+  /** Disable the library actions while a scan is running. */
+  function setBusy(busy) {
+    state.busy = busy;
+    for (const id of [
+      'scan-library-btn',
+      'replace-library-btn',
+      'import-library-btn',
+      'export-library-btn',
+      'add-folder-btn',
+    ]) {
+      const el = $(id);
+      if (el) el.disabled = busy;
+    }
+  }
+
   async function scanEntries(entries, replace = false) {
-    if (!entries.length) return;
-    // Keep a basename index (lowercased) for audio/zip lookup.
-    for (const e of entries) {
-      const base = e.name.toLowerCase();
-      if (!state.pathByBase.has(base)) state.pathByBase.set(base, e.path);
+    if (!entries.length) {
+      notify('That folder held no files — pick the folder that contains your karaoke files.', {
+        kind: 'warn',
+      });
+      return null;
     }
-    if (!tauriCore) {
-      for (const file of window.__pickedFiles || []) {
-        const path = file.webkitRelativePath || file.name;
-        state.files.set(path, file);
-        const base = file.name.toLowerCase();
-        if (!state.pathByBase.has(base)) state.pathByBase.set(base, path);
+    setBusy(true);
+    setStatus(replace ? 'Replacing the library…' : 'Scanning library…');
+    try {
+      // Keep a basename index (lowercased) for audio/zip lookup.
+      for (const e of entries) {
+        const base = e.name.toLowerCase();
+        if (!state.pathByBase.has(base)) state.pathByBase.set(base, e.path);
       }
-      window.__pickedFiles = [];
+      if (!tauriCore) {
+        for (const file of window.__pickedFiles || []) {
+          const path = file.webkitRelativePath || file.name;
+          state.files.set(path, file);
+          const base = file.name.toLowerCase();
+          if (!state.pathByBase.has(base)) state.pathByBase.set(base, path);
+        }
+        window.__pickedFiles = [];
+      }
+      const result = callApi('scan_files', entries, replace);
+      const zips = await scanZips(entries);
+      await refreshSettings();
+      await refreshLibraryViews();
+      renderScanReport();
+      persist();
+      const total = state.libraryCount;
+      const headline = `${replace ? 'Library replaced' : 'Library scan complete'} — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`;
+      setStatus(headline);
+      if (zips.failed) {
+        notify(`${formatCount(zips.failed)} ZIP archive${zips.failed === 1 ? '' : 's'} could not be opened.`, { kind: 'warn' });
+      }
+      notify(scanView ? scanView.summary : headline, {
+        kind: scanView?.severity === 'warn' ? 'warn' : 'info',
+        actionLabel: scanView ? 'See details' : '',
+        onAction: scanView ? openScanDetails : null,
+      });
+      return result;
+    } catch (err) {
+      console.error(err);
+      setStatus(`Library scan failed — ${err.message}`, { kind: 'error' });
+      notify(`The library scan failed: ${err.message}`, { kind: 'error', timeout: 0 });
+      return null;
+    } finally {
+      setBusy(false);
     }
-    const result = callApi('scan_files', entries, replace);
-    await scanZips(entries);
-    await refreshSettings();
-    renderLibraryCount();
-    renderScanSummary();
-    persist();
-    setStatus(`Library: ${result.total} songs`);
-    return result;
   }
 
   async function scanZips(entries) {
     const zips = entries.filter((e) => e.name.toLowerCase().endsWith('.zip'));
     const setting = callApi('get_settings') || {};
-    if (!setting.look_inside_zips) return;
+    if (!setting.look_inside_zips) return { added: 0, failed: 0 };
+    let added = 0;
+    let failed = 0;
     for (const zip of zips) {
       try {
         const bytes = await readBytes(zip.path);
         const r = callApi('scan_zip', zip.name, bytes);
-        setStatus(`Added ${r.added} songs from ${zip.name}`);
+        added += r?.added || 0;
       } catch (err) {
+        failed += 1;
         console.warn(`zip scan failed: ${zip.name}`, err);
       }
     }
+    return { added, failed };
   }
 
   // ── Rendering ──────────────────────────────────────────────────────
+  function countLibrary() {
+    try { return callApi('library_songs')?.songs?.length || 0; } catch { return 0; }
+  }
+
   function renderLibraryCount() {
-    const total = callApi('library_songs')?.songs?.length || 0;
-    $('library-count').textContent = `${total} songs`;
+    const total = state.libraryCount;
+    $('library-count').textContent = total
+      ? `${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`
+      : 'No songs yet';
+  }
+
+  /** Which folders a rescan re-reads, so the button is never a mystery. */
+  function renderLibraryFolders() {
+    const el = $('library-folders');
+    if (!el) return;
+    let folders = [];
+    try { folders = callApi('get_settings')?.folders || []; } catch { folders = []; }
+    el.textContent = folders.length
+      ? `Folders: ${folders.join(' · ')}`
+      : 'No folders yet — use Add folder to choose the folder that holds your karaoke files.';
+  }
+
+  /** Re-read the library after any change: count, folders and song list. */
+  function refreshLibraryViews() {
+    state.browse = null;
+    state.libraryCount = countLibrary();
+    renderLibraryCount();
+    renderLibraryFolders();
+    return runSearch(state.query);
+  }
+
+  /** First page of the library, shown while the search box is empty. */
+  function browseSongs() {
+    if (!state.browse) {
+      const songs = callApi('library_songs')?.songs || [];
+      state.browse = songs.slice(0, BROWSE_LIMIT);
+    }
+    return state.browse;
   }
 
   function parsePatternList(text) {
     return String(text).split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
   }
 
-  const SCAN_CATEGORY_LABELS = {
-    unsupported: 'unsupported',
-    filtered: 'filtered',
-    corrupt_archive: 'corrupt archive',
-    unsupported_compression: 'unsupported compression',
-    unreadable: 'unreadable',
-    parse_failure: 'parse failure',
-  };
+  // Described scan report for this session (null when there is nothing to
+  // report).  Kept so the details stay reachable after the notice is gone.
+  let scanView = null;
 
-  function renderScanSummary() {
-    const el = $('scan-summary');
+  function renderScanReport() {
+    const summary = $('scan-summary');
+    const chip = $('scan-issues');
     let report = null;
     try { report = callApi('scan_report'); } catch { report = null; }
-    if (!report || !(report.entries || []).length) {
-      el.hidden = true;
-      el.textContent = '';
+    scanView = report && (report.entries || []).length ? describeScanReport(report) : null;
+    $('scan-details').hidden = true;
+    $('scan-details').textContent = '';
+    chip.setAttribute('aria-expanded', 'false');
+    if (!scanView) {
+      summary.hidden = true;
+      summary.textContent = '';
+      chip.hidden = true;
       return;
     }
-    const parts = [];
-    for (const [key, n] of Object.entries(report.counts || {})) {
-      if (n > 0) parts.push(`${n} ${SCAN_CATEGORY_LABELS[key] || key}`);
-    }
-    const shown = (report.entries || [])
-      .filter((e) => e.category !== 'unsupported' && e.category !== 'filtered')
-      .slice(0, 3)
-      .map((e) => e.path);
-    el.textContent = `Scan: ${parts.join(', ') || '0 issues'}`;
-    if (shown.length) {
-      el.textContent += ` — e.g. ${shown.join('; ')}`;
-    }
-    const clear = document.createElement('button');
-    clear.className = 'btn btn-secondary btn-sm';
-    clear.textContent = 'Dismiss';
-    clear.addEventListener('click', () => {
-      try { callApi('clear_scan_report'); } catch { /* engine may be gone */ }
-      el.hidden = true;
-      el.textContent = '';
-    });
-    el.append(' ', clear);
-    el.hidden = false;
+    summary.hidden = false;
+    summary.textContent = scanView.summary;
+    summary.dataset.severity = scanView.severity;
+    const total = scanView.details.reduce((n, d) => n + d.count, 0);
+    chip.hidden = false;
+    chip.textContent = `Scan details (${formatCount(total)})`;
+    chip.title = 'Every file the scan skipped or could not use';
   }
 
-  function renderResults() {
-    const list = $('results-list');
-    const datalist = $('search-results');
+  function renderScanDetails() {
+    const details = $('scan-details');
+    details.textContent = '';
+    if (!scanView) return;
+    const list = document.createElement('ul');
+    for (const group of scanView.details) {
+      const item = document.createElement('li');
+      const heading = document.createElement('span');
+      heading.className = 'scan-category';
+      heading.textContent = `${formatCount(group.count)} ${group.label}`;
+      item.appendChild(heading);
+      const paths = document.createElement('ul');
+      for (const path of group.paths) {
+        const li = document.createElement('li');
+        li.textContent = path;
+        paths.appendChild(li);
+      }
+      if (group.hidden) {
+        const more = document.createElement('li');
+        more.textContent = `…and ${formatCount(group.hidden)} more`;
+        paths.appendChild(more);
+      }
+      item.appendChild(paths);
+      list.appendChild(item);
+    }
+    details.appendChild(list);
+    const clear = document.createElement('button');
+    clear.className = 'btn btn-secondary btn-sm';
+    clear.textContent = 'Clear scan details';
+    clear.title = 'Forget these results until the next scan';
+    clear.addEventListener('click', () => {
+      try { callApi('clear_scan_report'); } catch { /* the engine may be gone */ }
+      renderScanReport();
+    });
+    details.appendChild(clear);
+  }
+
+  function openScanDetails() {
+    if (!scanView) return;
+    renderScanDetails();
+    $('scan-details').hidden = false;
+    $('scan-issues').setAttribute('aria-expanded', 'true');
+    $('scan-details').scrollIntoView({ block: 'nearest' });
+  }
+
+  function toggleScanDetails() {
+    if ($('scan-details').hidden) openScanDetails();
+    else {
+      $('scan-details').hidden = true;
+      $('scan-details').textContent = '';
+      $('scan-issues').setAttribute('aria-expanded', 'false');
+    }
+  }
+
+  /** The list the user sees: the match set filtered by the format boxes. */
+  function visibleResults() {
     const kindFilter = {
       cdg: $('filter-cdg').checked,
       kar: $('filter-kar').checked,
       mpg: $('filter-mpg').checked,
       lrc: $('filter-lrc').checked,
     };
-    const visible = state.results.filter((s) => kindFilter[s.kind]);
-    if (!state.results.length) {
-      list.innerHTML = '<div class="no-results">Type to search your library</div>';
-      datalist.innerHTML = '';
-      state.selectedResult = -1;
+    return state.results.filter((s) => kindFilter[s.kind]);
+  }
+
+  function rowButton(glyph, label, onClick) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-icon';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.textContent = glyph;
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return button;
+  }
+
+  /** The "queued ×2" / "playing" marker on a result row, or nothing. */
+  function syncResultRow(row, song) {
+    const label = queueBadgeFor(song, state.queue.items, state.current?.id).label;
+    let tag = row.querySelector('.state-tag');
+    if (!label) {
+      if (tag) tag.remove();
       return;
     }
-    if (!visible.length) {
-      list.innerHTML = '<div class="no-results">No results match the filters</div>';
-      datalist.innerHTML = '';
-      state.selectedResult = -1;
-      return;
+    if (!tag) {
+      tag = document.createElement('span');
+      tag.className = 'tag state-tag';
+      row.insertBefore(tag, row.querySelector('.song-row-actions'));
     }
+    tag.textContent = label;
+  }
+
+  /** Refresh just the queue markers on the rows already on screen. */
+  function syncResultRows() {
+    const visible = visibleResults();
+    $('results-list').querySelectorAll('.song-row').forEach((row) => {
+      const song = visible[Number(row.dataset.index)];
+      if (song) syncResultRow(row, song);
+    });
+  }
+
+  function emptyAction(empty) {
+    const actions = {
+      'add-folder': pickFolder,
+      'clear-search': clearSearch,
+      'reset-filters': resetKindFilters,
+    };
+    const run = actions[empty.action];
+    if (!run) return null;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-secondary btn-sm';
+    button.textContent = empty.actionLabel;
+    button.addEventListener('click', () => run());
+    return button;
+  }
+
+  function renderResults() {
+    const list = $('results-list');
+    const datalist = $('search-results');
+    const visible = visibleResults();
+    const view = describeResults({
+      libraryCount: state.libraryCount,
+      query: state.query,
+      matched: state.results.length,
+      shown: visible.length,
+      limit: state.query ? SEARCH_LIMIT : BROWSE_LIMIT,
+    });
+
+    $('results-heading').textContent = view.heading;
+    $('results-count').textContent = view.count;
+    const hint = $('results-hint');
+    hint.textContent = view.hint;
+    hint.hidden = !view.hint;
+
+    const empty = $('results-empty');
     list.innerHTML = '';
     datalist.innerHTML = '';
+    state.selectedResult = -1;
+
+    if (view.empty) {
+      empty.hidden = false;
+      empty.textContent = '';
+      const title = document.createElement('span');
+      title.className = 'empty-title';
+      title.textContent = view.empty.title;
+      const sub = document.createElement('span');
+      sub.textContent = view.empty.hint;
+      empty.append(title, sub);
+      const action = emptyAction(view.empty);
+      if (action) empty.appendChild(action);
+      return;
+    }
+    empty.hidden = true;
+    empty.textContent = '';
+
     visible.forEach((song, i) => {
       // Accessible path: native datalist option bound to the search input.
       const option = document.createElement('option');
@@ -374,11 +596,8 @@ if (isBrowser) {
       const row = document.createElement('div');
       row.className = 'song-row';
       row.dataset.index = String(i);
-
-      const info = document.createElement('div');
-      info.className = 'song-row-info';
-      info.innerHTML = `<span class="song-row-title">${escapeHtml(songLabel(song))}</span>` +
-        `<span class="song-row-file muted">${escapeHtml(song.filename)}</span>`;
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', 'false');
 
       const badge = document.createElement('span');
       badge.className = `badge badge-${song.kind}`;
@@ -388,77 +607,312 @@ if (isBrowser) {
         badge.title = 'Word-level timing (.elrc)';
       }
 
-      const play = document.createElement('button');
-      play.className = 'btn btn-icon btn-row-play';
-      play.title = 'Play now';
-      play.textContent = '▶';
-      play.addEventListener('click', (e) => {
-        e.stopPropagation();
-        playSong(song);
-      });
+      const info = document.createElement('div');
+      info.className = 'song-row-info';
+      const title = document.createElement('span');
+      title.className = 'song-row-title';
+      title.textContent = songLabel(song);
+      const file = document.createElement('span');
+      file.className = 'song-row-file muted';
+      file.textContent = song.filename;
+      info.append(title, file);
 
-      row.append(badge, info, play);
-      row.addEventListener('click', () => enqueue(song));
+      const actions = document.createElement('div');
+      actions.className = 'song-row-actions';
+      actions.append(
+        rowButton('▶', `Play ${songLabel(song)} now`, () => playSong(song)),
+        rowButton('➕', `Add ${songLabel(song)} to the queue`, () => enqueue(song)),
+      );
+
+      row.append(badge, info, actions);
+      row.addEventListener('click', () => {
+        selectResult(i);
+        enqueue(song);
+      });
       row.addEventListener('dblclick', () => playSong(song));
       list.appendChild(row);
+      syncResultRow(row, song);
     });
-    state.selectedResult = -1;
   }
 
   function selectResult(i) {
     const rows = $('results-list').querySelectorAll('.song-row');
     if (!rows.length) return;
+    state.selectedQueue = -1;
     state.selectedResult = (i + rows.length) % rows.length;
     rows.forEach((r, idx) => {
-      r.classList.toggle('selected', idx === state.selectedResult);
+      const on = idx === state.selectedResult;
+      r.classList.toggle('selected', on);
+      r.setAttribute('aria-selected', String(on));
     });
     rows[state.selectedResult].scrollIntoView({ block: 'nearest' });
   }
 
-  function renderQueue() {
-    const list = $('queue-list');
-    if (!state.queue.length) {
-      list.innerHTML = '<li class="no-results">Queue is empty — add songs with Enter</li>';
+  /** Run a search (or browse the library when *raw* is empty). */
+  async function runSearch(raw) {
+    const query = String(raw == null ? '' : raw).trim();
+    state.query = query;
+    if (!query) {
+      state.results = browseSongs();
+      renderResults();
       return;
     }
+    try {
+      const r = callApi('search', query, SEARCH_LIMIT);
+      if (r?.error) throw new Error(r.error);
+      state.results = r?.results || [];
+    } catch (err) {
+      console.error(err);
+      state.results = [];
+      setStatus(`Search failed — ${err.message}`, { kind: 'error' });
+    }
+    renderResults();
+  }
+
+  function clearSearch() {
+    $('search-input').value = '';
+    runSearch('');
+  }
+
+  function resetKindFilters() {
+    for (const id of ['filter-cdg', 'filter-kar', 'filter-mpg', 'filter-lrc']) {
+      $(id).checked = true;
+    }
+    renderResults();
+  }
+
+  function renderQueue() {
+    const list = $('queue-list');
+    const items = state.queue.items;
+    const info = describeQueue({
+      length: items.length,
+      nextLabel: items.length ? songLabel(items[0]) : '',
+    });
+    $('queue-count').textContent = info.count;
+    $('queue-hint').textContent = info.hint;
+    $('clear-queue-btn').disabled = !items.length;
     list.innerHTML = '';
-    state.queue.items.forEach((song, i) => {
+
+    if (!items.length) {
+      state.selectedQueue = -1;
+      const empty = document.createElement('li');
+      empty.className = 'empty-state';
+      empty.textContent = 'Nothing queued yet.';
+      list.appendChild(empty);
+      syncResultRows();
+      return;
+    }
+    if (state.selectedQueue >= items.length) state.selectedQueue = items.length - 1;
+
+    items.forEach((song, i) => {
       const row = document.createElement('li');
       row.className = 'song-row queue-row';
-      const info = document.createElement('div');
-      info.className = 'song-row-info';
-      info.innerHTML = `<span class="song-row-title">${i + 1}. ${escapeHtml(songLabel(song))}</span>` +
-        `<span class="song-row-file muted">${escapeHtml(song.filename)}</span>`;
-      const remove = document.createElement('button');
-      remove.className = 'btn btn-icon';
-      remove.title = 'Remove (Delete)';
-      remove.textContent = '✕';
-      remove.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.queue.removeAt(i);
-        renderQueue();
-        persist();
-      });
-      row.append(info, remove);
-      row.addEventListener('dblclick', () => playSong(song));
+      row.dataset.index = String(i);
+      row.tabIndex = -1;
+      if (state.current && song.id === state.current.id) row.classList.add('current');
+      if (i === state.selectedQueue) row.classList.add('selected');
+
+      const position = document.createElement('span');
+      position.className = 'queue-position';
+      position.textContent = String(i + 1);
+
+      const rowInfo = document.createElement('div');
+      rowInfo.className = 'song-row-info';
+      const title = document.createElement('span');
+      title.className = 'song-row-title';
+      title.textContent = songLabel(song);
+      const file = document.createElement('span');
+      file.className = 'song-row-file muted';
+      file.textContent = song.filename;
+      rowInfo.append(title, file);
+
+      const actions = document.createElement('div');
+      actions.className = 'song-row-actions';
+      actions.append(
+        rowButton('▶', `Play ${songLabel(song)} now`, () => playFromQueue(i)),
+        rowButton('✕', `Remove ${songLabel(song)} from the queue`, () => removeQueueItem(i)),
+      );
+
+      row.append(position, rowInfo, actions);
+      row.addEventListener('click', () => selectQueueItem(i));
+      row.addEventListener('dblclick', () => playFromQueue(i));
       list.appendChild(row);
+    });
+    syncResultRows();
+  }
+
+  /**
+   * Queue rows are selectable: while one is selected, the arrow keys and
+   * Delete/Alt+arrow shortcuts act on the queue instead of the song list.
+   */
+  function selectQueueItem(i) {
+    const rows = $('queue-list').querySelectorAll('.queue-row');
+    if (!rows.length) return;
+    state.selectedResult = -1;
+    $('results-list').querySelectorAll('.song-row.selected').forEach((r) => {
+      r.classList.remove('selected');
+      r.setAttribute('aria-selected', 'false');
+    });
+    state.selectedQueue = (i + rows.length) % rows.length;
+    rows.forEach((r, idx) => r.classList.toggle('selected', idx === state.selectedQueue));
+    rows[state.selectedQueue].scrollIntoView({ block: 'nearest' });
+  }
+
+  function removeQueueItem(i) {
+    const song = state.queue.items[i];
+    if (!song) return;
+    state.queue.removeAt(i);
+    state.selectedQueue = Math.min(i, state.queue.length - 1);
+    renderQueue();
+    renderTransport();
+    persist();
+    notify(`Removed ${songLabel(song)} from the queue.`, {
+      actionLabel: 'Undo',
+      onAction: () => {
+        state.queue.insert(i, song);
+        state.selectedQueue = i;
+        renderQueue();
+        renderTransport();
+        persist();
+      },
     });
   }
 
-  function setStatus(msg) {
-    $('status-message').textContent = msg;
+  function moveQueueItem(i, delta) {
+    const target = i + delta;
+    if (i < 0 || i >= state.queue.length || target < 0 || target >= state.queue.length) return;
+    state.queue.move(i, delta);
+    state.selectedQueue = target;
+    renderQueue();
+    persist();
   }
 
-  function setEngineStatus(msg) {
-    $('engine-status').textContent = msg;
+  /** Play a queued song now: it leaves the queue, so it cannot replay later. */
+  function playFromQueue(i) {
+    const song = state.queue.items[i];
+    if (!song) return;
+    state.queue.removeAt(i);
+    state.selectedQueue = Math.min(i, state.queue.length - 1);
+    renderQueue();
+    renderTransport();
+    persist();
+    playSong(song);
   }
 
-  function setPlaying(song) {
+  function clearQueue() {
+    const removed = state.queue.items.slice();
+    if (!removed.length) return;
+    state.queue.clear();
+    state.selectedQueue = -1;
+    renderQueue();
+    renderTransport();
+    persist();
+    notify(
+      `Cleared ${formatCount(removed.length)} queued ${removed.length === 1 ? 'song' : 'songs'}.`,
+      {
+        actionLabel: 'Undo',
+        onAction: () => {
+          for (const song of removed) state.queue.push(song);
+          renderQueue();
+          renderTransport();
+          persist();
+        },
+      },
+    );
+  }
+
+  function setStatus(msg, { kind = 'info' } = {}) {
+    const el = $('status-message');
+    el.textContent = msg;
+    el.dataset.kind = kind;
+  }
+
+  function setEngineStatus(info) {
+    const el = $('engine-status');
+    el.textContent = info.text;
+    el.title = info.title;
+  }
+
+  let noticeTimer = null;
+
+  function clearNotice() {
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = null;
+    const el = $('notices');
+    el.hidden = true;
+    el.textContent = '';
+    el.removeAttribute('data-kind');
+  }
+
+  /** Non-blocking feedback, with an optional one-click action (Undo, Retry). */
+  function notify(message, { kind = 'info', actionLabel = '', onAction = null, timeout = 8000 } = {}) {
+    const el = $('notices');
+    if (noticeTimer) clearTimeout(noticeTimer);
+    el.textContent = '';
+    el.dataset.kind = kind;
+    const text = document.createElement('span');
+    text.textContent = message;
+    el.appendChild(text);
+    if (actionLabel && onAction) {
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.className = 'btn btn-secondary btn-sm';
+      action.textContent = actionLabel;
+      action.addEventListener('click', () => {
+        clearNotice();
+        onAction();
+      });
+      el.appendChild(action);
+    }
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn btn-icon';
+    close.title = 'Dismiss';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.textContent = '✕';
+    close.addEventListener('click', clearNotice);
+    el.appendChild(close);
+    el.hidden = false;
+    noticeTimer = timeout > 0 ? setTimeout(clearNotice, timeout) : null;
+  }
+
+  /**
+   * Chip plus control availability for the transport: a control that cannot
+   * do anything yet is disabled rather than failing on click.
+   */
+  function renderTransport() {
+    const info = describePlayback({
+      song: state.current,
+      playing: state.playing,
+      failed: state.playingFailed,
+    });
+    const chip = $('playback-state');
+    chip.dataset.state = info.state;
+    chip.textContent = info.label;
+    chip.title = info.mediaState;
+
+    const play = $('play-btn');
+    play.disabled = info.playDisabled;
+    play.textContent = state.playing ? '⏸' : info.playLabel === 'Retry' ? '↻' : '▶';
+    play.title = `${info.playLabel} (Space)`;
+    play.setAttribute('aria-label', info.playLabel);
+
+    $('stop-btn').disabled = info.stopDisabled;
+    $('prev-btn').disabled = !state.current;
+    $('rewind-btn').disabled = info.seekDisabled;
+    $('ff-btn').disabled = info.seekDisabled;
+    $('next-btn').disabled = state.queue.length === 0;
+    $('progress-slider').disabled = info.seekDisabled;
+  }
+
+  function setNowPlaying(song) {
     state.current = song;
     $('current-song-title').textContent = song ? songLabel(song) : '—';
     $('current-song-artist').textContent = song ? song.filename : '';
-    $('play-btn').textContent = state.playing ? '⏸' : '▶';
     $('stage-empty').style.display = song ? 'none' : '';
+    renderTransport();
+    renderQueue();
+    syncResultRows();
   }
 
   // ── Stage rendering (CDG) ──────────────────────────────────────────
@@ -472,10 +926,11 @@ if (isBrowser) {
 
   function applyZoom() {
     const scale = ZOOM_SCALES[state.settings.zoom] || 1;
+    // Intrinsic size only: CSS caps the display width to the column
+    // (`max-width: 100%` with `height: auto`), so a big zoom scales down
+    // instead of being squashed out of shape.
     canvas.width = Math.round(CDG_WIDTH * scale);
     canvas.height = Math.round(CDG_HEIGHT * scale);
-    canvas.style.width = `${canvas.width}px`;
-    canvas.style.height = `${canvas.height}px`;
   }
 
   function drawCdgUpdate(update) {
@@ -549,8 +1004,8 @@ if (isBrowser) {
   async function playSong(song) {
     stopPlayback();
     state.playing = true;
-    setPlaying(song);
-    $('stage-empty').style.display = 'none';
+    state.playingFailed = false;
+    setNowPlaying(song);
     try {
       if (song.kind === 'cdg') {
         await playCdg(song);
@@ -561,14 +1016,23 @@ if (isBrowser) {
       } else {
         await playMpg(song);
       }
+      renderTransport();
     } catch (err) {
       console.error(err);
       // Only tear down if this song is still the current one — a rapid
       // play-next can supersede it before its (async) setup settles.
       if (state.current === song) {
-        setStatus(`Playback error: ${err.message}`);
         state.playing = false;
-        setPlaying(song);
+        state.playingFailed = true;
+        const reason = describePlaybackError(err.message);
+        setStatus(`Playback error — ${reason}`, { kind: 'error' });
+        notify(`Could not play ${songLabel(song)}: ${reason}`, {
+          kind: 'error',
+          timeout: 0,
+          actionLabel: 'Retry',
+          onAction: () => playSong(song),
+        });
+        renderTransport();
       }
     }
   }
@@ -715,22 +1179,32 @@ if (isBrowser) {
     if (state.synth) state.synth.pause();
     if (state.videoEl) state.videoEl.pause();
     cancelAnimationFrame(state.rafId);
-    $('play-btn').textContent = '▶';
+    renderTransport();
   }
 
   function resumeMedia() {
     state.playing = true;
-    $('play-btn').textContent = '⏸';
+    state.playingFailed = false;
     if (state.audioEl) state.audioEl.play();
     if (state.synth) state.synth.resume();
     if (state.videoEl) state.videoEl.play();
     if (state.frameFn) startLoop(state.frameFn);
+    renderTransport();
   }
 
   function togglePlay() {
     if (!state.current) return;
     if (state.playing) pauseMedia();
+    else if (state.playingFailed) playSong(state.current);
     else resumeMedia();
+  }
+
+  /** Stop button: unload the song and clear any previous error. */
+  function stopNow() {
+    stopPlayback();
+    state.playingFailed = false;
+    setNowPlaying(null);
+    setStatus('Stopped — pick a song to sing');
   }
 
   function stopPlayback() {
@@ -764,19 +1238,21 @@ if (isBrowser) {
     $('time-current').textContent = '0:00';
     $('time-total').textContent = '0:00';
     $('progress-slider').value = 0;
-    $('play-btn').textContent = '▶';
+    renderTransport();
   }
 
   function onSongEnded() {
     const next = state.queue.next();
-    renderQueue();
-    persist();
-    if (next) playSong(next);
-    else {
-      stopPlayback();
-      setPlaying(null);
-      setStatus('Queue finished');
+    if (next) {
+      renderQueue();
+      renderTransport();
+      persist();
+      playSong(next);
+      return;
     }
+    stopPlayback();
+    setNowPlaying(null);
+    setStatus('Queue finished — pick the next song');
   }
 
   function seekTo(ms) {
@@ -795,21 +1271,39 @@ if (isBrowser) {
   }
 
   function enqueue(song) {
+    const already = queueBadgeFor(song, state.queue.items, null).count;
     state.queue.push(song);
     renderQueue();
+    renderTransport();
     persist();
-    setStatus(`Queued: ${songLabel(song)}`);
+    const undo = () => {
+      const at = state.queue.items.lastIndexOf(song);
+      if (at >= 0) state.queue.removeAt(at);
+      renderQueue();
+      renderTransport();
+      persist();
+    };
+    if (already) {
+      notify(`${songLabel(song)} was already queued — added again (${already + 1} in the queue).`, {
+        kind: 'warn',
+        actionLabel: 'Undo',
+        onAction: undo,
+      });
+      return;
+    }
+    notify(`Added ${songLabel(song)} to the queue.`, { actionLabel: 'Undo', onAction: undo });
   }
 
   function playNext() {
-    if (state.queue.length) {
-      const next = state.queue.next();
-      renderQueue();
-      persist();
-      playSong(next);
-    } else {
-      setStatus('Queue is empty');
+    if (!state.queue.length) {
+      setStatus('Nothing queued to play — add a song to the queue first');
+      return;
     }
+    const next = state.queue.next();
+    renderQueue();
+    renderTransport();
+    persist();
+    playSong(next);
   }
 
   function playPrev() {
@@ -842,27 +1336,79 @@ if (isBrowser) {
       applyZoom();
     }
     if (patch.zoom !== undefined) applyZoom();
+    if (patch.sort !== undefined) {
+      state.browse = null; // the engine re-orders library_songs
+      runSearch(state.query);
+    }
+    if (needsRescan(patch)) showRescanNote();
   }
 
-  // Keyboard-first controls: one small handler per binding, dispatched
-  // in the same order as before (a keydown may trigger several of them,
-  // e.g. Ctrl+ArrowDown both moves selection and reorders the queue).
+  /** These choices only take effect at the next scan — say so, plainly. */
+  function showRescanNote() {
+    const note = $('settings-rescan-note');
+    if (note) note.hidden = false;
+  }
+
+  function hideRescanNote() {
+    const note = $('settings-rescan-note');
+    if (note) note.hidden = true;
+  }
+
+  function toggleSettings(open) {
+    const panel = $('settings-panel');
+    const show = open === undefined ? panel.hidden : !!open;
+    panel.hidden = !show;
+    $('settings-btn').setAttribute('aria-expanded', String(show));
+    if (show) $('settings-heading').focus?.();
+  }
+
+  function renderShortcuts() {
+    const box = $('shortcuts-list');
+    if (!box) return;
+    box.textContent = '';
+    for (const shortcut of SHORTCUTS) {
+      const keys = document.createElement('kbd');
+      keys.textContent = shortcut.keys;
+      const description = document.createElement('span');
+      description.textContent = shortcut.description;
+      box.append(keys, description);
+    }
+  }
+
+  // Keyboard-first controls: one small handler per binding.  Each returns
+  // true when it consumed the key, so one keydown triggers one action.
   function focusSearchKey(e, searchInput) {
     if (e.key !== '/' && !(e.key === 'k' && (e.ctrlKey || e.metaKey))) return false;
     e.preventDefault();
     searchInput.focus();
+    searchInput.select?.();
     return true;
   }
 
-  function dismissSearchKey(e, inInput, searchInput) {
-    if (e.key !== 'Escape' || !inInput) return false;
-    e.target.value = '';
-    if (e.target === searchInput) {
-      state.results = [];
-      renderResults();
+  function escapeKey(e, inInput, searchInput) {
+    if (e.key !== 'Escape') return false;
+    if (inInput) {
+      if (e.target === searchInput) {
+        e.target.value = '';
+        runSearch('');
+      }
+      e.target.blur();
+      return true;
     }
-    e.target.blur();
-    return true;
+    if (state.selectedQueue >= 0) {
+      state.selectedQueue = -1;
+      renderQueue();
+      return true;
+    }
+    if (!$('settings-panel').hidden) {
+      toggleSettings(false);
+      return true;
+    }
+    if (state.query || searchInput.value) {
+      clearSearch();
+      return true;
+    }
+    return false;
   }
 
   function togglePlaybackKey(e, inInput) {
@@ -873,55 +1419,63 @@ if (isBrowser) {
   }
 
   function enqueueSelectedKey(e, inInput) {
-    if (e.key !== 'Enter' || inInput || state.selectedResult < 0) return false;
+    if (e.key !== 'Enter' || inInput || state.selectedQueue >= 0) return false;
+    if (state.selectedResult < 0) return false;
     const song = visibleResults()[state.selectedResult];
     if (song) enqueue(song);
     return true;
   }
 
   function moveSelectionKey(e, inInput) {
-    if (inInput) return;
-    const count = Math.max(1, visibleResults().length);
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectResult((state.selectedResult + 1) % count);
+    if (inInput || e.altKey) return;
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowDown' ? 1 : -1;
+    // A selected queue row owns the arrow keys until Esc leaves the queue.
+    if (state.selectedQueue >= 0 && state.queue.length) {
+      selectQueueItem(state.selectedQueue + delta);
+      return;
     }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectResult((state.selectedResult - 1 + count) % count);
-    }
+    selectResult(state.selectedResult + delta);
   }
 
   function deleteQueueItemKey(e, inInput) {
-    if (e.key !== 'Delete' || inInput) return;
-    const list = $('queue-list');
-    const selected = list.querySelector('.selected');
-    if (!selected) return;
-    const idx = [...list.children].indexOf(selected);
-    state.queue.removeAt(idx);
-    renderQueue();
-    persist();
+    if (e.key !== 'Delete' || inInput || state.selectedQueue < 0) return;
+    e.preventDefault();
+    removeQueueItem(state.selectedQueue);
   }
 
-  function reorderQueueKey(e) {
-    if (e.key === 'ArrowDown' && e.ctrlKey) {
-      e.preventDefault();
-      state.queue.move(0, 1);
-      renderQueue();
-      persist();
+  function reorderQueueKey(e, inInput) {
+    if (!e.altKey || inInput) return;
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    if (state.selectedQueue < 0) {
+      notify('Click a queued song first, then use Alt+↑ / Alt+↓ to move it.', { kind: 'info' });
+      return;
     }
-    if (e.key === 'ArrowUp' && e.ctrlKey) {
-      e.preventDefault();
-      state.queue.move(state.queue.length - 1, -1);
-      renderQueue();
-      persist();
-    }
+    moveQueueItem(state.selectedQueue, e.key === 'ArrowUp' ? -1 : 1);
   }
 
-  function nextSongKey(e) {
-    if (e.key !== 'ArrowRight' || !e.ctrlKey) return;
+  function previousSongKey(e, inInput) {
+    if (inInput || !e.ctrlKey || e.key !== 'ArrowUp') return false;
+    e.preventDefault();
+    playPrev();
+    return true;
+  }
+
+  function nextSongKey(e, inInput) {
+    if (inInput || !e.ctrlKey) return false;
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowDown') return false;
     e.preventDefault();
     playNext();
+    return true;
+  }
+
+  function helpKey(e, inInput) {
+    if (inInput || e.key !== 'F1') return false;
+    e.preventDefault();
+    toggleSettings(true);
+    return true;
   }
 
   // ── UI wiring ──────────────────────────────────────────────────────
@@ -929,33 +1483,13 @@ if (isBrowser) {
   const QUEUE_KEY = 'pykaraoke-ng:queue';
 
   function wireUi() {
-    // Folder picking.
+    // Folder picking and library management.
     $('add-folder-btn').addEventListener('click', pickFolder);
     $('scan-library-btn').addEventListener('click', rescanFolders);
-    $('replace-library-btn').addEventListener('click', replaceLibrary);
+    $('replace-library-btn').addEventListener('click', armReplace);
     $('export-library-btn').addEventListener('click', exportLibrary);
     $('import-library-btn').addEventListener('click', () => $('import-library-picker').click());
-    $('import-library-picker').addEventListener('change', async (e) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      try {
-        const text = await file.text();
-        const result = callApi('import_json', text);
-        if (result?.ok) {
-          await refreshSettings();
-          renderLibraryCount();
-          renderResults();
-          persist();
-          const total = callApi('library_songs')?.songs?.length || 0;
-          setStatus(`Library imported: ${total} songs`);
-        } else {
-          setStatus(`Import failed: ${result?.error || 'unknown error'}`);
-        }
-      } catch (err) {
-        setStatus(`Import failed: ${err.message}`);
-      }
-    });
+    $('import-library-picker').addEventListener('change', importLibrary);
     $('folder-picker').addEventListener('change', async (e) => {
       const files = [...e.target.files];
       window.__pickedFiles = files;
@@ -966,26 +1500,15 @@ if (isBrowser) {
       }));
       await scanEntries(entries);
       e.target.value = '';
+      disarmReplace();
     });
+
+    // The scan chip is the permanent route back to the skipped-file list.
+    $('scan-issues').addEventListener('click', toggleScanDetails);
 
     // Search.
     const searchInput = $('search-input');
-    searchInput.addEventListener('input', debounce(async () => {
-      const q = searchInput.value.trim();
-      if (!q) {
-        state.results = [];
-        renderResults();
-        return;
-      }
-      try {
-        const r = callApi('search', q, 500);
-        state.results = r?.results || [];
-      } catch (err) {
-        state.results = [];
-        setStatus(`Search error: ${err.message}`);
-      }
-      renderResults();
-    }, 150));
+    searchInput.addEventListener('input', debounce(() => runSearch(searchInput.value), 150));
 
     // Accessible selection: a datalist option picked from the search input
     // enqueues the matching result (mirrors clicking a result row).
@@ -995,15 +1518,12 @@ if (isBrowser) {
       const song = visibleResults().find((s) => songLabel(s) === label);
       if (!song) return;
       enqueue(song);
-      searchInput.value = '';
+      clearSearch();
     });
 
     // Transport.
     $('play-btn').addEventListener('click', togglePlay);
-    $('stop-btn').addEventListener('click', () => {
-      stopPlayback();
-      setPlaying(null);
-    });
+    $('stop-btn').addEventListener('click', stopNow);
     $('next-btn').addEventListener('click', playNext);
     $('prev-btn').addEventListener('click', playPrev);
     $('rewind-btn').addEventListener('click', () => seekTo(state.songClock - 5000));
@@ -1021,15 +1541,14 @@ if (isBrowser) {
     });
 
     // Queue.
-    $('clear-queue-btn').addEventListener('click', () => {
-      state.queue.clear();
-      renderQueue();
-      persist();
-    });
+    $('clear-queue-btn').addEventListener('click', clearQueue);
 
     // Settings panel (inline, no modal).
-    $('settings-btn').addEventListener('click', () => {
-      $('settings-panel').hidden = !$('settings-panel').hidden;
+    $('settings-btn').addEventListener('click', () => toggleSettings());
+    $('settings-close-btn').addEventListener('click', () => toggleSettings(false));
+    $('settings-rescan-btn').addEventListener('click', () => {
+      hideRescanNote();
+      rescanFolders();
     });
     $('setting-sort').addEventListener('change', (e) => updateSettings({ sort: e.target.value }));
     $('setting-zoom').addEventListener('change', (e) => updateSettings({ cdg_zoom: e.target.value }));
@@ -1042,31 +1561,94 @@ if (isBrowser) {
 
     // Kind filters.
     ['filter-cdg', 'filter-kar', 'filter-mpg', 'filter-lrc'].forEach((id) => {
-      $(id).addEventListener('change', renderResults);
+      $(id).addEventListener('change', () => {
+        state.selectedResult = -1;
+        renderResults();
+      });
     });
 
     document.addEventListener('keydown', (e) => {
       const target = e.target;
-      const inInput = target && (target.tagName === 'INPUT' || target.tagName === 'SELECT');
+      const tag = target?.tagName;
+      const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || !!target?.isContentEditable;
       if (focusSearchKey(e, searchInput)) return;
-      if (dismissSearchKey(e, inInput, searchInput)) return;
+      if (escapeKey(e, inInput, searchInput)) return;
       if (togglePlaybackKey(e, inInput)) return;
       if (enqueueSelectedKey(e, inInput)) return;
+      if (reorderQueueKey(e, inInput)) return;
+      if (deleteQueueItemKey(e, inInput)) return;
+      if (previousSongKey(e, inInput)) return;
+      if (nextSongKey(e, inInput)) return;
+      if (helpKey(e, inInput)) return;
       moveSelectionKey(e, inInput);
-      deleteQueueItemKey(e, inInput);
-      reorderQueueKey(e);
-      nextSongKey(e);
     });
   }
 
-  function visibleResults() {
-    const kindFilter = {
-      cdg: $('filter-cdg').checked,
-      kar: $('filter-kar').checked,
-      mpg: $('filter-mpg').checked,
-      lrc: $('filter-lrc').checked,
-    };
-    return state.results.filter((s) => kindFilter[s.kind]);
+  async function importLibrary(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const result = callApi('import_json', await file.text());
+      if (!result?.ok) {
+        const reason = result?.error || 'unknown error';
+        setStatus(`Import failed — ${reason}`, { kind: 'error' });
+        notify(`That library file could not be imported: ${reason}`, {
+          kind: 'error',
+          timeout: 0,
+        });
+        return;
+      }
+      await refreshSettings();
+      await refreshLibraryViews();
+      persist();
+      const total = state.libraryCount;
+      setStatus(`Library imported — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`);
+      notify(`Library imported — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'}.`);
+    } catch (err) {
+      setStatus(`Import failed — ${err.message}`, { kind: 'error' });
+      notify(`That library file could not be imported: ${err.message}`, {
+        kind: 'error',
+        timeout: 0,
+      });
+    }
+  }
+
+  let replaceArmed = false;
+  let replaceTimer = null;
+
+  /**
+   * Replacing the library discards the current song list, so it asks for a
+   * second click (and explains itself first) instead of doing it outright.
+   */
+  function armReplace() {
+    if (replaceArmed) {
+      disarmReplace();
+      replaceLibrary();
+      return;
+    }
+    replaceArmed = true;
+    const button = $('replace-library-btn');
+    button.textContent = 'Confirm replace';
+    button.classList.add('btn-danger');
+    const hint = $('replace-hint');
+    hint.hidden = false;
+    hint.textContent =
+      'Replacing clears the current song list and re-reads your folders. Press “Confirm replace” to go ahead, or wait six seconds to cancel.';
+    replaceTimer = setTimeout(disarmReplace, 6000);
+  }
+
+  function disarmReplace() {
+    if (replaceTimer) clearTimeout(replaceTimer);
+    replaceTimer = null;
+    replaceArmed = false;
+    const button = $('replace-library-btn');
+    if (!button) return;
+    button.textContent = 'Replace library';
+    button.classList.remove('btn-danger');
+    const hint = $('replace-hint');
+    hint.hidden = true;
+    hint.textContent = '';
   }
 
   async function pickFolder() {
@@ -1080,7 +1662,8 @@ if (isBrowser) {
         if (!folders.includes(path)) updateSettings({ folders: [...folders, path] });
         await scanEntries(entries);
       } catch (err) {
-        setStatus(`Folder error: ${err.message}`);
+        setStatus(`Could not read that folder — ${err.message}`, { kind: 'error' });
+        notify(`Could not read that folder: ${err.message}`, { kind: 'error', timeout: 0 });
       }
     } else {
       $('folder-picker').click();
@@ -1091,11 +1674,13 @@ if (isBrowser) {
     const s = callApi('get_settings') || {};
     const folders = s.folders || [];
     if (!folders.length) {
-      setStatus('No folders configured — use ＋ Folder');
+      setStatus('No folders to scan yet');
+      notify('No folders are configured yet — use Add folder to choose one.', { kind: 'warn' });
+      if (!tauriCore) $('folder-picker').click();
       return;
     }
     if (!tauriCore) {
-      setStatus('In the browser, re-pick the folder to reload files');
+      notify('In the browser, pick the folder again to reload its files.', { kind: 'info' });
       $('folder-picker').click();
       return;
     }
@@ -1104,7 +1689,8 @@ if (isBrowser) {
         const entries = await tauriCore.invoke('list_folder', { path: folder });
         await scanEntries(entries);
       } catch (err) {
-        setStatus(`Scan error for ${folder}: ${err.message}`);
+        setStatus(`Could not read ${folder} — ${err.message}`, { kind: 'error' });
+        notify(`Could not read ${folder}: ${err.message}`, { kind: 'error', timeout: 0 });
       }
     }
   }
@@ -1134,12 +1720,13 @@ if (isBrowser) {
   async function replaceLibrary() {
     const entries = await collectLibraryEntries();
     if (!entries.length) {
-      setStatus('Nothing to rescan — use ＋ Folder (or re-pick in the browser) first');
+      setStatus('Nothing to re-read yet');
+      notify('There is nothing to re-read yet — use Add folder to choose your songs folder.', {
+        kind: 'warn',
+      });
       return;
     }
     await scanEntries(entries, true);
-    const total = callApi('library_songs')?.songs?.length || 0;
-    setStatus(`Library replaced: ${total} songs`);
   }
 
   function exportLibrary() {
@@ -1152,9 +1739,11 @@ if (isBrowser) {
       a.download = 'pykaraoke-library.json';
       a.click();
       URL.revokeObjectURL(url);
-      setStatus('Library exported');
+      setStatus('Library exported to pykaraoke-library.json');
+      notify('Library exported — your browser saved pykaraoke-library.json.');
     } catch (err) {
-      setStatus(`Export failed: ${err.message}`);
+      setStatus(`Export failed — ${err.message}`, { kind: 'error' });
+      notify(`The library could not be exported: ${err.message}`, { kind: 'error', timeout: 0 });
     }
   }
 
@@ -1283,7 +1872,40 @@ if (isBrowser) {
 
   // Test hook: expose the wired app for DOM-level tests.  Production uses the
   // same boot()/wireUi() path via the DOMContentLoaded listener below.
-  __app = { boot, wireUi, state, callApi, setStatus, setEngineStatus };
+  __app = {
+    boot,
+    wireUi,
+    state,
+    callApi,
+    setStatus,
+    setEngineStatus,
+    notify,
+    clearNotice,
+    renderResults,
+    renderQueue,
+    renderTransport,
+    renderScanReport,
+    renderScanDetails,
+    toggleScanDetails,
+    openScanDetails,
+    renderShortcuts,
+    toggleSettings,
+    runSearch,
+    clearSearch,
+    resetKindFilters,
+    enqueue,
+    clearQueue,
+    removeQueueItem,
+    moveQueueItem,
+    playFromQueue,
+    selectQueueItem,
+    selectResult,
+    syncResultRows,
+    refreshLibraryViews,
+    updateSettings,
+    armReplace,
+    disarmReplace,
+  };
 
   // Boot.
   document.addEventListener('DOMContentLoaded', () => {
