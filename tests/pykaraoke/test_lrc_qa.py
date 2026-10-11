@@ -100,13 +100,13 @@ class TestTimestampVariants:
     @pytest.mark.parametrize(
         ("line", "expected_ms"),
         [
-            ("[00:12.34]", 12340),      # standard
-            ("[00:12.345]", 12345),     # milliseconds
-            ("[00:12.3]", 12300),       # tenths
-            ("[0:12.34]", 12340),       # non-padded minutes
-            ("[00:5.34]", 5340),        # non-padded seconds
-            ("[00:00.999]", 999),       # precision
-            ("[1:02.05]", 62050),       # mixed padding
+            ("[00:12.34]", 12340),  # standard
+            ("[00:12.345]", 12345),  # milliseconds
+            ("[00:12.3]", 12300),  # tenths
+            ("[0:12.34]", 12340),  # non-padded minutes
+            ("[00:5.34]", 5340),  # non-padded seconds
+            ("[00:00.999]", 999),  # precision
+            ("[1:02.05]", 62050),  # mixed padding
         ],
     )
     def test_timestamp_forms(self, line, expected_ms):
