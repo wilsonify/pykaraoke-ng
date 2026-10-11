@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Serve the PyKaraoke web app for development.
 
-Same as ``python -m http.server`` but with ``Cache-Control: no-store`` on
-every response, so the webview never shows a stale (pre-rewrite) page.
+Serve ``src/web/dist/`` for the Tauri dev server with ``Cache-Control:
+no-store`` on every response, so the webview never shows a stale page.
 ``tauri.conf.json`` runs this as ``beforeDevCommand``; it can also be run
 by hand from anywhere in the repo:
 
