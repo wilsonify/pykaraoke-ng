@@ -46,7 +46,10 @@ engine_tests() {
 web_tests() {
   echo "==> vitest (web logic)"
   if [[ ! -d "$ROOT_DIR/tests/web/node_modules" ]]; then
-    (cd "$ROOT_DIR/tests/web" && npm install)
+    # --ignore-scripts: vitest/esbuild run from the installed files; no
+  # dependency install script is needed (npm still installs the @esbuild/*
+  # platform binary via optionalDependencies).
+  (cd "$ROOT_DIR/tests/web" && npm install --ignore-scripts)
   fi
   (cd "$ROOT_DIR/tests/web" && npm test)
 }
