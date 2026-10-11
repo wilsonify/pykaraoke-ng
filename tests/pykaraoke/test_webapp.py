@@ -1,9 +1,24 @@
 """Tests for pykaraoke.webapp — the PyScript-facing API."""
 
 import io
+import struct
 import zipfile
 
+import pytest
+
 from pykaraoke.webapp import KaraokeApp
+
+
+def _minimal_midi() -> bytes:
+    """A one-lyric MIDI file: tempo + lyric event + end-of-track."""
+    header = b"MThd" + struct.pack(">LHHH", 6, 0, 1, 480)
+    events = [
+        b"\x00\xff\x51\x03\x07\xa1\x20",  # tempo 500000
+        b"\x00\xff\x05\x03Hel",
+        b"\x00\xff\x2f\x00",
+    ]
+    data = b"".join(events)
+    return header + b"MTrk" + struct.pack(">L", len(data)) + data
 
 
 class TestPersistence:
@@ -22,6 +37,24 @@ class TestPersistence:
         assert app.library.songs == []
         app.from_json(None)
         assert app.library.songs == []
+
+    def test_from_json_non_dict_is_ignored(self):
+        # Valid JSON that is not an object leaves the library untouched.
+        app = KaraokeApp()
+        app.scan_files([{"name": "A - B.cdg", "path": "A - B.cdg", "size": 0}])
+        app.from_json("[1, 2, 3]")
+        assert len(app.library.songs) == 1
+
+    def test_from_json_clears_decoder_and_zip_caches(self):
+        app = KaraokeApp()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("a.kar", b"x")
+        app.scan_zip("s.zip", buf.getvalue())
+        app.cdg_open("k", bytes(24))
+        app.from_json(app.to_json())
+        assert app._decoders == {}
+        assert app._zip_names == {}
 
 
 class TestScan:
@@ -42,6 +75,18 @@ class TestScan:
         app = KaraokeApp()
         result = app.scan_files([None, {"name": "A - B.kar"}, "junk"])
         assert result["total"] == 1
+
+    def test_scan_files_skips_uncoercible_entries(self):
+        # A size that cannot be int()-coerced is skipped, not fatal.
+        app = KaraokeApp()
+        result = app.scan_files(
+            [
+                {"name": "A - B.cdg", "size": "not-a-number"},
+                {"name": "C - D.cdg", "size": 10},
+            ]
+        )
+        assert result["total"] == 1
+        assert app.library.songs[0].title == "D"
 
     def test_scan_zip(self):
         app = KaraokeApp()
@@ -92,6 +137,24 @@ class TestScan:
         app.scan_zip("songs.zip", buf2.getvalue())
         assert app.zip_members("songs.zip") == ["a.kar", "b.kar"]
 
+    def test_zip_members_bad_zip_returns_empty(self):
+        # A corrupt zip yields [] and is cached as such (no retry storm).
+        app = KaraokeApp()
+        app.scan_zip("junk.zip", b"not a zip")
+        assert app.zip_members("junk.zip") == []
+        assert app.zip_members("junk.zip") == []
+
+    def test_zip_members_caches_namelist(self):
+        # A second call hits the cache instead of re-opening the zip.
+        app = KaraokeApp()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("a.kar", b"x")
+        app.scan_zip("songs.zip", buf.getvalue())
+        assert app.zip_members("songs.zip") == ["a.kar"]
+        assert "songs.zip" in app._zip_names
+        assert app.zip_members("songs.zip") == ["a.kar"]
+
 
 class TestSearch:
     def test_search(self):
@@ -130,14 +193,35 @@ class TestSettings:
         updated = app.set_settings({"file_name_type": 4})
         assert updated["file_name_type"] == 4
         app.scan_files(
-            [{"name": "CB30055-15 - Switchfoot - Stars.cdg",
-              "path": "/lib/CB30055-15 - Switchfoot - Stars.cdg",
-              "size": 100}]
+            [
+                {
+                    "name": "CB30055-15 - Switchfoot - Stars.cdg",
+                    "path": "/lib/CB30055-15 - Switchfoot - Stars.cdg",
+                    "size": 100,
+                }
+            ]
         )
         songs = app.library_songs()["songs"]
         assert songs[0]["artist"] == "Switchfoot"
         assert songs[0]["title"] == "Stars"
         assert songs[0]["disc"] == "CB30055"
+
+    def test_set_settings_boolean_and_list_keys(self):
+        app = KaraokeApp()
+        updated = app.set_settings(
+            {
+                "derive_song_info": False,
+                "exclude_non_matching": True,
+                "look_inside_zips": True,
+                "folders": ["/lib", "/extra"],
+                "include_patterns": ["*.cdg", "*.kar"],
+            }
+        )
+        assert updated["derive_song_info"] is False
+        assert updated["exclude_non_matching"] is True
+        assert updated["look_inside_zips"] is True
+        assert updated["folders"] == ["/lib", "/extra"]
+        assert updated["include_patterns"] == ["*.cdg", "*.kar"]
 
 
 class TestScanReportAPI:
@@ -171,8 +255,11 @@ class TestPatternSettingsAPI:
         assert app.get_settings()["exclude_patterns"] == ["*_(vocal)_*"]
         app.scan_files(
             [
-                {"name": "Song - Artist_(Vocal)_.cdg",
-                 "path": "Song - Artist_(Vocal)_.cdg", "size": 0},
+                {
+                    "name": "Song - Artist_(Vocal)_.cdg",
+                    "path": "Song - Artist_(Vocal)_.cdg",
+                    "size": 0,
+                },
                 {"name": "Plain - Song.cdg", "path": "Plain - Song.cdg", "size": 0},
             ]
         )
@@ -186,7 +273,9 @@ class TestCdg:
     def test_open_update_close(self):
         app = KaraokeApp()
         # Memory preset packet: 24 bytes.
-        packet = bytes([0x09, 0x01, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        packet = bytes(
+            [0x09, 0x01, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        )
         key = app.cdg_open("song1", packet)
         assert key == "song1"
         upd = app.cdg_update(key, 50)
@@ -206,6 +295,15 @@ class TestCdg:
         assert upd is not None
         assert len(upd["tiles"]) == 24
 
+    def test_cdg_seek_unknown_key_is_noop(self):
+        app = KaraokeApp()
+        app.cdg_seek("missing", 100)  # must not raise
+
+    def test_cdg_open_invalid_data_raises(self):
+        app = KaraokeApp()
+        with pytest.raises(ValueError):
+            app.cdg_open("s", None)
+
     def test_cdg_packet_count(self):
         app = KaraokeApp()
         assert app.cdg_packet_count(bytes(24 * 5)) == 5
@@ -220,6 +318,13 @@ class TestMidi:
     def test_parse_midi_bad_input(self):
         app = KaraokeApp()
         assert "error" in app.parse_midi(None)
+
+    def test_parse_midi_success(self):
+        app = KaraokeApp()
+        res = app.parse_midi(_minimal_midi())
+        assert "error" not in res
+        assert [s["text"] for s in res["lyrics"]] == ["Hel"]
+        assert "notes" in res
 
 
 class TestLrc:
@@ -272,8 +377,7 @@ class TestDuet:
         # The API passes duet information straight through to the UI.
         app = KaraokeApp()
         res = app.parse_lrc(
-            "[pa:Alice]\n[pb:Bob]\n"
-            "[00:01.00][a]first\n[00:05.00][b]second\n[00:09.00][ab]shared\n"
+            "[pa:Alice]\n[pb:Bob]\n[00:01.00][a]first\n[00:05.00][b]second\n[00:09.00][ab]shared\n"
         )
         assert res["parts"] == {"a": "Alice", "b": "Bob"}
         assert [s.get("part") for s in res["lyrics"]] == ["a", "b", "ab"]
@@ -299,6 +403,30 @@ class TestInvalidData:
     def test_scan_zip_invalid_bytes(self):
         app = KaraokeApp()
         assert app.scan_zip("x.zip", None)["added"] == 0
+
+
+class TestZipSlipSafety:
+    """Zip member names never reach the filesystem (no extract path exists).
+
+    Member names are used only as virtual path strings and in-memory
+    ``zf.read()`` keys, so traversal-style names stay inert.
+    """
+
+    def test_traversal_member_names_stay_in_memory(self, tmp_path, monkeypatch):
+        app = KaraokeApp()
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("../../evil - payload.kar", b"karbytes")
+            zf.writestr("..\\..\\win - payload.cdg", b"cdgbytes")
+        monkeypatch.chdir(tmp_path)
+        result = app.scan_zip("evil.zip", buf.getvalue())
+        assert result["added"] == 2
+        # Bytes are only served from the in-memory archive.
+        assert app.read_zip_member("evil.zip", "../../evil - payload.kar") == b"karbytes"
+        # Nothing was written outside the (empty) working directory.
+        assert list(tmp_path.iterdir()) == []
+        assert not (tmp_path / "evil - payload.kar").exists()
+        assert not (tmp_path.parent / "evil - payload.kar").exists()
 
 
 class TestRelocationAPI:
@@ -338,12 +466,26 @@ class TestRelocationAPI:
         assert app.prune_songs([])["pruned"] == 0
         assert len(app.library_songs()["songs"]) == 1
 
+    def test_prune_non_iterable_is_noop(self):
+        # A non-iterable known list is treated as empty, not an error.
+        app = KaraokeApp()
+        app.scan_files([{"name": "A - B.cdg", "path": "A - B.cdg", "size": 0}])
+        assert app.prune_songs(42)["pruned"] == 0
+        assert len(app.library_songs()["songs"]) == 1
+
 
 class TestImportExportAPI:
     def test_round_trip_through_page(self):
         app = KaraokeApp()
-        app.scan_files([{"name": "Queen - Bohemian Rhapsody.cdg",
-                         "path": "Queen - Bohemian Rhapsody.cdg", "size": 0}])
+        app.scan_files(
+            [
+                {
+                    "name": "Queen - Bohemian Rhapsody.cdg",
+                    "path": "Queen - Bohemian Rhapsody.cdg",
+                    "size": 0,
+                }
+            ]
+        )
         payload = app.export_json()
         assert app.import_json(payload) == {"ok": True}
         assert len(app.library_songs()["songs"]) == 1
