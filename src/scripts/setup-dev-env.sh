@@ -35,6 +35,9 @@ echo "==> Building web assets"
 "$VENV_PY" "$ROOT_DIR/src/scripts/build-web.py"
 
 echo "==> Installing frontend test runner"
-(cd "$ROOT_DIR/tests/web" && npm install)
+# --ignore-scripts: vitest/esbuild run from the installed files; no
+# dependency install script is needed (npm still installs the @esbuild/*
+# platform binary via optionalDependencies).
+(cd "$ROOT_DIR/tests/web" && npm install --ignore-scripts)
 
 echo "Setup complete. Run ./src/scripts/run-tests.sh"
