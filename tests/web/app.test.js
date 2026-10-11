@@ -836,7 +836,6 @@ describe('index.html: wiring contract with app.js', () => {
       'search-input',
       'volume-slider',
       'progress-slider',
-      'cdg-canvas',
       'folder-picker',
       'import-library-picker',
     ]) {
@@ -844,6 +843,28 @@ describe('index.html: wiring contract with app.js', () => {
       expect(tag, `missing element #${id}`).toBeTruthy();
       expect(tag[0], `#${id} needs an aria-label`).toContain('aria-label=');
     }
+  });
+
+  it('names the CD+G surface without giving the canvas a role', () => {
+    // <canvas> is interactive content, so it must not carry a non-interactive
+    // role; the description belongs on the wrapper around it.
+    const view = /<div id="cdg-view"[^>]*>/.exec(html);
+    expect(view, 'missing the #cdg-view wrapper').toBeTruthy();
+    expect(view[0]).toContain('role="img"');
+    expect(view[0]).toContain('aria-label=');
+    const canvas = (html.match(/<canvas[^>]*>/g) || []).find((tag) =>
+      tag.includes('id="cdg-canvas"'),
+    );
+    expect(canvas, 'missing the #cdg-canvas element').toBeTruthy();
+    expect(canvas).not.toContain('role=');
+  });
+
+  it('never gives an interactive element a non-interactive role', () => {
+    const interactive = html.match(/<(button|a|input|select|textarea|canvas)[^>]*>/g) || [];
+    const offenders = interactive.filter((tag) =>
+      /role="(img|presentation|none|document|heading|status|list|listitem|group)"/.test(tag),
+    );
+    expect(offenders).toEqual([]);
   });
 
   it('marks the settings that need a rescan next to their labels', () => {
