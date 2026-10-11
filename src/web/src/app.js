@@ -200,18 +200,19 @@ if (isBrowser) {
       return;
     }
     const pyVer = window.pyodide?.version || '';
-    setEngineStatus(describeEngine({ ready: true, version: pyVer ? `Pyodide ${pyVer}` : '' }));
-    $('engine-detail').textContent = `Engine: ${pyVer ? `Pyodide ${pyVer}` : 'PyScript'} · runs offline in this window`;
+    const pyodideLabel = pyVer ? `Pyodide ${pyVer}` : '';
+    setEngineStatus(describeEngine({ ready: true, version: pyodideLabel }));
+    $('engine-detail').textContent = `Engine: ${pyodideLabel || 'PyScript'} · runs offline in this window`;
     await restoreState();
     await refreshSettings();
     renderQueue();
     renderTransport();
     const total = state.libraryCount;
-    setStatus(
-      total
-        ? `Ready — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'} in the library`
-        : 'Ready — add a folder to scan',
-    );
+    if (!total) {
+      setStatus('Ready — add a folder to scan');
+      return;
+    }
+    setStatus(`Ready — ${formatCount(total)} ${total === 1 ? 'song' : 'songs'} in the library`);
   }
 
   async function restoreState() {
@@ -380,9 +381,11 @@ if (isBrowser) {
 
   function renderLibraryCount() {
     const total = state.libraryCount;
-    $('library-count').textContent = total
-      ? `${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`
-      : 'No songs yet';
+    if (!total) {
+      $('library-count').textContent = 'No songs yet';
+      return;
+    }
+    $('library-count').textContent = `${formatCount(total)} ${total === 1 ? 'song' : 'songs'}`;
   }
 
   /** Which folders a rescan re-reads, so the button is never a mystery. */
@@ -612,11 +615,11 @@ if (isBrowser) {
       option.label = song.filename;
       datalist.appendChild(option);
 
-      const row = document.createElement('div');
+      // A real list item: the rows are a list, not listbox options.
+      const row = document.createElement('li');
       row.className = 'song-row';
       row.dataset.index = String(i);
-      row.setAttribute('role', 'option');
-      row.setAttribute('aria-selected', 'false');
+      row.tabIndex = -1;
 
       const badge = document.createElement('span');
       badge.className = `badge badge-${song.kind}`;
@@ -654,6 +657,12 @@ if (isBrowser) {
     });
   }
 
+  /** Mark the keyboard-selected row (aria-current fits a list item). */
+  function setRowCurrent(row, on) {
+    if (on) row.setAttribute('aria-current', 'true');
+    else row.removeAttribute('aria-current');
+  }
+
   function selectResult(i) {
     const rows = $('results-list').querySelectorAll('.song-row');
     if (!rows.length) return;
@@ -662,7 +671,7 @@ if (isBrowser) {
     rows.forEach((r, idx) => {
       const on = idx === state.selectedResult;
       r.classList.toggle('selected', on);
-      r.setAttribute('aria-selected', String(on));
+      setRowCurrent(r, on);
     });
     rows[state.selectedResult].scrollIntoView({ block: 'nearest' });
   }
@@ -729,7 +738,12 @@ if (isBrowser) {
       row.dataset.index = String(i);
       row.tabIndex = -1;
       if (state.current && song.id === state.current.id) row.classList.add('current');
-      if (i === state.selectedQueue) row.classList.add('selected');
+      if (i === state.selectedQueue) {
+        row.classList.add('selected');
+        // A re-render (reorder, remove, clear) rebuilds the rows, so the
+        // selection marker has to be re-applied here, not only on selection.
+        setRowCurrent(row, true);
+      }
 
       const position = document.createElement('span');
       position.className = 'queue-position';
@@ -770,10 +784,14 @@ if (isBrowser) {
     state.selectedResult = -1;
     $('results-list').querySelectorAll('.song-row.selected').forEach((r) => {
       r.classList.remove('selected');
-      r.setAttribute('aria-selected', 'false');
+      setRowCurrent(r, false);
     });
     state.selectedQueue = (i + rows.length) % rows.length;
-    rows.forEach((r, idx) => r.classList.toggle('selected', idx === state.selectedQueue));
+    rows.forEach((r, idx) => {
+      const on = idx === state.selectedQueue;
+      r.classList.toggle('selected', on);
+      setRowCurrent(r, on);
+    });
     rows[state.selectedQueue].scrollIntoView({ block: 'nearest' });
   }
 
@@ -912,7 +930,8 @@ if (isBrowser) {
 
     const play = $('play-btn');
     play.disabled = info.playDisabled;
-    play.textContent = state.playing ? '⏸' : info.playLabel === 'Retry' ? '↻' : '▶';
+    const idleGlyph = info.playLabel === 'Retry' ? '↻' : '▶';
+    play.textContent = state.playing ? '⏸' : idleGlyph;
     play.title = `${info.playLabel} (Space)`;
     play.setAttribute('aria-label', info.playLabel);
 
