@@ -551,7 +551,9 @@ class TestExportImport:
         lib = SongLibrary()
         lib.settings.folders = ["D:/Karaoke"]
         lib.settings.volume = 0.4
-        lib.scan([_entry("Queen - Bohemian Rhapsody.cdg", path="root/Queen - Bohemian Rhapsody.cdg")])
+        lib.scan(
+            [_entry("Queen - Bohemian Rhapsody.cdg", path="root/Queen - Bohemian Rhapsody.cdg")]
+        )
         restored = SongLibrary()
         result = restored.import_json(lib.export_json())
         assert result == {"ok": True}
