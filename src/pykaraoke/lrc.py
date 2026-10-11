@@ -61,7 +61,9 @@ def _parse_meta(stripped: str) -> tuple[str, str] | None:
 # Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
 _WORD_RE = re.compile(r"<(\d{1,2}):(\d{1,2})\.(\d{1,3})>")
 # .elrc word entry: [mm:ss.xx] text (same timestamp shape as a line tag).
-_ELRC_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\]\s*(.+)$")
+# Only the fixed-width timestamp is a regex; the trailing ``\\s*(.+)$``
+# backtracked on long whitespace tails, so the text is sliced by hand.
+_ELRC_TS_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\]")
 # Duet part tag sitting right after the timestamps: [00:12.00][a]line.
 # Longer alternatives first so [ab]/[ba] are never read as a bare part.
 _PART_RE = re.compile(r"^\[(ab|ba|a|b)\]", re.IGNORECASE)
@@ -412,15 +414,17 @@ def _read_elrc_entries(elrc_text: str, offset_ms: int) -> list[tuple[int, str]]:
     """All ``[mm:ss.xx] word`` entries, shifted by *offset_ms*, by time."""
     entries: list[tuple[int, str]] = []
     for line in str(elrc_text).lstrip("\ufeff").splitlines():
-        match = _ELRC_RE.match(line.strip())
+        stripped = line.strip()
+        match = _ELRC_TS_RE.match(stripped)
         if not match:
             continue  # metadata, comments, blanks and bare timestamps
+        text = stripped[match.end() :].strip()
+        if not text:
+            continue  # timestamp with no words is not an entry
         ms = _tag_ms(match.group(1), match.group(2), match.group(3))
         if offset_ms:
             ms = max(0, ms - offset_ms)
-        text = match.group(4).strip()
-        if text:
-            entries.append((ms, text))
+        entries.append((ms, text))
     entries.sort(key=lambda entry: entry[0])
     return entries
 
