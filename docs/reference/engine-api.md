@@ -1,8 +1,9 @@
 # Engine API
 
 The browser and desktop UI talk to the Python karaoke engine through a single
-bridge: the inline `<script type="py">` block in
-[`src/web/index.html`](https://github.com/wilsonify/pykaraoke-ng/blob/main/src/web/index.html)
+bridge: [`src/web/src/bridge.py`](https://github.com/wilsonify/pykaraoke-ng/blob/main/src/web/src/bridge.py),
+loaded by the `<script type="py">` tag in
+[`src/web/index.html`](https://github.com/wilsonify/pykaraoke-ng/blob/main/src/web/index.html),
 builds one
 [`pykaraoke.webapp.KaraokeApp`](https://github.com/wilsonify/pykaraoke-ng/blob/main/src/pykaraoke/webapp.py)
 instance and publishes a dispatcher as `window.pykaraoke_api`.
@@ -16,7 +17,7 @@ instance and publishes a dispatcher as `window.pykaraoke_api`.
 Exactly one function crosses the boundary:
 
 ```js
-window.pykaraoke_api(name, ...args)   // defined by the inline <script type="py">
+window.pykaraoke_api(name, ...args)   // defined by src/web/src/bridge.py
 ```
 
 The bridge calls `app.<name>(*args)` with converted arguments and returns the
