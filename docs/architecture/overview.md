@@ -16,10 +16,10 @@ PyKaraoke-NG is three thin layers and nothing else:
 └───────────────┬──────────────────────────────────────────────┘
                 │ window.__TAURI__.core.invoke / convertFileSrc
 ┌───────────────▼──────────────────────────────────────────────┐
-│  src/web/index.html — the whole application                  │
-│    <style>            all CSS                                │
-│    <script type=module>  UI, state, file access, playback    │
-│    <script type=py>      bridge → window.pykaraoke_api       │
+│  src/web — the whole application                             │
+│    index.html + css/*.css     markup and styles              │
+│    src/app.js + helpers.js   UI, state, file access, playback│
+│    src/bridge.py              bridge → window.pykaraoke_api  │
 │    PyScript/Pyodide (vendored) + one engine .whl             │
 └───────────────┬──────────────────────────────────────────────┘
                 │ window.pykaraoke_api(name, ...args)
@@ -36,15 +36,15 @@ test suite.
 
 ## Components
 
-### Web application (`src/web/index.html`)
+### Web application (`src/web/`)
 
-One self-contained file — UI, CSS, state, interaction, playback, and the
-inline PyScript bridge. Vanilla JS, no framework, no bundler, no build
-step. It owns:
+One page of markup (`index.html`) plus plain CSS and ES modules — UI, state,
+interaction, playback, and the PyScript bridge. Vanilla JS, no framework, no
+bundler, no build step. It owns:
 
 | Concern | Implementation |
 |---------|----------------|
-| Layout / styling | Inline `<style>` |
+| Layout / styling | `src/web/css/*.css`, linked from `index.html` |
 | State (queue, settings, playback) | Plain JS object + `localStorage` |
 | Folder access (browser fallback) | `<input webkitdirectory>` |
 | Audio / video playback | `<audio>`, `<video>` |
@@ -54,8 +54,9 @@ step. It owns:
 | Persistence | `localStorage` (library JSON + queue ids) |
 
 Everything pure in that script (queue, lyric grouping/highlighting,
-note timeline, time formatting) is unit-tested: the vitest suite extracts
-the inline module from `index.html` and imports it.
+note timeline, time formatting) is unit-tested: the vitest suite imports
+`src/web/src/*.js` directly, and a wiring-contract suite checks the shipped
+`index.html` and stylesheets.
 
 ### Python engine (`src/pykaraoke`)
 
@@ -94,7 +95,7 @@ the webview. The same code runs in a plain browser using the
 Exactly one function crosses it:
 
 ```js
-window.pykaraoke_api(name, ...args)   // defined by the inline <script type="py">
+window.pykaraoke_api(name, ...args)   // defined by src/web/src/bridge.py
 ```
 
 * Arguments are converted to plain Python with `to_py()`.
@@ -117,7 +118,7 @@ rather than a dead window.
 
 | Decision | Rationale |
 |----------|-----------|
-| **One HTML file** | No build step, no module graph, no framework; the file *is* the app |
+| **Plain files, no build** | No bundler, no module graph, no framework; `index.html` plus `css/` and `src/` *is* the app |
 | **Tauri only for native gaps** | The webview already does audio, video, canvas, workers, storage |
 | **Pyodide instead of a backend process** | Same code path in dev, tests, and the shipped app; nothing to spawn or supervise |
 | **Single engine wheel** | One artifact, one version, no service split |
