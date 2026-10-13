@@ -11,8 +11,8 @@ the rules that keep those builds working on every CI runner.
 
 There is **no bundler**. The front end is plain HTML, CSS, and native ES
 modules living directly under `src/web/`. A single `index.html` links the
-stylesheet, loads the module bundle `src/app.js`, the PyScript runtime, and
-the Pyodide interpreter, and carries an inline Python bridge.
+stylesheets in `css/`, loads the module `src/app.js`, the PyScript runtime, and
+the Pyodide interpreter, and loads the Python bridge from `src/bridge.py`.
 
 ```text
 src/pykaraoke/                      pure-stdlib Python engine
@@ -21,9 +21,20 @@ src/pykaraoke/                      pure-stdlib Python engine
         ▼
 src/web/                            authoritative frontend root (committed)
 ├── index.html                      the application page (source of truth)
+├── css/                            stylesheets, one topical file per area
+│   ├── base.css                    tokens, reset, focus rings
+│   ├── layout.css                  app shell: header, column, status, notices
+│   ├── buttons.css                 .btn family, transport buttons, chips
+│   ├── sections.css                panels, headings, counts, empty states
+│   ├── filters.css                 search box and format filters
+│   ├── song-list.css               song rows, badges, queue rows
+│   ├── player.css                  stage, CD+G canvas, lyrics, progress
+│   ├── library.css                 library management and scan diagnostics
+│   └── settings.css                settings panel and groups
 ├── src/
 │   ├── app.js                      UI wiring (browser-only, no framework)
-│   └── helpers.js                  pure helpers (exported for tests)
+│   ├── helpers.js                  pure helpers (exported for tests)
+│   └── bridge.py                   PyScript bridge → window.pykaraoke_api
 ├── _wheel/                         engine wheel        (generated, git-ignored)
 └── _assets/
     ├── pyodide/                    vendored runtime    (generated, git-ignored)
@@ -103,17 +114,17 @@ npx tauri dev
 ```
 
 `beforeDevCommand` starts `python ../../scripts/serve-web.py 18000`, which
-serves `src/web/` (including `index.html`, `src/app.js`, `_assets/`, and
+serves `src/web/` (including `index.html`, `css/`, `src/app.js`, `_assets/`, and
 `_wheel/`) on `http://localhost:18000`. Edit `src/web/src/app.js`,
-`helpers.js`, or `index.html` and reload the window — there is no dev rebuild
-step.
+`helpers.js`, `bridge.py`, a file in `css/`, or `index.html` and reload the
+window — there is no dev rebuild step.
 
 You can open the same URL in a plain browser; the frontend detects the absence
 of `window.__TAURI__.core` and falls back to a browser folder picker.
 
 ### The PyScript bridge
 
-The inline Python bridge is the only Python in the page. It builds one
+The bridge is the only Python in the page. It builds one
 `pykaraoke.webapp.KaraokeApp` and publishes a single JSON-friendly dispatcher:
 
 ```python
@@ -125,8 +136,10 @@ def api(name, *args):
 window.pykaraoke_api = api
 ```
 
-It lives inline in `src/web/index.html` — the single source of truth for the
-page. Edit it there and reload; there is no second copy to keep in sync.
+It lives in `src/web/src/bridge.py`, loaded by the `<script type="py">` tag in
+`index.html`. `app.js` polls for `window.pykaraoke_api` before calling the
+engine, so the extra fetch is not a race. Edit it and reload; there is no
+second copy to keep in sync.
 
 ## Testing
 
@@ -174,9 +187,10 @@ uv run ruff format .            # format
 
 ## Editing rules
 
-- Keep `src/web/` as the authoritative frontend root: page structure and the
-  inline bridge in `index.html`, browser wiring in `src/app.js`, pure helpers
-  in `src/helpers.js`. Do not reintroduce a bundler or a `dist/` tree.
+- Keep `src/web/` as the authoritative frontend root: page structure in
+  `index.html`, styles in `css/*.css`, the bridge in `src/bridge.py`, browser
+  wiring in `src/app.js`, pure helpers in `src/helpers.js`. Do not
+  reintroduce a bundler or a `dist/` tree.
 - Keep `src/pykaraoke/` untouched by the frontend; engine work belongs there
   and must stay **stdlib-only** so it runs under Pyodide.
 - Changes that touch extracted logic must keep `tests/web` green.
