@@ -1,0 +1,69 @@
+/* Settings panel (inline, no modal) and its groups. */
+
+.settings-panel {
+  flex: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  /* Narrow windows: wrap the control under its label instead of
+     overflowing the panel. */
+  flex-wrap: wrap;
+}
+.settings-row label { flex: 1 1 auto; display: flex; align-items: center; gap: 4px; }
+.settings-row select {
+  flex: 1 1 8em;
+  min-width: 0;
+  max-width: 100%;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 6px;
+}
+.settings-row input[type="text"] {
+  flex: 1 1 8em;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ── Settings groups ───────────────────────────────────────────────── */
+.settings-head { display: flex; align-items: center; justify-content: space-between; }
+.settings-group { display: flex; flex-direction: column; gap: 6px; border: 0; padding: 0; margin: 0; }
+.settings-group + .settings-group { border-top: 1px solid var(--border); padding-top: 8px; }
+.settings-group-title {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.settings-group > summary {
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.settings-actions { display: flex; gap: 6px; align-items: center; }
+.shortcuts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 11px; }
+.shortcuts kbd {
+  font: inherit;
+  font-size: 10px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  background: var(--bg-input);
+  white-space: nowrap;
+}
+.shortcuts span { color: var(--text-dim); }
