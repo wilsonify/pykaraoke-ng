@@ -1,0 +1,34 @@
+/* Library management and scan diagnostics. */
+
+/* ── Library management (progressive disclosure) ───────────────────── */
+.manage {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 4px 8px;
+}
+.manage > summary { cursor: pointer; font-size: 11px; color: var(--text-dim); }
+.manage-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.manage .hint { margin-top: 5px; }
+
+/* ── Scan diagnostics ──────────────────────────────────────────────── */
+/* An <output>, not a <p>, so keep the paragraph's 1em block margins. */
+.scan-summary {
+  margin: 1em 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+}
+.scan-summary[data-severity="warn"] { border-left-color: var(--danger); }
+.scan-details {
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 6px 6px 2px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+.scan-details ul { margin: 0; padding-left: 16px; }
+.scan-details li { word-break: break-all; margin-bottom: 2px; }
+.scan-details .scan-category { color: var(--text); font-weight: 600; }
