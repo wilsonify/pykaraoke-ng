@@ -1,0 +1,51 @@
+/* Song lists: results rows, queue rows, format badges. */
+
+.song-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
+
+.song-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.song-row:hover { background: var(--bg-elevated); }
+.song-row.selected { background: var(--bg-elevated); border-color: var(--accent); }
+
+.song-row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.song-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-row-file { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.results-section, .queue-section, .player-section { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Badges ────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  flex: none;
+}
+.badge-cdg { color: var(--ok); border-color: var(--ok); }
+.badge-kar { color: var(--accent); border-color: var(--accent); }
+.badge-mpg { color: #6cb6ff; border-color: #6cb6ff; }
+
+/* ── Song rows: selected / queued / playing ────────────────────────── */
+.song-row.selected .song-row-title::before { content: "▸ "; color: var(--accent); }
+.song-row.playing { border-color: var(--ok); }
+.song-row.playing .song-row-title::before { content: "▶ "; color: var(--ok); }
+.song-row-actions { display: flex; gap: 2px; flex: none; }
+.song-row .tag { flex: none; }
+
+.queue-position {
+  flex: none;
+  min-width: 1.2em;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.queue-row.current { border-color: var(--ok); }
+.queue-section .empty-state { list-style: none; }
