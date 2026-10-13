@@ -5,10 +5,11 @@
 #   unit-tests-rust   ─┼─► sonarqube ─► build (matrix) ─► release
 #   unit-tests-frontend┘
 #
-# The app is one HTML file (src/web/index.html) + a pure-Python engine wheel +
-# a thin Tauri shell, so the pipeline only needs those three test/build legs:
+# The app is a static page (src/web/index.html + css/ + src/) + a pure-Python
+# engine wheel + a thin Tauri shell, so the pipeline only needs those three
+# test/build legs:
 #   * pytest   → src/pykaraoke (runs under CPython and under Pyodide)
-#   * vitest   → the JS extracted from src/web/index.html
+#   * vitest   → the JS in src/web/src (+ a wiring contract over index.html)
 #   * cargo    → src/runtimes/tauri/src-tauri (folder dialog + file reads)
 #   * tauri build → bundles the wheel + vendored Pyodide/PyScript + src/web/
 #
@@ -146,8 +147,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # Extracts the inline <script type="module"> from src/web/index.html and
-      # runs the UI logic tests against it (vitest, no browser needed).
+      # Runs the UI logic tests against the shipped src/web/src/*.js modules
+      # (vitest, no browser needed), plus a wiring contract over index.html.
       - name: Run frontend unit tests
         working-directory: tests/web
         # --ignore-scripts: vitest/esbuild run from the installed files;
