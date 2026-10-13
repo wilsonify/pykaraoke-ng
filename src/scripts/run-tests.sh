@@ -3,7 +3,7 @@
 # Run the PyKaraoke-NG test suite.
 #
 #   pytest    engine unit tests (CPython) — src/pykaraoke
-#   vitest    web UI logic tests — extracted from src/web/index.html
+#   vitest    web UI logic tests — src/web/src/*.js + the index.html wiring
 #
 # Usage:
 #   ./src/scripts/run-tests.sh            # everything
