@@ -37,6 +37,6 @@ npx tauri dev
 ```
 
 `beforeDevCommand` runs `python ../../scripts/serve-web.py 18000`, so the
-window loads `http://localhost:18000` — the same URL you can open in a plain
+window loads `http://localhost:18000` - the same URL you can open in a plain
 browser with the browser folder picker. Reload the window after editing
-`src/web/index.html`.
+anything under `src/web/`.
