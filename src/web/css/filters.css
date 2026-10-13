@@ -1,0 +1,39 @@
+/* Collapsible filters, format checkboxes and the search box. */
+
+.filters {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: var(--bg-elevated);
+}
+.filters summary { cursor: pointer; color: var(--text-dim); font-weight: 600; }
+/* A <fieldset> so the format filters are a native group; the UA border,
+   padding and min-width are reset to keep the row's original geometry. */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+}
+.kind-filter {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-height: 24px;
+  color: var(--text-dim);
+}
+
+.search-box input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text);
+  outline: none;
+}
+.search-box input:focus { border-color: var(--accent); }
