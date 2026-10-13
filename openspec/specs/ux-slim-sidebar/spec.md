@@ -9,7 +9,7 @@ carry the same governance weight as the architectural constraints in the
 project-governance specification and are treated as defects when violated.
 
 > Source: migrated from `specs/ux-design.md`; every statement below was verified
-> against the shipped UI in `src/web/index.html` and the window configuration in
+> against the shipped UI in `src/web/` (`index.html` plus `css/`) and the window configuration in
 > `src/runtimes/tauri/src-tauri/tauri.conf.json`.
 
 > Note: the shipped implementation diverges from the original design document in
@@ -134,7 +134,7 @@ horizontally.
 
 > Note: the original design document specified a `position: sticky` Now Playing
 > section. The shipped UI does not use sticky positioning; Now Playing scrolls
-> with the rest of the content column (`src/web/index.html`, `.main-column`).
+> with the rest of the content column (`src/web/css/layout.css`, `.main-column`).
 
 ### Requirement: Incremental search
 
@@ -153,8 +153,9 @@ button, and MUST debounce input to avoid excessive work.
 - **THEN** the query is issued once after a short debounce interval
 - **AND** the result list is not re-rendered for every individual keystroke
 
-> Note: the shipped debounce interval is 150 ms and the result limit is 500
-> (`src/web/index.html`). The original document said 100–150 ms; 150 ms is
+> Note: the shipped debounce interval is 150 ms and the result limit is 300
+> (`src/web/src/app.js` and `src/web/src/helpers.js`). The original document
+> said 100–150 ms; 150 ms is
 > within that range.
 
 ### Requirement: Search kind filters
@@ -218,7 +219,7 @@ queue without a confirmation dialog.
 > Note: the original design document specified pressing Delete to remove the
 > selected queue item. The shipped key handler looks for a selected queue row,
 > but queue rows are never marked selected, so that binding is currently
-> ineffective (`src/web/index.html` keydown handler).
+> ineffective (`src/web/src/app.js` keydown handler).
 
 ### Requirement: Reorder the queue
 
@@ -422,7 +423,7 @@ and MUST remain legible on both dark and light system settings.
   3:1 for interface elements
 
 > Note: the shipped palette is defined as CSS custom properties on `:root` in
-> `src/web/index.html` — background `#14151a`, elevated surface `#1c1e25`,
+> `src/web/css/base.css` — background `#14151a`, elevated surface `#1c1e25`,
 > border `#2c2f3a`, text `#e8e9ed`, dimmed text `#9aa0ae`, accent `#e8b64c`,
 > danger `#e06c75`, and success `#7ec699`. This supersedes the illustrative
 > palette in the original design document.
