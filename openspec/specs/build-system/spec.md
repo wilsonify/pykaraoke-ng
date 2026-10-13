@@ -4,7 +4,7 @@
 
 Defines how PyKaraoke-NG is assembled and packaged identically on Windows,
 macOS, and Linux. A build produces three things: the self-contained web
-application (`src/web/index.html`), one pure-stdlib Python engine wheel, and
+application (`src/web/` — `index.html`, `css/`, `src/`), one pure-stdlib Python engine wheel, and
 the vendored Pyodide/PyScript runtime that `src/scripts/build-web.py` fetches.
 Tauri then embeds the whole `src/web/` tree into the desktop installers, so the
 same build commands must succeed on every supported platform and CI runner.
