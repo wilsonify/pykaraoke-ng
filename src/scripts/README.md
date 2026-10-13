@@ -1,6 +1,6 @@
 # Development Scripts
 
-Small helpers for setup, testing, and serving the single-file web app.
+Small helpers for setup, testing, and serving the web app.
 
 ## `setup-dev-env.sh`
 
@@ -17,8 +17,7 @@ VENV_DIR=/tmp/venv ./src/scripts/setup-dev-env.sh  # venv location (default: .ve
 
 ## `run-tests.sh`
 
-Runs the whole suite: pytest (Python engine) then vitest (JS extracted
-from `src/web/index.html`).
+Runs the whole suite: pytest (Python engine) then vitest (web UI logic).
 
 ```bash
 ./src/scripts/run-tests.sh              # both suites
@@ -35,7 +34,7 @@ uv run pytest tests/pykaraoke --cov --cov-report=html
 
 ## `build-web.py`
 
-Builds everything `src/web/index.html` needs at runtime:
+Builds everything the page needs at runtime:
 
 1. builds `src/web/_wheel/pykaraoke_ng-*.whl` from `src/pykaraoke`
 2. vendors Pyodide + PyScript into `src/web/_assets/`
