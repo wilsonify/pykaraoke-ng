@@ -25,7 +25,9 @@ WebAssembly.
 
 ```
 src/web/
-  index.html              the entire app: UI + CSS + JS + PyScript bridge
+  index.html              the app page: markup, linked from css/ and src/
+  css/                    stylesheets, one topical file per UI area
+  src/                    app.js (UI wiring) + helpers.js + bridge.py (PyScript)
   _assets/                vendored Pyodide + PyScript (generated)
   _wheel/                 pykaraoke engine wheel (generated)
 src/pykaraoke/            pure-stdlib Python engine (CPython + Pyodide)
@@ -35,12 +37,13 @@ src/pykaraoke/            pure-stdlib Python engine (CPython + Pyodide)
   database.py             song library, search, settings
   filename_parser.py      "Artist - Title" name parsing
 src/runtimes/tauri/       thin desktop shell (3 native commands)
-tests/                    pytest (engine) + vitest (JS extracted from index.html)
+tests/                    pytest (engine) + vitest (web UI logic)
 ```
 
-`src/web/index.html` is one self-contained file: markup, `<style>`, the
-vanilla-JS module (UI, file access, playback), and the inline
-`<script type="py">` bridge — no framework, no bundler, no build step.
+`src/web/` is plain files — markup in `index.html`, CSS in `css/*.css`, the
+vanilla-JS modules (UI, file access, playback) in `src/`, and the
+`<script type="py">` bridge in `src/bridge.py` — no framework, no bundler, no
+build step.
 
 The engine is pure stdlib (no pygame, numpy, or mutagen) so the same
 modules run under CPython for tests and under Pyodide in the browser.
