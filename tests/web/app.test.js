@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -929,10 +929,21 @@ describe('index.html: wiring contract with app.js', () => {
     expect(nestedInsideInterpolation(appJs)).toEqual([]);
   });
 
-  it('declares each stylesheet selector only once', () => {
-    const style = /<style[^>]*>([\s\S]*?)<\/style>/.exec(html);
-    expect(style, 'missing the inline stylesheet').toBeTruthy();
-    const css = style[1].replace(/\/\*[\s\S]*?\*\//g, '');
+  it('declares each stylesheet selector only once across css/', () => {
+    // The styles live in src/web/css/*.css (index.html links them in cascade
+    // order); an inline <style> block would hide that layout from review.
+    expect(html).not.toContain('<style');
+    const cssDir = resolve(webDir, 'css');
+    const files = readdirSync(cssDir)
+      .filter((name) => name.endsWith('.css'))
+      .sort();
+    expect(files.length).toBeGreaterThan(5);
+    // Every stylesheet on disk is actually linked from the page, so a new
+    // file cannot be silently left out of the cascade.
+    for (const name of files) expect(html).toContain(`/css/${name}"`);
+    const css = files
+      .map((name) => readFileSync(resolve(cssDir, name), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''))
+      .join('\n');
     const selectors = [];
     // Linear scan instead of /(?:^|\})\s*([^{}]+)\{/g: split each rule
     // block on '}' and take the selector group before the first '{'.
@@ -971,7 +982,8 @@ describe('index.html: wiring contract with app.js', () => {
     expect(html).toContain('id="settings-rescan-note"');
     expect(html).toContain('id="shortcuts-list"');
     // The note lives inside the panel, next to the controls it explains.
-    const panel = /id="settings-panel"[\s\S]*?<script type="py">/.exec(html)[0];
+    // (The engine <script type="py"> tag after the panel bounds the region.)
+    const panel = /id="settings-panel"[\s\S]*?<script type="py"/.exec(html)[0];
     expect(panel).toContain('id="settings-rescan-note"');
     expect(panel).toContain('id="shortcuts-list"');
   });
