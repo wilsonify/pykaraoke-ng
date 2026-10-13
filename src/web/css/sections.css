@@ -1,0 +1,52 @@
+/* Shared panel chrome: section headings, counts, state chips, empty states. */
+
+.panel { display: flex; flex-direction: column; gap: 5px; }
+
+.section-label {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.section-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+
+.count-badge { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+
+.state-chip {
+  font-size: 10px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.state-chip[data-state="playing"] { color: var(--ok); border-color: var(--ok); }
+.state-chip[data-state="paused"] { color: var(--accent); border-color: var(--accent); }
+.state-chip[data-state="error"] { color: var(--danger); border-color: var(--danger); }
+
+.hint { margin: 0; font-size: 11px; color: var(--text-dim); }
+.muted { color: var(--text-dim); }
+
+.tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+
+.empty-state {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.empty-state .empty-title { color: var(--text); display: block; margin-bottom: 2px; }
+.empty-state .btn { margin-top: 6px; }
