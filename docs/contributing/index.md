@@ -29,8 +29,10 @@ uv sync                              # or: uv sync --extra dev
 
 ```
 src/web/
-  index.html              the app: markup + <style> + <script type="module">
-                           + <script type="py"> bridge   (one file, no build)
+  index.html              the app page: markup, links to css/ and src/
+  css/                    stylesheets, one topical file per UI area
+  src/                    app.js (UI wiring), helpers.js (pure logic),
+                           bridge.py (PyScript → window.pykaraoke_api)
   _assets/                vendored Pyodide + PyScript   (generated)
   _wheel/                 pykaraoke engine wheel        (generated)
 
@@ -48,7 +50,8 @@ src/runtimes/tauri/       desktop shell
 
 tests/
   pykaraoke/              pytest (engine)
-  web/                    vitest on the JS extracted from src/web/index.html
+  web/                    vitest on src/web/src + a wiring contract over
+                           index.html and css/*.css
   fixtures/               karaoke + LRC samples
 
 src/scripts/              setup, test runner, web build/serve helpers
@@ -66,7 +69,7 @@ uv run pytest tests/pykaraoke/ --cov --cov-report=html
 uv run pytest tests/pykaraoke/test_cdg.py -v   # single file
 ```
 
-### Frontend (JS extracted from `src/web/index.html`)
+### Frontend (web UI logic)
 
 ```bash
 cd tests/web
@@ -74,9 +77,10 @@ npm ci
 npm test
 ```
 
-The loader (`tests/web/load-app.mjs`) pulls the inline module out of
-`src/web/index.html`, so tests always run against the real shipped script —
-no `app.js` to keep in sync.
+The suite imports the shipped modules from `src/web/src/` directly, so the
+tests always run against the real code — no generated copy to keep in sync.
+A wiring-contract suite also reads `src/web/index.html` and `src/web/css/*.css`
+to check the element ids, accessibility markup and stylesheet the page ships.
 
 ### Rust
 
@@ -129,15 +133,21 @@ openspec-validation ─┘
 
 Pull requests never reach `release`.
 
-## Working on `src/web/index.html`
+## Working on the web UI (`src/web/`)
 
-The whole application lives in that file. Three sections, top to bottom:
+The application is plain files under `src/web/` — no build step. Four pieces:
 
-1. **`<style>`** — all CSS.
-2. **`<script type="module">`** — vanilla JS: state, rendering, file
-   access, playback, canvas, lyrics. Pure functions here are covered by
-   `tests/web`.
-3. **`<script type="py">`** — the PyScript bridge. It defines
+1. **`index.html`** — markup only: the app shell, sections, and the hidden
+   file pickers. Stylesheets are linked from `css/` in cascade order.
+2. **`css/*.css`** — one topical file per UI area (`base`, `layout`,
+   `buttons`, `sections`, `filters`, `song-list`, `player`, `library`,
+   `settings`). A selector may be declared only once across all of them; the
+   test suite enforces it.
+3. **`src/app.js` + `src/helpers.js`** — vanilla JS: state, rendering, file
+   access, playback, canvas, lyrics. Pure functions in `helpers.js` are
+   covered by `tests/web`.
+4. **`src/bridge.py`** — the PyScript bridge (loaded by the
+   `<script type="py">` tag). It defines
    `window.pykaraoke_api(name, ...args)`, which dispatches into
    `pykaraoke.webapp`, plus `runPython`-based helpers for decoding
    (CD+G packets, MIDI, LRC).
@@ -148,8 +158,8 @@ helpers and `formatTime`.
 
 ### Editing rules
 
-- Keep the file self-contained. No external CSS/JS files, no build step.
-- Never add a dependency to the front end.
+- Keep it framework-free and build-free: plain HTML, CSS and ES modules served
+  straight from `src/web/`. No external front-end dependencies.
 - Changes that touch extracted logic must keep `tests/web` green.
 - Engine work happens in `src/pykaraoke` and must stay **stdlib-only** so
   it runs under Pyodide.
@@ -167,7 +177,8 @@ npx tauri dev
 `beforeDevCommand` starts `python ../../scripts/serve-web.py 18000`,
 which serves `src/web/` (including `_assets/` and `_wheel/`) on
 `http://localhost:18000`, and the window loads that URL. Edit
-`src/web/index.html` and reload the window.
+`src/web/index.html`, `src/web/css/*.css` or `src/web/src/*.js` and reload the
+window.
 
 ### Production build
 
@@ -192,7 +203,7 @@ rebuilds the engine wheel and vendors the Pyodide/PyScript runtime into
 | `read_file` | `std::fs` | Raw bytes over IPC → `ArrayBuffer` |
 
 If you change them, update the Rust unit tests in `src/runtimes/tauri/src-tauri`
-(`cargo test`) and the fallback path in `src/web/index.html`
+(`cargo test`) and the fallback path in `src/web/src/app.js`
 (`window.__TAURI__` detection).
 
 ### Tauri prerequisites
