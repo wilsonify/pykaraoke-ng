@@ -1,0 +1,57 @@
+/* Buttons, icon buttons and clickable chips. */
+
+.btn {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  padding: 5px 10px;
+  font-size: 12px;
+  /* Every button keeps a 24 px target (WCAG 2.5.8). */
+  min-height: 24px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: #1a1408; border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { background: var(--accent-strong); }
+.btn-sm { padding: 4px 9px; font-size: 11px; }
+.btn-icon {
+  /* Icon-only controls keep a 24 px touch/click target (WCAG 2.5.8). */
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 12px;
+  background: transparent;
+}
+.btn-danger { color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { border-color: var(--danger); background: var(--bg-input); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* Transport buttons (the .btn-control family lives with the player). */
+.btn-control {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.btn-control:hover { border-color: var(--accent); }
+.btn-play { background: var(--accent); color: #1a1408; border-color: var(--accent); }
+.btn-control[disabled] { opacity: 0.4; cursor: not-allowed; border-color: var(--border); }
+
+.chip {
+  align-self: flex-start;
+  min-height: 24px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
