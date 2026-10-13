@@ -1,0 +1,90 @@
+/* The karaoke stage: CD+G canvas, lyrics, transport, progress and volume. */
+
+/* ── Stage ─────────────────────────────────────────────────────────── */
+.stage {
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+  padding: 8px;
+  position: relative;
+}
+/* A <figure> so the CD+G surface has native semantics; UA margin reset. */
+#cdg-view {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+  margin: 0;
+}
+#cdg-canvas {
+  image-rendering: pixelated;
+  max-width: 100%;
+  /* Let a zoomed canvas shrink to the column without distorting its ratio. */
+  height: auto;
+  background: #000;
+}
+.stage-empty { color: var(--text-dim); font-style: italic; }
+#video-slot video { display: block; border-radius: 4px; }
+
+/* ── Lyrics ────────────────────────────────────────────────────────── */
+.lyrics {
+  margin-top: 8px;
+  width: 100%;
+  text-align: center;
+}
+.lyric-line {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dim);
+  min-height: 1.3em;
+}
+/* Duet lines: colour by singer/part; untagged lines keep the dim default. */
+.lyric-line.part-a { color: var(--part-a); }
+.lyric-line.part-b { color: var(--part-b); }
+.lyric-line.part-ab { color: var(--part-ab); }
+/* Declared after the part colours so the upcoming line always dims. */
+.lyric-line.lyric-next { color: #5a5f6e; font-size: 14px; }
+/* Part chip: "A", "B", "A+B", or the song's [pa:]/[pb:] display names. */
+.lyric-part {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-right: 5px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  vertical-align: 1px;
+}
+.lyric-syl.lit { color: var(--accent-strong); }
+/* Sung syllables light up in the line's own (brighter) part colour. */
+.lyric-line.part-a .lyric-syl.lit { color: var(--part-a-lit); }
+.lyric-line.part-b .lyric-syl.lit { color: var(--part-b-lit); }
+.lyric-line.part-ab .lyric-syl.lit { color: var(--part-ab-lit); }
+
+/* ── Player controls ───────────────────────────────────────────────── */
+.now-playing-info { margin-top: 6px; }
+.song-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song-artist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A <fieldset> so the transport is a native control group; UA chrome reset. */
+.player-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+
+.progress-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+#progress-slider, #volume-slider { flex: 1; accent-color: var(--accent); }
+.time-display { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.volume-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.volume-row .row-label { font-size: 11px; color: var(--text-dim); }
