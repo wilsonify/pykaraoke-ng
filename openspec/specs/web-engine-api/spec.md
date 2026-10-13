@@ -9,8 +9,8 @@ JSON-friendly data (plain dicts, lists, bytes, or `None`) or a structured error
 payload, so the page can stay a thin, total client that never crashes on engine
 failure.
 
-> Source: `src/pykaraoke/webapp.py` (the API) and the inline `<script type="py">`
-> bridge in `src/web/index.html` (the dispatcher and value conversion).
+> Source: `src/pykaraoke/webapp.py` (the API) and the `<script type="py">`
+> bridge in `src/web/src/bridge.py` (the dispatcher and value conversion).
 
 ## Requirements
 
