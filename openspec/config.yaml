@@ -4,8 +4,9 @@ schema: spec-driven
 # Kept short on purpose — general documentation lives in docs/.
 context: |
   PyKaraoke-NG is a cross-platform desktop karaoke player for working DJs.
-  The application is a single self-contained HTML file (src/web/index.html)
-  plus a pure-stdlib Python engine (src/pykaraoke) that runs both under
+  The application is a static web page (src/web/index.html plus its
+  stylesheets in src/web/css and scripts in src/web/src) plus a pure-stdlib
+  Python engine (src/pykaraoke) that runs both under
   CPython (tests) and under Pyodide/PyScript (the shipped app). Tauri is a
   thin desktop shell exposing only three native commands.
 
