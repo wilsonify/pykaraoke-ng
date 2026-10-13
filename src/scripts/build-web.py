@@ -20,8 +20,8 @@ swapped upstream asset cannot reach a package.
 
 After vendoring, ``validate_assets`` cross-checks every local asset that
 ``src/web/index.html`` references (``/_assets/...``, ``/_wheel/...``,
-``./src/app.js``, ``./src/helpers.js``) and exits non-zero if any is
-missing, so a build can never ship a page that 404s at runtime.
+``/css/...``, ``./src/app.js``, ``./src/bridge.py``) and exits non-zero if any
+is missing, so a build can never ship a page that 404s at runtime.
 
 Usage: python src/scripts/build-web.py [--check-only]
 """
