@@ -25,7 +25,7 @@ Individually:
 
 ```bash
 uv run pytest tests/pykaraoke/ -v # Python engine tests
-cd tests/web && npm ci && npm test # JS extracted from src/web/index.html
+cd tests/web && npm ci && npm test # web UI logic tests (vitest)
 ```
 
 ## 3. Run in a browser
@@ -38,7 +38,8 @@ python -m http.server 18000 --directory src/web
 Open <http://localhost:18000>.
 
 The page loads Pyodide in a Web Worker, installs the `pykaraoke` wheel,
-and runs the app from `src/web/index.html`. Folder picking falls back to
+and runs the app from `src/web/index.html` (markup) with its stylesheets in
+`src/web/css/` and scripts in `src/web/src/`. Folder picking falls back to
 `<input webkitdirectory>` when there is no Tauri window.
 
 ## 4. Desktop app (Tauri)
@@ -52,7 +53,7 @@ npx tauri dev
 ```
 
 `beforeDevCommand` serves `src/web/` on port 18000; the window loads that
-URL. Reload the window after editing `src/web/index.html`.
+URL. Reload the window after editing anything under `src/web/`.
 
 ### Production build
 
