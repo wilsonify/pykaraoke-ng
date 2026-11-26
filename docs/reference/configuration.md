@@ -20,6 +20,7 @@ it, its type, its default, and its effect.
 |---------|-----------|------|---------|--------|
 | `sort` | Settings panel — **Sort library by** | `filename` \| `title` \| `artist` | `filename` | Library/song-list ordering. `title` and `artist` sorts ignore a leading article (`a`, `an`, `the`) and any leading parenthesised block. An unknown value falls back to `filename`. |
 | `cdg_zoom` | Settings panel — **CDG zoom** | `quick` \| `int` \| `full` \| `soft` | `int` | Zoom level applied to the CD+G rendering stage: Quick (0.75×), Normal (1×), Large (1.5×), Full (2×). |
+| `lyric_size` | Settings panel — **Lyric size** | `small` \| `medium` \| `large` | `medium` | Text size for LRC and MIDI lyrics on the stage. Any other value is stored as `medium`. |
 | `look_inside_zips` | Settings panel — **Look inside .zip files** | boolean | `true` | When enabled, scanning a `.zip` archive expands its supported karaoke members into songs. When disabled, archives are skipped. |
 | `exclude_non_matching` | Settings panel — **Hide songs without artist** | boolean | `false` | When enabled, entries from which no artist can be parsed are omitted from the library. When disabled (the default) they are kept as title-only songs. |
 | `derive_song_info` | Settings panel — **Derive song info from filename** | boolean | `true` | UI-facing toggle. See the note below. |

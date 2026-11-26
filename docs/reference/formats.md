@@ -55,6 +55,9 @@ file. The parser understands:
 | Syntax | Meaning |
 |--------|---------|
 | `[mm:ss.xx]lyric text` | A lyric line at that time |
+| `[mm:ss]lyric text` | The same, without a fractional second (read as `.00`) |
+| `[mm:ss:xx]lyric text` | The same, with `:` introducing the fraction |
+| `[mmm:ss.xxx]lyric text` | Minutes may run to three digits on long compilations |
 | `[mm:ss.xx][mm:ss.xx]text` | Several leading timestamps repeat the same text |
 | `[key:value]` | Metadata, e.g. `[ti:Title]`, `[ar:Artist]` |
 | `[offset:±ms]` | A global adjustment; a positive offset makes lyrics appear sooner |
@@ -81,7 +84,36 @@ a line is always kept, and if nothing matches it falls back to the plain line
 timings. A missing or unusable `.elrc` is not an error.
 
 The `.elrc` merges with the LRC, so keep it beside the `.lrc` (and add the
-words to the same musical timing).
+words to the same musical timing). Both files are matched in the song's own
+folder first, so two folders may hold the same base name.
+
+### `.elrc` line headers
+
+The `.elrc` dialect written by the chord-vault pipeline repeats each line as a
+*header* at the same timestamp as its first word, followed by one entry per
+word:
+
+```elrc
+[00:11.560]I got my license last week   ← header: the line
+[00:11.560] I
+[00:12.440] got
+[00:13.320] my
+[00:14.720] license
+[00:15.320] last
+[00:15.740] week
+```
+
+A header is recognised only when the words after it spell it letter for
+letter. If the `.lrc` has no usable timestamps at all, the player builds the
+lyric lines from these headers instead of giving up; a `.lrc` that does have
+timed lines always takes precedence, and the `.elrc` only adds word timing.
+
+### When a lyric line cannot be read
+
+A line whose timestamp is malformed (`[00:6x.00]…`) is skipped, and the status
+bar says how many lines were dropped. The rest of the file still plays. If a
+`.elrc` word timing cannot be matched to any word of its line, that is
+reported too rather than shifting the remaining words.
 
 ### Duet parts
 
@@ -123,14 +155,29 @@ for any other format.
 
 CD+G and LRC songs are paired with an audio file in the same scan:
 
-1. **Exact match first** — the audio file whose basename equals the song's
-   basename (ignoring case), e.g. `Song Title.cdg` → `Song Title.mp3`.
-2. **Normalised match otherwise** — a match that ignores track-number prefixes
-   and `karaoke`/`instrumental` suffixes, so `01 - Inside Out.lrc` pairs with
-   `Inside Out.mp3`.
+1. **The song's own folder first** — exact stem (ignoring case), then a
+   normalised stem that ignores track-number prefixes and `karaoke` /
+   `instrumental` suffixes. Two packs that both contain `A - Song.cdg` and
+   `A - Song.mp3` therefore keep their own audio.
+2. **Anywhere else second** — the same two matches, for libraries whose audio
+   lives in a separate folder (e.g. `Songs/A - B.cdg` with `Audio/A - B.mp3`).
+   Where several files match, the alphabetically first path wins, so repeated
+   scans pair the same way.
 
 Only `.mp3`, `.ogg`, and `.wav` files are used as companion audio. Pairing is
 skipped for songs inside a zip archive.
+
+### One performance per folder and stem
+
+A folder holding `B - Tune.cdg`, `B - Tune.lrc`, and `B - Tune.mp3` describes
+**one** performance, and CD+G wins: the stage renders the graphics. The lyric
+file is recorded in the scan report as a duplicate lyric rather than listed as
+a second song.
+
+A `.lrc`/`.lcr` with no companion audio anywhere is **not** listed as a song —
+it could never play — and is reported in the scan details so you can add the
+missing audio file. `.lrc` and `.lcr` of the same stem also collapse to one
+song (`.lrc` wins).
 
 ## Zip archives
 
@@ -149,6 +196,7 @@ folder:
 ├── Artist Name/
 │   ├── Song Title.cdg
 │   ├── Song Title.mp3          ← audio companion for the .cdg
+│   ├── Song Title.lrc          ← optional: CD+G wins, this is a companion
 │   └── Another Song.kar        ← self-contained (MIDI synthesis)
 └── Another Artist/
     ├── Great Song.mpg          ← self-contained (embedded audio)

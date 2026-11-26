@@ -1,0 +1,7 @@
+[ti:Skipped Lines]
+[ar:Fixture Band]
+
+[00:01.00]A line that parses
+[00:6x.00]Non-digit seconds
+[00:03.00]Another line that parses
+[0x:04.00]Non-digit minutes

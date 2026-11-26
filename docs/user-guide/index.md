@@ -191,10 +191,19 @@ plain language:
 A **Scan details (N)** chip next to the summary expands a grouped list of the
 exact files the scan could not use — grouped by reason (not karaoke, filtered
 out, damaged ZIP archive, unsupported compression, could not be read, name
-could not be parsed). The details stay available until you press **Clear scan
-details** or run another scan, so dismissing the notification never loses
-them. Skipped files are never playable and are never presented as errors in
-the song list.
+could not be parsed, duplicate lyric, missing audio). The details stay
+available until you press **Clear scan details** or run another scan, so
+dismissing the notification never loses them. Skipped files are never playable
+and are never presented as errors in the song list.
+
+Two of those reasons are worth knowing by name:
+
+- **Duplicate lyric** — a `.lrc` for a song that also has a `.cdg` (or a
+  `.lcr` beside a `.lrc`). The CD+G is the performance, so the lyric file is a
+  companion rather than a second song.
+- **Missing audio** — a `.lrc`/`.lcr` with no `.mp3`, `.ogg`, or `.wav` to play
+  it. Such a file cannot ever play, so it is left out of the song list instead
+  of failing when you press Play. Add the audio file and rescan.
 
 ---
 
@@ -239,6 +248,20 @@ Drag or click the slider to seek to any position in the current song. The
 current time and total duration are shown next to it, and both follow the
 slider while you scrub. Seeking stays disabled until a song is loaded.
 
+### Lyric Lines
+
+The stage shows three lines: the line just sung (dimmed, above), the line
+being sung (bright, with each syllable lighting up as it is reached), and the
+line coming up (dimmed, below). While a song is playing:
+
+- **Click a lyric line** to jump to the start of that line. Click-to-seek is
+offered only when the song can be seeked, which the progress slider also
+shows.
+- **Lyric size** in settings makes the words larger or smaller for a singer
+standing back from the screen, and the choice is remembered.
+- If a lyric line could not be read, the status bar says how many were
+skipped — the rest of the song still plays.
+
 ### Volume
 
 Drag the volume slider (0–100%). The percentage is displayed beside it.
@@ -266,6 +289,8 @@ the power-user options stay out of the way of the main workflow:
 
 - **CD+G zoom** — `quick` (0.75×), `Normal` (1×), `Large` (1.5×), `Full` (2×).
   Applies to the stage immediately.
+- **Lyric size** — `Small`, `Medium`, or `Large`, for LRC and MIDI lyrics alike.
+  Applies immediately and is remembered between sessions.
 
 **Advanced file filters** — *include* only files matching your patterns, or
 *exclude* files with a pattern such as `*(vocal)*`. An empty include list
@@ -275,9 +300,9 @@ allows every file; excludes always win.
 
 Settings tagged **rescan** only take effect at the next scan. Changing one
 shows a note with a **Rescan library now** button, so you can apply it without
-hunting for the library actions. Volume, CD+G zoom and sort order apply
-immediately; everything that changes which songs are in the library, or how
-they are named, waits for the rescan.
+hunting for the library actions. Volume, CD+G zoom, lyric size and sort
+order apply immediately; everything that changes which songs are in the
+library, or how they are named, waits for the rescan.
 
 ---
 
@@ -414,6 +439,9 @@ details stay reachable from the library panel afterwards.
 | Playback failed — no audio file next to it | A `.cdg`/`.lrc` needs an `.mp3`, `.ogg`, or `.wav` with the same name in the same folder; add one and press **Retry** |
 | Song won't resume after Stop | Stop unloads the song — pick it again from the song list or the queue |
 | FF/Rewind doesn't change audio | Some codecs don't honour seek in the middle of a decode; position display still updates |
+| A lyrics song is missing from the library | Its audio file is missing. **Scan details** lists it under missing audio; add an `.mp3`/`.ogg`/`.wav` with the same name beside the `.lrc` and rescan |
+| Lyrics start late, or some lines never appear | The timestamp form may be unusual. `[mm:ss]`, `[mm:ss.xx]` and `[mm:ss:xx]` are supported; the status bar names lines that could not be read |
+| A song plays the wrong backing track | Two folders hold the same base name. Audio is paired in the song's own folder first, so check for a stray `.mp3` in that folder |
 | Folder picker doesn't appear | Only the desktop app has it — in a browser, use **Add folder** with the directory file input |
 | Settings don't persist | Library and settings live in browser storage; clearing site data resets them |
 | Installer fails | Build from source, or try the other installer format from Releases |

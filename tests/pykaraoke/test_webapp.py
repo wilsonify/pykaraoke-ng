@@ -497,3 +497,85 @@ class TestImportExportAPI:
         assert result["ok"] is False
         assert "error" in result
         assert len(app.library_songs()["songs"]) == 1
+
+
+class TestLyricWarningsAPI:
+    """The page needs to know what the parser had to skip."""
+
+    def test_warnings_are_returned(self):
+        app = KaraokeApp()
+        payload = app.parse_lrc("[00:01.00]Good\n[00:6x.00]Bad\n")
+        assert [e["text"] for e in payload["lyrics"]] == ["Good"]
+        assert payload["warnings"][0]["kind"] == "skipped-line"
+
+    def test_clean_lyrics_have_no_warnings_key(self):
+        app = KaraokeApp()
+        assert "warnings" not in app.parse_lrc("[00:01.00]Good\n")
+
+    def test_elrc_lines_are_inferred_when_the_lrc_has_no_timing(self):
+        app = KaraokeApp()
+        payload = app.parse_lrc(
+            "Just some untimed words\n",
+            "[00:01.00]Hello world\n[00:01.00]Hello\n[00:02.00]world\n",
+        )
+        assert payload["inferred"] is True
+        assert [(e["text"], e["ms"]) for e in payload["lyrics"]] == [
+            ("Hello", 1000),
+            ("world", 2000),
+        ]
+
+    def test_a_timed_lrc_is_never_replaced_by_inference(self):
+        app = KaraokeApp()
+        payload = app.parse_lrc(
+            "[00:05.00]From the LRC\n",
+            "[00:01.00]Hello world\n[00:01.00]Hello\n[00:02.00]world\n",
+        )
+        assert "inferred" not in payload
+        assert payload["lyrics"][0]["text"] == "From the LRC"
+
+    def test_whole_second_lrc_no_longer_fails(self):
+        app = KaraokeApp()
+        payload = app.parse_lrc("[00:01]One\n[00:05]Two\n")
+        assert "error" not in payload
+        assert [e["text"] for e in payload["lyrics"]] == ["One", "Two"]
+
+
+class TestScanPairingAPI:
+    def test_songs_expose_the_paired_audio_path(self):
+        app = KaraokeApp()
+        app.scan_files(
+            [
+                {"name": "A - B.cdg", "path": "Pack1/A - B.cdg", "size": 1},
+                {"name": "A - B.mp3", "path": "Pack1/A - B.mp3", "size": 1},
+                {"name": "A - B.cdg", "path": "Pack2/A - B.cdg", "size": 1},
+                {"name": "A - B.mp3", "path": "Pack2/A - B.mp3", "size": 1},
+            ]
+        )
+        paths = {s["path"]: s["audio_path"] for s in app.library_songs()["songs"]}
+        assert paths == {
+            "Pack1/A - B.cdg": "Pack1/A - B.mp3",
+            "Pack2/A - B.cdg": "Pack2/A - B.mp3",
+        }
+
+    def test_scan_result_and_report_agree(self):
+        app = KaraokeApp()
+        result = app.scan_files(
+            [
+                {"name": "B - Tune.cdg", "path": "P/B - Tune.cdg", "size": 1},
+                {"name": "B - Tune.lrc", "path": "P/B - Tune.lrc", "size": 1},
+                {"name": "B - Tune.mp3", "path": "P/B - Tune.mp3", "size": 1},
+            ]
+        )
+        assert result == {"added": 1, "total": 1}
+        assert app.scan_report()["counts"]["duplicate_lyric"] == 1
+
+
+class TestLyricSizeSetting:
+    def test_round_trip(self):
+        app = KaraokeApp()
+        assert app.set_settings({"lyric_size": "large"})["lyric_size"] == "large"
+        assert app.get_settings()["lyric_size"] == "large"
+
+    def test_unknown_size_falls_back_to_medium(self):
+        app = KaraokeApp()
+        assert app.set_settings({"lyric_size": "huge"})["lyric_size"] == "medium"

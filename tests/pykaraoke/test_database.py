@@ -602,3 +602,241 @@ class TestExportImport:
         lib.scan([_entry("A - B.cdg")])
         assert lib.import_json("[1, 2, 3]")["ok"] is False
         assert len(lib.songs) == 1
+
+
+# ===========================================================================
+# Folder-aware pairing, lyric classification, scan counts
+# ===========================================================================
+
+
+def _song(path, name=None, size=100):
+    return {"name": name or path.rsplit("/", 1)[-1], "path": path, "size": size}
+
+
+def _break_member(zip_bytes, member):
+    """Mark one member's compression method unsupported, leaving the rest."""
+    data = bytearray(zip_bytes)
+    idx = data.find(b"PK\x01\x02")
+    while idx != -1:
+        name_len = int.from_bytes(data[idx + 28 : idx + 30], "little")
+        name = bytes(data[idx + 46 : idx + 46 + name_len])
+        if name == member.encode():
+            # Central-directory header: compression method at offset 10.
+            data[idx + 10 : idx + 12] = (99).to_bytes(2, "little")
+            break
+        idx = data.find(b"PK\x01\x02", idx + 4)
+    return bytes(data)
+
+
+class TestFolderAwarePairing:
+    """A base name is not an identity: two packs keep their own audio."""
+
+    def test_two_packs_pair_their_own_audio(self):
+        lib = SongLibrary()
+        lib.scan(
+            [
+                _song("Pack1/A - Song.cdg"),
+                _song("Pack1/A - Song.mp3"),
+                _song("Pack2/A - Song.cdg"),
+                _song("Pack2/A - Song.mp3"),
+            ]
+        )
+        pairs = {s.path: s.audio_path for s in lib.songs}
+        assert pairs == {
+            "Pack1/A - Song.cdg": "Pack1/A - Song.mp3",
+            "Pack2/A - Song.cdg": "Pack2/A - Song.mp3",
+        }
+        assert {s.audio_name for s in lib.songs} == {"A - Song.mp3"}
+
+    def test_same_folder_beats_a_global_exact_match(self):
+        lib = SongLibrary()
+        lib.scan(
+            [
+                _song("Zeta/A - Song.cdg"),
+                _song("Alpha/A - Song.mp3"),  # alphabetically first, wrong folder
+                _song("Zeta/A - Song.wav"),
+            ]
+        )
+        assert lib.songs[0].audio_path == "Zeta/A - Song.wav"
+
+    def test_cross_folder_fallback_still_pairs(self):
+        lib = SongLibrary()
+        lib.scan([_song("Songs/A - B.cdg"), _song("Audio/A - B.mp3")])
+        assert lib.songs[0].audio_path == "Audio/A - B.mp3"
+
+    def test_pairing_is_deterministic(self):
+        files = [
+            _song("P/A - B.cdg"),
+            _song("P/A - B.ogg"),
+            _song("P/A - B.mp3"),
+        ]
+        first = SongLibrary()
+        first.scan(files)
+        second = SongLibrary()
+        second.scan(list(reversed(files)))
+        assert first.songs[0].audio_path == second.songs[0].audio_path == "P/A - B.mp3"
+
+    def test_prune_repairs_pairing(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/A - B.cdg"), _song("P/A - B.mp3")])
+        assert lib.songs[0].audio_path == "P/A - B.mp3"
+        lib.prune_songs(["P/A - B.cdg"])
+        assert lib.songs[0].audio_path is None
+
+
+class TestLyricClassification:
+    """One performance per folder and stem: CD+G first, lyrics need audio."""
+
+    def test_cdg_shadows_lyric_of_the_same_stem(self):
+        lib = SongLibrary()
+        result = lib.scan(
+            [_song("P/B - Tune.cdg"), _song("P/B - Tune.lrc"), _song("P/B - Tune.mp3")]
+        )
+        assert result == {"added": 1, "total": 1}
+        assert [(s.path, s.kind) for s in lib.songs] == [("P/B - Tune.cdg", "cdg")]
+        counts = lib.scan_report()["counts"]
+        assert counts["duplicate_lyric"] == 1
+        assert counts["missing_audio"] == 0
+
+    def test_unpaired_lyric_is_not_listed(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/Orphan - Song.lrc")])
+        assert lib.songs == []
+        assert lib.scan_report()["counts"]["missing_audio"] == 1
+
+    def test_adding_the_audio_makes_the_song_appear(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/Orphan - Song.lrc")])
+        result = lib.scan([_song("P/Orphan - Song.mp3")])
+        assert result["added"] == 1
+        assert [(s.path, s.audio_path) for s in lib.songs] == [
+            ("P/Orphan - Song.lrc", "P/Orphan - Song.mp3")
+        ]
+
+    def test_duplicate_lyric_extensions_yield_one_song(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/C - T.lcr"), _song("P/C - T.lrc"), _song("P/C - T.mp3")])
+        assert [s.path for s in lib.songs] == ["P/C - T.lrc"]
+        assert lib.scan_report()["counts"]["duplicate_lyric"] == 1
+
+    def test_the_same_stem_in_another_folder_is_its_own_song(self):
+        lib = SongLibrary()
+        lib.scan(
+            [
+                _song("P/A - B.cdg"),
+                _song("P/A - B.mp3"),
+                _song("Q/A - B.lrc"),
+                _song("Q/A - B.mp3"),
+            ]
+        )
+        assert sorted((s.path, s.kind) for s in lib.songs) == [
+            ("P/A - B.cdg", "cdg"),
+            ("Q/A - B.lrc", "lrc"),
+        ]
+        assert lib.scan_report()["counts"]["duplicate_lyric"] == 0
+
+    def test_lyric_of_a_cdg_is_never_reported_as_missing_audio(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/B - Tune.cdg"), _song("P/B - Tune.lrc")])
+        counts = lib.scan_report()["counts"]
+        assert counts["duplicate_lyric"] == 1
+        assert counts["missing_audio"] == 0
+
+    def test_an_mpg_sharing_a_stem_is_still_a_song(self):
+        lib = SongLibrary()
+        lib.scan([_song("P/A - B.cdg"), _song("P/A - B.mp3"), _song("P/A - B.mpg")])
+        assert sorted(s.kind for s in lib.songs) == ["cdg", "mpg"]
+
+
+class TestScanCounts:
+    def test_first_scan_counts_every_song(self):
+        lib = SongLibrary()
+        assert lib.scan([_song("A - One.cdg"), _song("B - Two.kar")]) == {
+            "added": 2,
+            "total": 2,
+        }
+
+    def test_rescan_counts_nothing(self):
+        lib = SongLibrary()
+        files = [_song("A - One.cdg"), _song("B - Two.kar")]
+        lib.scan(files)
+        assert lib.scan(files) == {"added": 0, "total": 2}
+
+    def test_only_new_songs_are_counted(self):
+        lib = SongLibrary()
+        lib.scan([_song("A - One.cdg")])
+        assert lib.scan([_song("A - One.cdg"), _song("B - Two.cdg")]) == {
+            "added": 1,
+            "total": 2,
+        }
+
+
+class TestAudioPathPersistence:
+    def test_audio_path_round_trips(self):
+        lib = SongLibrary()
+        lib.scan([_song("Pack/A - B.cdg"), _song("Pack/A - B.mp3")])
+        restored = SongLibrary.from_dict(lib.to_dict())
+        assert restored.songs[0].audio_path == "Pack/A - B.mp3"
+        assert restored.songs[0].audio_name == "A - B.mp3"
+
+    def test_a_library_without_audio_path_still_loads(self):
+        # A library exported before audio_path existed: base name only.
+        data = {
+            "version": 2,
+            "settings": {},
+            "songs": [
+                {
+                    "id": "A - B.cdg",
+                    "title": "B",
+                    "artist": "A",
+                    "filename": "A - B.cdg",
+                    "kind": "cdg",
+                    "path": "A - B.cdg",
+                    "audio_name": "A - B.mp3",
+                }
+            ],
+        }
+        song = SongLibrary.from_dict(data).songs[0]
+        assert song.audio_name == "A - B.mp3"
+        assert song.audio_path is None
+
+    def test_a_restored_song_is_repaired_by_the_next_scan(self):
+        data = {
+            "version": 2,
+            "settings": {},
+            "songs": [
+                {
+                    "id": "Pack/A - B.cdg",
+                    "title": "B",
+                    "artist": "A",
+                    "filename": "A - B.cdg",
+                    "kind": "cdg",
+                    "path": "Pack/A - B.cdg",
+                    "audio_name": "A - B.mp3",
+                }
+            ],
+        }
+        lib = SongLibrary.from_dict(data)
+        lib.scan([_song("Pack/A - B.mp3")])
+        assert lib.songs[0].audio_path == "Pack/A - B.mp3"
+
+
+class TestZipMemberTolerance:
+    def test_one_unreadable_member_keeps_its_neighbours(self):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+            zf.writestr("Artist - One.kar", b"x")
+            zf.writestr("Artist - Two.kar", b"y")
+        data = _break_member(buf.getvalue(), "Artist - Two.kar")
+        lib = SongLibrary()
+        result = lib.scan_zip("pack.zip", data)
+        assert result["added"] == 1
+        assert [s.title for s in lib.songs] == ["One"]
+        assert lib.scan_report()["counts"]["unsupported_compression"] == 1
+
+    def test_a_corrupt_archive_is_still_one_report(self):
+        lib = SongLibrary()
+        lib.scan_zip("bad.zip", b"not a zip")
+        counts = lib.scan_report()["counts"]
+        assert counts["corrupt_archive"] == 1
+        assert counts["unreadable"] == 0

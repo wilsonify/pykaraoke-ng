@@ -8,9 +8,13 @@ import {
   BROWSE_LIMIT,
   buildLyricLines,
   CDG_HEIGHT,
+  cdgHasInk,
   CDG_WIDTH,
   companionBaseName,
   companionMember,
+  companionPath,
+  createPlaybackGuard,
+  describeLyricWarnings,
   computeNoteTimeline,
   debounce,
   describeEngine,
@@ -25,6 +29,7 @@ import {
   formatCount,
   formatTime,
   highlightState,
+  lyricWindow,
   needsRescan,
   noteToFrequency,
   PART_IDS,
@@ -34,6 +39,7 @@ import {
   RESCAN_KEYS,
   scanCategoryLabel,
   SHORTCUTS,
+  shouldWarnBlankCdg,
   SongQueue,
   songLabel,
   writeTileRgba,
@@ -297,6 +303,55 @@ describe('writeTileRgba', () => {
     expect(rgba[idx + 3]).toBe(255); // alpha
     // Pixels outside the tile stay untouched.
     expect(rgba[0]).toBe(0);
+  });
+});
+
+describe('cdgHasInk', () => {
+  it('is false for a frame that paints nothing', () => {
+    expect(
+      cdgHasInk({ border: [0, 0, 0], tiles: [{ x: 0, y: 0, data: new Uint8Array(6912) }] }),
+    ).toBe(false);
+    expect(cdgHasInk({ border: null, tiles: [] })).toBe(false);
+    expect(cdgHasInk(null)).toBe(false);
+  });
+
+  it('is true when a tile carries colour', () => {
+    const data = new Uint8Array(6912);
+    data[100] = 255;
+    expect(cdgHasInk({ border: [0, 0, 0], tiles: [{ x: 1, y: 2, data }] })).toBe(true);
+  });
+
+  it('is true for a coloured border', () => {
+    expect(cdgHasInk({ border: [0, 0, 51], tiles: [] })).toBe(true);
+  });
+});
+
+describe('shouldWarnBlankCdg', () => {
+  it('warns once a blank stage has outlasted the grace period', () => {
+    expect(shouldWarnBlankCdg({ elapsedMs: 5000, sawInk: false, warned: false })).toBe(true);
+    expect(shouldWarnBlankCdg({ elapsedMs: 20000, sawInk: false, warned: false })).toBe(true);
+  });
+
+  it('stays quiet before the grace period ends', () => {
+    expect(shouldWarnBlankCdg({ elapsedMs: 4999, sawInk: false, warned: false })).toBe(false);
+    expect(shouldWarnBlankCdg()).toBe(false);
+  });
+
+  it('never warns when graphics appeared, and never twice', () => {
+    expect(shouldWarnBlankCdg({ elapsedMs: 60000, sawInk: true, warned: false })).toBe(false);
+    expect(shouldWarnBlankCdg({ elapsedMs: 60000, sawInk: false, warned: true })).toBe(false);
+  });
+});
+
+describe('blank CD+G watchdog wiring', () => {
+  const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'web');
+
+  it('tracks ink and warns from the render loop', () => {
+    const appJs = readFileSync(resolve(webDir, 'src', 'app.js'), 'utf8');
+    expect(appJs).toContain('cdgHasInk(update)');
+    expect(appJs).toContain('shouldWarnBlankCdg({');
+    expect(appJs).toContain('cdgBlankWarned: false');
+    expect(appJs).toContain('state.cdgSawInk = false;');
   });
 });
 
@@ -1015,5 +1070,105 @@ describe('index.html: wiring contract with app.js', () => {
     // Empty states are rendered by the app with specific wording; a static
     // placeholder would fight with them.
     expect(appJs).not.toContain('no-results');
+  });
+});
+
+describe('createPlaybackGuard', () => {
+  it('accepts only the most recent attempt', () => {
+    const guard = createPlaybackGuard();
+    const first = guard.begin();
+    const second = guard.begin();
+    expect(guard.isCurrent(first)).toBe(false);
+    expect(guard.isCurrent(second)).toBe(true);
+  });
+
+  it('abandons the running attempt when invalidated', () => {
+    const guard = createPlaybackGuard();
+    const token = guard.begin();
+    guard.invalidate();
+    expect(guard.isCurrent(token)).toBe(false);
+  });
+});
+
+describe('companionPath', () => {
+  it('derives a sibling path in the same folder', () => {
+    expect(companionPath({ path: 'Pack/Artist - Song.lrc' }, '.elrc')).toBe(
+      'Pack/Artist - Song.elrc',
+    );
+  });
+
+  it('keeps backslash paths intact', () => {
+    expect(companionPath({ path: 'C:\\Songs\\A - B.lrc' }, '.elrc')).toBe(
+      'C:\\Songs\\A - B.elrc',
+    );
+  });
+
+  it('is null without a path', () => {
+    expect(companionPath({}, '.elrc')).toBeNull();
+    expect(companionPath(null, '.elrc')).toBeNull();
+  });
+});
+
+describe('lyricWindow', () => {
+  const lines = [
+    { line: 0, ms: 1000, part: null, syllables: [{ ms: 1000, text: 'one' }] },
+    { line: 1, ms: 2000, part: null, syllables: [{ ms: 2000, text: 'two' }] },
+    { line: 2, ms: 3000, part: null, syllables: [{ ms: 3000, text: 'three' }] },
+  ];
+
+  it('names the past, current and next line', () => {
+    expect(lyricWindow(lines, 2500)).toEqual({ past: 0, current: 1, next: 2, litCount: 1 });
+  });
+
+  it('has no past line at the start', () => {
+    expect(lyricWindow(lines, 1000)).toEqual({ past: -1, current: 0, next: 1, litCount: 1 });
+  });
+
+  it('has no next line at the end', () => {
+    expect(lyricWindow(lines, 9000)).toEqual({ past: 1, current: 2, next: -1, litCount: 1 });
+  });
+
+  it('is empty for no lyrics', () => {
+    expect(lyricWindow([], 0)).toEqual({ past: -1, current: -1, next: -1, litCount: 0 });
+    expect(lyricWindow(null, 0).current).toBe(-1);
+  });
+});
+
+describe('describeLyricWarnings', () => {
+  it('names skipped lines and unmatched word timings separately', () => {
+    const text = describeLyricWarnings([
+      { kind: 'skipped-line', line: 3, text: '[00:6x.00]x' },
+      { kind: 'unmatched-elrc', line: 1, count: 2 },
+    ]);
+    expect(text).toBe('1 lyric line could not be read; 2 word timings did not match the lyrics');
+  });
+
+  it('is empty when there is nothing to report', () => {
+    expect(describeLyricWarnings([])).toBe('');
+    expect(describeLyricWarnings(undefined)).toBe('');
+  });
+});
+
+describe('lyric display wiring', () => {
+  const webDir = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'web');
+  const html = readFileSync(resolve(webDir, 'index.html'), 'utf8');
+  const appJs = readFileSync(resolve(webDir, 'src', 'app.js'), 'utf8');
+
+  it('offers small, medium and large lyric sizes', () => {
+    const select = /<select id="setting-lyric-size">([\s\S]*?)<\/select>/.exec(html);
+    expect(select, 'missing #setting-lyric-size').toBeTruthy();
+    const values = [...select[1].matchAll(/value="([a-z]+)"/g)].map((match) => match[1]);
+    expect(values).toEqual(['small', 'medium', 'large']);
+  });
+
+  it('applies the size and offers click-to-seek through data attributes', () => {
+    // Typography belongs to the stylesheet: the app only sets attributes.
+    expect(appJs).toContain("$('lyrics').dataset.size");
+    expect(appJs).toContain("$('lyrics').dataset.seekable");
+    expect(appJs).toContain("closest?.('.lyric-line')");
+  });
+
+  it('keeps the lyric size out of the rescan-only settings', () => {
+    expect(RESCAN_KEYS).not.toContain('lyric_size');
   });
 });

@@ -53,6 +53,8 @@ REPORT_CATEGORIES = (
     "unsupported_compression",
     "unreadable",
     "parse_failure",
+    "duplicate_lyric",
+    "missing_audio",
 )
 
 
@@ -90,6 +92,9 @@ class Song:
     track: str = ""
     zip_name: str | None = None  # zip file name when the song is inside one
     audio_name: str | None = None  # companion mp3/ogg for .cdg songs
+    # Full path of the paired audio file.  It is what playback loads: a base
+    # name alone cannot tell two folders' "A - Song.mp3" apart.
+    audio_path: str | None = None
     size: int = 0
 
     def to_dict(self) -> dict:
@@ -104,6 +109,7 @@ class Song:
             "path": self.path,
             "zip_name": self.zip_name,
             "audio_name": self.audio_name,
+            "audio_path": self.audio_path,
             "size": self.size,
         }
 
@@ -120,6 +126,9 @@ class Song:
             path=data.get("path", ""),
             zip_name=data.get("zip_name"),
             audio_name=data.get("audio_name"),
+            # Optional: a library exported before audio_path existed still
+            # loads, and the next scan re-pairs it from the folder index.
+            audio_path=data.get("audio_path"),
             size=data.get("size", 0),
         )
 
@@ -138,6 +147,7 @@ class Settings:
     volume: float = 0.75
     include_patterns: list = field(default_factory=list)
     exclude_patterns: list = field(default_factory=list)
+    lyric_size: str = "medium"  # 'small' | 'medium' | 'large'
 
     def to_dict(self) -> dict:
         return {
@@ -151,6 +161,7 @@ class Settings:
             "volume": self.volume,
             "include_patterns": [str(p) for p in self.include_patterns],
             "exclude_patterns": [str(p) for p in self.exclude_patterns],
+            "lyric_size": self.lyric_size,
         }
 
     @staticmethod
@@ -166,6 +177,7 @@ class Settings:
         s.volume = float(data.get("volume", s.volume))
         s.include_patterns = [str(p) for p in data.get("include_patterns", [])]
         s.exclude_patterns = [str(p) for p in data.get("exclude_patterns", [])]
+        s.lyric_size = str(data.get("lyric_size", s.lyric_size))
         return s
 
 
@@ -265,6 +277,7 @@ class SongLibrary:
             self.songs = []
         if not files:
             return {"added": 0, "total": len(self.songs)}
+        before = {song.id for song in self.songs}
         for entry in files:
             name = entry.get("name", "")
             path = entry.get("path", name)
@@ -277,7 +290,10 @@ class SongLibrary:
                 self._report("unsupported", path or name)
             self._files[(path or name).lower()] = entry
         self._rebuild()
-        return {"added": len(self.songs), "total": len(self.songs)}
+        # `added` is what this scan introduced; re-scanning an unchanged
+        # library must say 0, not repeat the whole library size.
+        added = sum(1 for song in self.songs if song.id not in before)
+        return {"added": added, "total": len(self.songs)}
 
     def prune_songs(self, known_paths) -> int:
         """Remove loose and zip songs whose paths are absent from *known_paths*.
@@ -299,16 +315,25 @@ class SongLibrary:
         self._zip_cache = kept_cache
         before = len(self.songs)
         self.songs = [s for s in self.songs if s.path.replace("\\", "/").lower() in known]
+        # A pruned library must not keep pointing at a companion that is gone.
+        self.pair_cdg_audio()
         return before - len(self.songs)
 
     def _open_archive(self, name: str, data: bytes):
-        """Open zip *data*, reporting corrupt/unreadable archives (None then)."""
+        """Open zip *data*, reporting corrupt/unreadable archives (None then).
+
+        The categories are kept apart on purpose: "not a zip" and "a zip the
+        runtime cannot decompress" need different fixes from the operator.
+        """
         try:
             return zipfile.ZipFile(io.BytesIO(data))
         except zipfile.BadZipFile:
             self._report("corrupt_archive", name)
             return None
-        except Exception:
+        except NotImplementedError:
+            self._report("unsupported_compression", name)
+            return None
+        except (OSError, RuntimeError, ValueError):
             self._report("unreadable", name)
             return None
 
@@ -324,8 +349,14 @@ class SongLibrary:
             members.append(member)
         return members
 
-    def _probe_zip_readable(self, zf: zipfile.ZipFile, member: str, name: str) -> bool:
-        """Probe the first member so bad compression/encryption is classified now."""
+    def _member_readable(self, zf: zipfile.ZipFile, member: str, name: str) -> bool:
+        """Whether one member can be read, reporting only that member on failure.
+
+        A per-member probe means one corrupt entry costs its own song instead
+        of the whole archive's songs.  An unsupported compression method is
+        still reported against the archive, because every member using it will
+        fail the same way.
+        """
         try:
             with zf.open(member) as fh:
                 fh.read(1)
@@ -334,7 +365,7 @@ class SongLibrary:
             self._report("unsupported_compression", name)
             return False
         except Exception:
-            self._report("unreadable", name)
+            self._report("unreadable", name + "!" + member)
             return False
 
     def _store_zip_songs(self, name: str, members: list) -> int:
@@ -362,10 +393,13 @@ class SongLibrary:
         zf = self._open_archive(name, data)
         if zf is None:
             return {"added": 0, "total": len(self.songs)}
+        members: list = []
         try:
-            members = self._select_zip_members(zf, name)
-            if members and not self._probe_zip_readable(zf, members[0], name):
-                return {"added": 0, "total": len(self.songs)}
+            members = [
+                member
+                for member in self._select_zip_members(zf, name)
+                if self._member_readable(zf, member, name)
+            ]
         finally:
             zf.close()
         if not members:
@@ -378,35 +412,155 @@ class SongLibrary:
         self._dedupe_and_sort()
         return {"added": added, "total": len(self.songs)}
 
+    def _song_key(self, path: str) -> tuple[str, str]:
+        """Folder and stem of *path*, both lowercased, to identify a performance."""
+        folder = os.path.dirname(path.replace("\\", "/")).lower()
+        stem = os.path.splitext(os.path.basename(path))[0]
+        return folder, stem.lower()
+
+    def _audio_index(self) -> dict:
+        """Companion-audio lookups, built once per rebuild.
+
+        Four tables let pairing ask the narrowest question first: same folder
+        with an exact stem, same folder normalised, any folder exact, then any
+        folder normalised.  Entries are visited in path order and the first
+        wins, so the same inputs always pair the same way.
+        """
+        exact: dict = {}
+        norm: dict = {}
+        global_exact: dict = {}
+        global_norm: dict = {}
+        ordered = sorted(
+            self._files.values(), key=lambda e: str(e.get("path", e.get("name", "")))
+        )
+        for entry in ordered:
+            name = str(entry.get("name", ""))
+            if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
+                continue
+            path = str(entry.get("path", name))
+            folder, stem = self._song_key(path)
+            normalised = _normalize_stem(stem)
+            exact.setdefault((folder, stem), path)
+            norm.setdefault((folder, normalised), path)
+            global_exact.setdefault(stem, path)
+            global_norm.setdefault(normalised, path)
+        return {
+            "exact": exact,
+            "norm": norm,
+            "global_exact": global_exact,
+            "global_norm": global_norm,
+        }
+
+    def _resolve_audio(self, path: str, index: dict) -> str | None:
+        """Companion audio path for the song at *path*, or None."""
+        folder, stem = self._song_key(path)
+        normalised = _normalize_stem(stem)
+        for table, key in (
+            ("exact", (folder, stem)),
+            ("norm", (folder, normalised)),
+            ("global_exact", stem),
+            ("global_norm", normalised),
+        ):
+            hit = index[table].get(key)
+            if isinstance(hit, str) and hit:
+                return hit
+        return None
+
     def _rebuild(self) -> None:
         """Rebuild the song list from the raw file entries and zip cache."""
-        songs = []
-        for entry in self._files.values():
-            name = entry.get("name", "")
-            ext = os.path.splitext(name)[1].lower()
-            if ext in ZIP_EXTENSIONS:
-                # Zips are expanded separately via scan_zip (they need
-                # their bytes read); skip them here.
-                continue
-            kind = kind_for_name(name)
-            if kind is None:
-                continue
-            song = self._make_song(
-                path=entry.get("path", name),
-                name=name,
-                size=int(entry.get("size", 0) or 0),
-                zip_name=None,
-                zip_member=None,
-            )
-            if song:
-                songs.append(song)
+        songs = self._build_songs()
         for cached in self._zip_cache.values():
             for song_dict in cached:
                 songs.append(Song.from_dict(song_dict))
         self.songs = songs
         self._dedupe_and_sort()
 
-    def _make_song(self, path, name, size, zip_name, zip_member):
+    def _build_songs(self) -> list[Song]:
+        """Songs for the loose files, with companions classified per stem.
+
+        Files that share a folder and a stem are one performance: a CD+G wins
+        over a lyric file, a lyric file needs its audio, and anything left over
+        is reported instead of being dropped without a trace.
+        """
+        index = self._audio_index()
+        groups: dict = {}
+        order: list = []
+        for entry in self._files.values():
+            name = str(entry.get("name", ""))
+            if os.path.splitext(name)[1].lower() in ZIP_EXTENSIONS:
+                # Zips are expanded separately via scan_zip (they need their
+                # bytes read); skip them here.
+                continue
+            if kind_for_name(name) is None:
+                continue
+            key = self._song_key(str(entry.get("path", name)))
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(entry)
+        songs: list[Song] = []
+        for key in order:
+            songs.extend(self._songs_for_group(groups[key], index))
+        return songs
+
+    def _songs_for_group(self, entries: list, index: dict) -> list[Song]:
+        """The songs one folder+stem group contributes."""
+        cdg = [e for e in entries if kind_for_name(str(e.get("name", ""))) == "cdg"]
+        lyrics = [e for e in entries if kind_for_name(str(e.get("name", ""))) == "lrc"]
+        others = [
+            e for e in entries if kind_for_name(str(e.get("name", ""))) not in ("cdg", "lrc")
+        ]
+        songs = [song for entry in others if (song := self._song_from_entry(entry, index))]
+        lyric_paths = [str(e.get("path", e.get("name", ""))) for e in lyrics]
+        if cdg:
+            song = self._song_from_entry(cdg[0], index)
+            if song:
+                songs.append(song)
+            for path in lyric_paths:
+                # The CD+G is the performance; the lyrics are its companion.
+                self._report("duplicate_lyric", path)
+            return songs
+        if not lyrics:
+            return songs
+        # One lyric per performance: `.lrc` before `.lcr`, then path order.
+        lyrics.sort(key=lambda e: (0 if str(e.get("name", "")).lower().endswith(".lrc") else 1, str(e.get("path", ""))))
+        for entry in lyrics[1:]:
+            self._report("duplicate_lyric", str(entry.get("path", entry.get("name", ""))))
+        song = self._song_from_entry(lyrics[0], index)
+        if song is None:
+            return songs
+        if not song.audio_path:
+            # A lyric file cannot play on its own; listing it would only give
+            # the operator a row that fails on click.
+            self._report("missing_audio", song.path)
+            return songs
+        songs.append(song)
+        return songs
+
+    def _song_from_entry(self, entry: dict, index: dict) -> Song | None:
+        """Build one Song from a file entry, pairing its companion audio."""
+        name = str(entry.get("name", ""))
+        path = str(entry.get("path", name))
+        kind = kind_for_name(name)
+        audio_path = self._resolve_audio(path, index) if kind in ("cdg", "lrc") else None
+        return self._make_song(
+            path=path,
+            name=name,
+            size=int(entry.get("size", 0) or 0),
+            zip_name=None,
+            zip_member=None,
+            audio_path=audio_path,
+        )
+
+    def _make_song(
+        self,
+        path: str,
+        name: str,
+        size: int,
+        zip_name: str | None,
+        zip_member: str | None,
+        audio_path: str | None = None,
+    ) -> Song | None:
         """Build a Song from a file entry, or None if it should be excluded."""
         if not self._name_allowed(name):
             self._report("filtered", path)
@@ -418,7 +572,7 @@ class SongLibrary:
             self._report("filtered", path)
             return None
         return Song(
-            id=path if zip_member is None else zip_name + "!" + zip_member,
+            id=path if zip_member is None else f"{zip_name}!{zip_member}",
             title=title,
             artist=artist,
             disc=parsed.disc,
@@ -427,6 +581,8 @@ class SongLibrary:
             kind=kind_for_name(name) or "cdg",
             path=path,
             zip_name=zip_name,
+            audio_name=os.path.basename(audio_path) if audio_path else None,
+            audio_path=audio_path,
             size=size,
         )
 
@@ -440,39 +596,21 @@ class SongLibrary:
             self._report("parse_failure", zip_member or name)
             return _EmptyParsed()
 
-    @staticmethod
-    def _needs_audio(song) -> bool:
-        """Whether *song* still needs a companion audio file attached."""
-        return song.kind in ("cdg", "lrc") and song.zip_name is None and not song.audio_name
-
-    def _find_companion_audio(self, song_stem: str, song_norm: str):
-        """Best audio entry for a stem: exact match wins, else normalized."""
-        best = None
-        for entry in self._files.values():
-            name = entry.get("name", "")
-            if os.path.splitext(name)[1].lower() not in AUDIO_EXTENSIONS:
-                continue
-            audio_stem = os.path.splitext(os.path.basename(name))[0]
-            if audio_stem.lower() == song_stem.lower():
-                return name
-            if _normalize_stem(audio_stem) == song_norm:
-                best = name
-        return best
-
     def pair_cdg_audio(self) -> None:
-        """Attach companion audio files to .cdg and .lrc/.lcr songs.
+        """(Re)attach companion audio to every loose .cdg/.lrc/.lcr song.
 
-        Exact basename match first; then a normalized match that ignores
-        track-number prefixes and "karaoke"/"instrumental" suffixes
-        (e.g. ``01 - Inside Out.lrc`` pairs with ``Inside Out.mp3``).
+        Resolution prefers the song's own folder (see :meth:`_resolve_audio`),
+        so two packs that share a base name keep their own audio; a normalised
+        match still ignores track-number prefixes and trailing
+        "karaoke"/"instrumental" suffixes.
         """
+        index = self._audio_index()
         for song in self.songs:
-            if not self._needs_audio(song):
+            if song.zip_name is not None or song.kind not in ("cdg", "lrc"):
                 continue
-            song_stem = os.path.splitext(os.path.basename(song.path))[0]
-            best = self._find_companion_audio(song_stem, _normalize_stem(song_stem))
-            if best:
-                song.audio_name = best
+            audio_path = self._resolve_audio(song.path, index)
+            song.audio_path = audio_path
+            song.audio_name = os.path.basename(audio_path) if audio_path else None
 
     def _dedupe_and_sort(self) -> None:
         seen: set[str] = set()

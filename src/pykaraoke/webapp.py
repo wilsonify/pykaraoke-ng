@@ -173,6 +173,11 @@ class KaraokeApp:
             settings.include_patterns = [str(p) for p in updates["include_patterns"]]
         if "exclude_patterns" in updates:
             settings.exclude_patterns = [str(p) for p in updates["exclude_patterns"]]
+        if "lyric_size" in updates:
+            # Three steps only: anything else falls back to the default rather
+            # than persisting a size the stylesheet cannot render.
+            size = str(updates["lyric_size"])
+            settings.lyric_size = size if size in ("small", "medium", "large") else "medium"
         return settings.to_dict()
 
     def scan_report(self) -> dict:
@@ -213,7 +218,14 @@ class KaraokeApp:
         """
         if not isinstance(text, str):
             return {"error": "invalid text"}
+        warnings: list = []
         parsed = lrc.parse_lrc(text)
+        if parsed is not None:
+            warnings.extend(parsed.pop("warnings", []) or [])
+        elif isinstance(elrc_text, str) and elrc_text.strip():
+            # The .lrc carries no timed lines, but a companion .elrc may still
+            # describe them as line headers (the chord-vault dialect).
+            parsed = lrc.parse_elrc_lines(elrc_text)
         if parsed is None:
             return {"error": "no timed lyrics found"}
         if isinstance(elrc_text, str) and elrc_text.strip():
@@ -221,9 +233,12 @@ class KaraokeApp:
                 elrc_text,
                 parsed["lyrics"],
                 offset_ms=lrc.parse_offset(parsed["meta"]),
+                warnings=warnings,
             )
             if merged:
                 parsed = {**parsed, "lyrics": merged, "elrc": True}
+        if warnings:
+            parsed = {**parsed, "warnings": warnings}
         return parsed
 
     def cdg_open(self, song_id: str, data) -> str:

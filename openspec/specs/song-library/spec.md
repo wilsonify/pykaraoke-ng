@@ -39,11 +39,11 @@ kind, or ignore it when the extension is not a supported karaoke format.
 
 ### Requirement: Scanning file entries
 
-The library SHALL accept a batch of file entries of the shape
-`{"name", "path", "size"}`, index them by their lowercased path, and rebuild
-the song list from every entry seen so far. Re-scanning the same entry SHALL
-not produce duplicates, and two files that share a basename in different
-folders SHALL remain distinct songs.
+The library SHALL accept a batch of file entries `{name, path, size}`, index
+them by lowercased path, and rebuild the song list from every entry seen.
+Re-scanning an entry SHALL not duplicate it, and two files sharing a basename in
+different folders SHALL stay distinct songs. The result SHALL report `added` as
+the number of songs this scan introduced and `total` as the size afterwards.
 
 > Source: `SongLibrary.scan()` and `_rebuild()` in `src/pykaraoke/database.py`.
 
@@ -52,11 +52,13 @@ folders SHALL remain distinct songs.
 - **WHEN** a batch containing `Queen - Bohemian Rhapsody.cdg` is scanned
 - **THEN** the library contains one `cdg` song
 - **AND** its artist is `Queen` and its title is `Bohemian Rhapsody`
+- **AND** `added` is 1
 
 #### Scenario: Repeated scans are idempotent
 
 - **WHEN** the same file entries are scanned twice
 - **THEN** the library contains each song exactly once
+- **AND** the second scan reports `added` of 0
 
 #### Scenario: Same basename, different folders
 
@@ -118,20 +120,21 @@ library SHALL keep those entries as title-only songs.
 
 ### Requirement: Companion audio pairing
 
-The library SHALL attach a companion audio file (`.mp3`, `.ogg`, or `.wav`)
-to each top-level `.cdg` and `.lrc`/`.lcr` song. It SHALL prefer an exact
-case-insensitive basename-stem match, and otherwise accept a normalised-stem
-match that ignores leading track numbers and trailing `karaoke` /
-`instrumental` suffixes. Songs inside a zip archive SHALL NOT be paired.
+The library SHALL pair each top-level `.cdg`, `.lrc`, and `.lcr` with a
+`.mp3`, `.ogg`, or `.wav`, recording `audio_name` and `audio_path`. Resolution
+SHALL try the song's folder first (exact stem, then normalised), then any folder
+the same way, taking the alphabetically first path at each level. Zip songs
+SHALL NOT be paired.
 
-> Source: `pair_cdg_audio()`, `_normalize_stem()`, and `AUDIO_EXTENSIONS` in
-> `src/pykaraoke/database.py`.
+> Source: `_audio_index()` and `_resolve_audio()` in
+> `src/pykaraoke/database.py`; verified by `TestFolderAwarePairing`.
 
 #### Scenario: Exact stem match
 
 - **WHEN** `Queen - Bohemian Rhapsody.cdg` and
   `Queen - Bohemian Rhapsody.mp3` are scanned
 - **THEN** the song's `audio_name` is `Queen - Bohemian Rhapsody.mp3`
+- **AND** its `audio_path` is that file's path
 
 #### Scenario: Normalised match ignores numbering and suffixes
 
@@ -139,10 +142,21 @@ match that ignores leading track numbers and trailing `karaoke` /
   `Inside Out - Karaoke.mp3`
 - **THEN** the song's `audio_name` is `Inside Out - Karaoke.mp3`
 
+#### Scenario: Same base name in two folders pairs within each folder
+
+- **WHEN** `Pack1/A - Song.cdg` with `Pack1/A - Song.mp3`, and
+  `Pack2/A - Song.cdg` with `Pack2/A - Song.mp3`, are scanned together
+- **THEN** each song's `audio_path` is the audio file in its own folder
+
 #### Scenario: No companion file
 
-- **WHEN** a `.cdg` song has no matching audio entry
-- **THEN** its `audio_name` remains unset
+- **WHEN** a `.cdg` song has no matching audio entry anywhere in the library
+- **THEN** its `audio_name` and `audio_path` remain unset
+
+#### Scenario: Audio in another folder still pairs
+
+- **WHEN** `Songs/A - B.cdg` is scanned with `Audio/A - B.mp3`
+- **THEN** the song is paired with `Audio/A - B.mp3`
 
 ### Requirement: Zip archive scanning
 
@@ -360,13 +374,12 @@ rather than raising or aborting the scan.
 
 The library SHALL record a structured scan report — per-input outcome plus
 per-kind counts — covering `unsupported`, `filtered`, `corrupt_archive`,
-`unsupported_compression`, `unreadable`, and `parse_failure`. The report
-SHALL be retrievable and clearable by the caller and SHALL never influence
-which songs are added.
+`unsupported_compression`, `unreadable`, `parse_failure`, `duplicate_lyric`,
+and `missing_audio`. It SHALL be retrievable and clearable, and SHALL never
+influence which songs are added except as another requirement requires.
 
-> Source: `SongLibrary._report()`, `scan_report()`, and
-> `clear_scan_report()` in `src/pykaraoke/database.py`; verified by
-> `TestScanReport`.
+> Source: `_report()` and `scan_report()` in `src/pykaraoke/database.py`;
+> verified by `TestScanReport`.
 
 #### Scenario: A mixed batch reports every category
 
@@ -388,6 +401,12 @@ which songs are added.
 - **THEN** the library adds no songs and does not raise
 - **AND** the scan report records the archive path as
   `unsupported_compression`
+
+#### Scenario: One unreadable member is reported on its own
+
+- **WHEN** a zip's first member is readable and a later member cannot be read
+- **THEN** the readable members still become songs
+- **AND** the report records `name!member` as `unreadable`
 
 #### Scenario: Reporting never aborts
 
@@ -582,3 +601,48 @@ produce identical songs and ordering for identical inputs.
 - **WHEN** the same entries are scanned into two fresh libraries with the same
   settings
 - **THEN** both libraries contain the same songs in the same order
+
+### Requirement: CD+G wins over a lyric file of the same stem
+
+When a `.cdg` and a `.lrc` or `.lcr` share a folder and stem, the library SHALL
+provide one song — the CD+G — and SHALL NOT list the lyric file as a separate
+playable song. The lyric file SHALL be recorded in the scan report as
+`duplicate_lyric`, so a scan's outcomes still account for every input.
+
+> Source: `_rebuild()` lyric classification in `src/pykaraoke/database.py`;
+> verified by `TestLyricClassification`.
+
+#### Scenario: CD+G and LRC of one performance are one song
+
+- **WHEN** `B - Tune.cdg`, `B - Tune.lrc`, and `B - Tune.mp3` are scanned
+- **THEN** the library contains exactly one song
+- **AND** its kind is `cdg`
+- **AND** the report counts one `duplicate_lyric` for `B - Tune.lrc`
+
+#### Scenario: A duplicated lyric extension is reported, not listed twice
+
+- **WHEN** `B - Tune.lrc` and `B - Tune.lcr` are scanned with one audio file
+- **THEN** one `lrc` song is listed
+- **AND** the report counts one `duplicate_lyric`
+
+### Requirement: Lyrics without audio are reported instead of listed
+
+A `.lrc` or `.lcr` file that has no companion audio anywhere in the library
+SHALL NOT become a song, because it can never be played. It SHALL be recorded
+in the scan report as `missing_audio` under its path, so the operator can add
+the audio file. A lyric file shadowed by a CD+G SHALL be reported as
+`duplicate_lyric` instead, never as `missing_audio`.
+
+> Source: `_rebuild()` lyric classification in `src/pykaraoke/database.py`;
+> verified by `TestLyricClassification`.
+
+#### Scenario: Unpaired lyrics are not listed
+
+- **WHEN** `Orphan - Song.lrc` is scanned with no audio file beside it
+- **THEN** the library contains no song for it
+- **AND** the report counts one `missing_audio` for `Orphan - Song.lrc`
+
+#### Scenario: Adding the audio file makes the song appear
+
+- **WHEN** `Orphan - Song.mp3` is scanned afterwards
+- **THEN** the library contains one `lrc` song for the pair

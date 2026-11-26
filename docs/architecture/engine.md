@@ -115,8 +115,16 @@ is JSON-serializable so the page can persist it in `localStorage`.
 * **Scanning** indexes the supported extensions — `.cdg`, `.kar`/`.mid`,
   `.mpg`/`.mpeg`/`.avi`, and `.lrc`/`.lcr` — keyed by path, so re-scanning is
   idempotent.
-* **Companion audio** pairs a `.cdg` or `.lrc` with a same-stem
-  `.mp3`/`.ogg`/`.wav` next to it, matching exact then normalised stems.
+* **Companion audio** pairs a `.cdg` or `.lrc` with a `.mp3`/`.ogg`/`.wav`
+  from a directory-keyed index built once per rebuild: same folder exact stem,
+  same folder normalised stem, then any folder exact, then any folder
+  normalised. The first path at each level wins, so the pairing is
+  deterministic and two packs sharing a base name keep their own audio. Both
+  `audio_name` and `audio_path` are recorded.
+* **One performance per folder and stem.** A `.cdg` shadows a `.lrc`/`.lcr` of
+  the same stem (CD+G is the playback mode), a lyric file needs companion
+  audio to be listed at all, and both cases are reported
+  (`duplicate_lyric`, `missing_audio`) rather than dropped silently.
 * **Zip support** can look inside `.zip` archives (when enabled) and address a
   song by `zip_name` + member, without extracting to disk.
 * **Search** matches all whitespace-separated terms, case-insensitively,
@@ -124,8 +132,8 @@ is JSON-serializable so the page can persist it in `localStorage`.
 * **Sorting** by `filename`, `title`, or `artist`, with leading articles
   stripped for artist/title ordering.
 * **`Settings`** persists `folders`, `cdg_zoom`, `derive_song_info`,
-  `file_name_type`, `exclude_non_matching`, `look_inside_zips`, `sort`, and
-  `volume`.
+  `file_name_type`, `exclude_non_matching`, `look_inside_zips`, `sort`,
+  `volume`, and `lyric_size`.
 
 The exact contract is in the
 [song-library spec](https://github.com/wilsonify/pykaraoke-ng/blob/main/openspec/specs/song-library/spec.md).

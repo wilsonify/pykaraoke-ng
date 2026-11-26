@@ -84,6 +84,7 @@ validation:
 
 nav:
   - Home: index.md
+  - Changelog: changelog.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start (from source): getting-started/quickstart.md

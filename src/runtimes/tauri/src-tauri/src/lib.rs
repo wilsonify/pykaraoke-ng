@@ -7,7 +7,7 @@
 //! decoding, search and rendering all happen in the webview.
 
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize)]
 struct FileEntry {
@@ -32,20 +32,42 @@ fn list_folder(path: String) -> Result<Vec<FileEntry>, String> {
     if !root.is_dir() {
         return Err(format!("not a directory: {path}"));
     }
+    // An unreadable root is a real failure the operator must see; trouble
+    // deeper in the tree is tolerated by `walk`.
+    std::fs::read_dir(root).map_err(|e| format!("read_dir {path}: {e}"))?;
     let mut entries = Vec::new();
-    walk(root, &mut entries)?;
+    let mut seen = Vec::new();
+    walk(root, &mut entries, &mut seen);
     Ok(entries)
 }
 
-fn walk(dir: &Path, out: &mut Vec<FileEntry>) -> Result<(), String> {
-    let read = std::fs::read_dir(dir).map_err(|e| format!("read_dir {}: {e}", dir.display()))?;
-    for item in read {
-        let item = item.map_err(|e| e.to_string())?;
+/// Collect the files under *dir*, visiting each directory at most once.
+///
+/// A library can contain a symlink that points back up the tree, or a folder
+/// the current user cannot read. Neither may abort the whole listing: cycles
+/// are cut by canonical path, and an unreadable subfolder contributes nothing
+/// while its siblings still appear.
+fn walk(dir: &Path, out: &mut Vec<FileEntry>, seen: &mut Vec<PathBuf>) {
+    let canonical = match dir.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return,
+    };
+    if seen.iter().any(|seen_path| *seen_path == canonical) {
+        return;
+    }
+    seen.push(canonical);
+    let read = match std::fs::read_dir(dir) {
+        Ok(read) => read,
+        Err(_) => return,
+    };
+    for item in read.flatten() {
         let entry_path = item.path();
-        let file_type = item.file_type().map_err(|e| e.to_string())?;
-        if file_type.is_dir() {
-            walk(&entry_path, out)?;
+        // `is_dir()` follows symlinks, so a linked folder is walked (once).
+        if entry_path.is_dir() {
+            walk(&entry_path, out, seen);
         } else {
+            // A file whose metadata cannot be read is still listed, with an
+            // unknown size, rather than being dropped from the library.
             let size = std::fs::metadata(&entry_path).map(|m| m.len()).unwrap_or(0);
             out.push(FileEntry {
                 name: item.file_name().to_string_lossy().into_owned(),
@@ -54,7 +76,6 @@ fn walk(dir: &Path, out: &mut Vec<FileEntry>) -> Result<(), String> {
             });
         }
     }
-    Ok(())
 }
 
 /// Read a file's bytes (raw IPC transfer; the webview gets an ArrayBuffer).

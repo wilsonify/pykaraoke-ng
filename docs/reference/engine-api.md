@@ -102,14 +102,22 @@ stays additive.
 { "added": 12, "total": 240 }
 ```
 
-`total` is the resulting library size.
+`total` is the resulting library size, and `added` counts only the songs this
+scan introduced — re-scanning an unchanged library reports `{"added": 0}`.
+
+Each song payload carries `audio_name` (the companion's base name, for
+display) and `audio_path` (its full path, which is what playback loads; two
+folders can hold the same base name). Files that share a folder and stem are
+one performance: a `.cdg` wins over a `.lrc`, and a `.lrc` with no audio is
+reported as `missing_audio` instead of being listed.
 
 ### `scan_zip(name, data) -> dict`
 
 Scan an archive's bytes and add its karaoke members. The archive is remembered
 so members can be read later, and its cached member list is invalidated. Data
 that is not a valid archive does **not** raise — the call reports
-`{"added": 0, "total": <library size>}`.
+`{"added": 0, "total": <library size>}`. Members are probed one at a time: an
+unreadable member is reported on its own and its neighbours are still added.
 
 ### `read_zip_member(zip_name, member) -> bytes | None`
 
@@ -245,9 +253,18 @@ The payload also carries duet information when the lyrics declare it:
 | `parts` | duet tags present | `{"a": "Alice", "b": "Bob"}` |
 | `elrc` | word timing applied | `true` |
 | per-event `part` | that line is tagged | `"a"`, `"b"`, or shared `"ab"` |
+| `warnings` | a line was skipped | `[{kind, line, text}]` / `[{kind: "unmatched-elrc", line, count}]` |
+| `inferred` | lines came from the `.elrc` | `true` |
 
 Solo songs return the same payload as before duet support — no `parts`, no
 per-line `part`. Word-level merging preserves each line's `part`.
+
+Accepted timestamps are `[mm:ss]`, `[mm:ss.xx]`, `[mm:ss:xx]` and
+`[mmm:ss.xxx]`, in the line tags, the `.elrc` entries and the enhanced-LRC
+`<mm:ss.xx>` word tags alike. A line that looks timed but cannot be parsed is
+skipped and reported in `warnings` (absent when the file is clean). When the
+`.lrc` yields no timed lines, the companion `.elrc` is read on its own and its
+line headers become the lyrics (`"inferred": true`).
 
 ```js
 const parsed = callApi('parse_lrc', decodeText(bytes), elrcText);

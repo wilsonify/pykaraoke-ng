@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from pykaraoke.lrc import parse_elrc, parse_lrc, parse_offset
+from pykaraoke.lrc import parse_elrc, parse_elrc_lines, parse_lrc, parse_offset
 
 FIXTURES = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fixtures", "lrc"
@@ -19,6 +19,65 @@ FIXTURES = os.path.join(
 def _read(name: str) -> str:
     with open(os.path.join(FIXTURES, name), encoding="utf-8") as f:
         return f.read()
+
+
+class TestTimestampVariantFixtures:
+    """Real-world timestamp shapes, as whole files rather than one-liners."""
+
+    def test_whole_second_file(self):
+        parsed = parse_lrc(_read("no-fraction.lrc"))
+        assert parsed is not None
+        assert [e["ms"] for e in parsed["lyrics"]] == [1000, 5000, 62000]
+        assert parsed["duration_ms"] == 45000  # from [length:00:45]
+
+    def test_colon_fraction_file(self):
+        parsed = parse_lrc(_read("colon-fraction.lrc"))
+        assert [e["ms"] for e in parsed["lyrics"]] == [1500, 12250]
+
+
+class TestSkippedLineFixture:
+    def test_bad_lines_are_counted_not_fatal(self):
+        parsed = parse_lrc(_read("skipped-lines.lrc"))
+        assert [e["text"] for e in parsed["lyrics"]] == [
+            "A line that parses",
+            "Another line that parses",
+        ]
+        assert [w["line"] for w in parsed["warnings"]] == [5, 7]
+
+
+class TestElrcHeaderFixture:
+    """A chord-vault .elrc, trimmed to two lines of real output."""
+
+    def test_lines_are_inferred_from_headers(self):
+        parsed = parse_elrc_lines(_read("line-headers.elrc"))
+        assert parsed["inferred"] is True
+        assert len(parsed["lyrics"]) == 13
+        assert parsed["lyrics"][0]["ms"] == 11560
+        assert parsed["lyrics"][-1]["text"] == "about"
+        assert parsed["duration_ms"] == 247000  # from [length:4:07]
+
+    def test_the_fixture_merges_into_its_lrc(self):
+        lrc_text = (
+            "[ti:Drivers License]\n"
+            "[00:11.560]I got my driver’s license last week\n"
+            "[00:16.160]Just like we always talked about\n"
+        )
+        parsed = parse_lrc(lrc_text)
+        merged = parse_elrc(_read("line-headers.elrc"), parsed["lyrics"])
+        assert merged is not None
+        first_line = [s for s in merged if s["line"] == 0]
+        # The .lrc supplies the words (so its curly apostrophe survives); the
+        # .elrc's straight apostrophe still matched because matching is on
+        # letters alone.
+        assert [s["text"] for s in first_line] == [
+            "I",
+            "got",
+            "my",
+            "driver’s",
+            "license",
+            "last",
+            "week",
+        ]
 
 
 # ---------------------------------------------------------------------------

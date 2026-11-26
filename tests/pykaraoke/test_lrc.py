@@ -2,7 +2,7 @@
 
 import pytest
 
-from pykaraoke.lrc import parse_elrc, parse_lrc, parse_offset
+from pykaraoke.lrc import parse_elrc, parse_elrc_lines, parse_lrc, parse_offset
 
 
 class TestParseLrc:
@@ -299,3 +299,132 @@ class TestParseDuet:
             (1, "line", "b"),
         ]
         assert parsed["parts"] == {"a": "Alice"}
+
+
+class TestTimestampVariants:
+    """Timestamps people actually write: the fraction is optional, and either
+    `.` or `:` may introduce it."""
+
+    @pytest.mark.parametrize("tag", ["[00:12]", "[00:12.00]", "[00:12:00]"])
+    def test_equivalent_forms(self, tag):
+        parsed = parse_lrc(f"{tag}Hello\n")
+        assert [(e["ms"], e["text"]) for e in parsed["lyrics"]] == [(12000, "Hello")]
+
+    def test_fraction_digits_scale(self):
+        assert parse_lrc("[00:01.5]a\n")["lyrics"][0]["ms"] == 1500
+        assert parse_lrc("[00:01.50]a\n")["lyrics"][0]["ms"] == 1500
+        assert parse_lrc("[00:01.500]a\n")["lyrics"][0]["ms"] == 1500
+
+    def test_three_digit_minutes(self):
+        parsed = parse_lrc("[123:45.67]a\n")
+        assert parsed["lyrics"][0]["ms"] == (123 * 60 + 45) * 1000 + 670
+
+    def test_word_tags_accept_the_same_forms(self):
+        parsed = parse_lrc("[00:01]One <00:02>two <00:03:50>three\n")
+        assert [e["ms"] for e in parsed["lyrics"]] == [1000, 2000, 3500]
+
+    def test_elrc_accepts_the_same_forms(self):
+        parsed = parse_lrc("[00:01.00]Hello world\n")
+        merged = parse_elrc("[00:01]Hello\n[00:01.5] world\n", parsed["lyrics"])
+        assert [e["text"] for e in merged] == ["Hello", "world"]
+
+    def test_a_whole_second_file_no_longer_fails(self):
+        parsed = parse_lrc("[00:01]One\n[00:05]Two\n")
+        assert parsed is not None
+        assert [e["text"] for e in parsed["lyrics"]] == ["One", "Two"]
+
+
+class TestParseWarnings:
+    """A line that looks timed but cannot be read is reported, not swallowed."""
+
+    def test_malformed_line_is_skipped_and_reported(self):
+        parsed = parse_lrc("[00:01.00]Good\n[00:6x.00]Bad\n[00:03.00]Also good\n")
+        assert [e["text"] for e in parsed["lyrics"]] == ["Good", "Also good"]
+        assert len(parsed["warnings"]) == 1
+        assert parsed["warnings"][0] == {
+            "kind": "skipped-line",
+            "line": 2,
+            "text": "[00:6x.00]Bad",
+        }
+
+    def test_clean_file_has_no_warnings_key(self):
+        assert "warnings" not in parse_lrc("[00:01.00]Good\n")
+
+    def test_clear_line_markers_are_not_warnings(self):
+        assert "warnings" not in parse_lrc("[00:05.00]\n[00:12.00]Good\n")
+
+    def test_unmatched_elrc_entry_is_counted(self):
+        parsed = parse_lrc("[00:01.00]Hello brave world\n")
+        warnings = []
+        merged = parse_elrc(
+            "[00:01.00]Hello brave world\n[00:01.10]Hello\n[00:01.90]zebra\n",
+            parsed["lyrics"],
+            warnings=warnings,
+        )
+        assert [e["text"] for e in merged] == ["Hello", "brave", "world"]
+        assert warnings == [{"kind": "unmatched-elrc", "line": 0, "count": 1}]
+
+    def test_a_header_is_not_a_warning(self):
+        parsed = parse_lrc("[00:01.00]Hello world\n")
+        warnings = []
+        parse_elrc(
+            "[00:01.00]Hello world\n[00:01.10]Hello\n[00:01.90]world\n",
+            parsed["lyrics"],
+            warnings=warnings,
+        )
+        assert warnings == []
+
+
+class TestElrcLineInference:
+    """The chord-vault dialect: a header entry, then its words."""
+
+    TEXT = (
+        "[ar:Olivia Rodrigo]\n"
+        "[length:0:20]\n"
+        "[00:11.560]I got my license last week\n"
+        "[00:11.560] I\n"
+        "[00:12.440] got\n"
+        "[00:13.320] my\n"
+        "[00:14.720] license\n"
+        "[00:15.320] last\n"
+        "[00:15.740] week\n"
+    )
+
+    def test_lines_come_from_headers(self):
+        parsed = parse_elrc_lines(self.TEXT)
+        assert parsed["inferred"] is True
+        assert [(e["text"], e["line"]) for e in parsed["lyrics"]] == [
+            ("I", 0),
+            ("got", 0),
+            ("my", 0),
+            ("license", 0),
+            ("last", 0),
+            ("week", 0),
+        ]
+        assert parsed["lyrics"][0]["ms"] == 11560
+        assert parsed["meta"]["ar"] == "Olivia Rodrigo"
+        assert parsed["duration_ms"] == 20000
+
+    def test_a_line_without_words_stays_one_line(self):
+        parsed = parse_elrc_lines("[00:01.00]Solo line here\n[00:05.00]Next line\n")
+        assert [(e["text"], e["line"]) for e in parsed["lyrics"]] == [
+            ("Solo line here", 0),
+            ("Next line", 1),
+        ]
+
+    def test_a_header_needs_its_words_to_match(self):
+        # "Hello there" is not spelled by "Goodbye" + "now", so no header.
+        parsed = parse_elrc_lines("[00:01.00]Hello there\n[00:01.20]Goodbye\n[00:01.40]now\n")
+        assert [(e["text"], e["line"]) for e in parsed["lyrics"]] == [
+            ("Hello there", 0),
+            ("Goodbye", 1),
+            ("now", 2),
+        ]
+
+    def test_offset_is_applied(self):
+        parsed = parse_elrc_lines("[offset:+500]\n[00:01.00]Solo line\n")
+        assert parsed["lyrics"][0]["ms"] == 500
+
+    def test_text_without_lines_is_none(self):
+        assert parse_elrc_lines("") is None
+        assert parse_elrc_lines("[ar:Only metadata]\n") is None

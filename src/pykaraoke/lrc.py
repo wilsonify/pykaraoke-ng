@@ -37,8 +37,11 @@ from __future__ import annotations
 
 import re
 
-# [mm:ss.xx] or [mm:ss.xxx] — minutes/seconds 1-2 digits, fraction 1-3.
-_LINE_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\](.*)$")
+# One timestamp definition, shared by line tags, .elrc entries and enhanced
+# word tags: [mm:ss], [mm:ss.xx], [mm:ss:xx] or [mmm:ss.xxx].  Minutes are 1-3
+# digits (long compilations), seconds 1-2, the fraction 1-3 digits and optional.
+_TIMESTAMP = r"\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]"
+_LINE_RE = re.compile("^" + _TIMESTAMP + "(.*)$")
 # Any [key:value] ID tag.  Keys must start with a letter so timestamps
 # like [00:12.34] are never mistaken for metadata.
 _META_KEY_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]*\Z")
@@ -58,12 +61,12 @@ def _parse_meta(stripped: str) -> tuple[str, str] | None:
     return key.lower(), value.strip()
 
 
-# Enhanced-LRC word tag: <mm:ss.xx> inside the line text.
-_WORD_RE = re.compile(r"<(\d{1,2}):(\d{1,2})\.(\d{1,3})>")
+# Enhanced-LRC word tag: <mm:ss.xx> inside the line text (fraction optional).
+_WORD_RE = re.compile(r"<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>")
 # .elrc word entry: [mm:ss.xx] text (same timestamp shape as a line tag).
 # Only the fixed-width timestamp is a regex; the trailing ``\\s*(.+)$``
 # backtracked on long whitespace tails, so the text is sliced by hand.
-_ELRC_TS_RE = re.compile(r"^\[(\d{1,2}):(\d{1,2})\.(\d{1,3})\]")
+_ELRC_TS_RE = re.compile("^" + _TIMESTAMP)
 # Duet part tag sitting right after the timestamps: [00:12.00][a]line.
 # Longer alternatives first so [ab]/[ba] are never read as a bare part.
 _PART_RE = re.compile(r"^\[(ab|ba|a|b)\]", re.IGNORECASE)
@@ -129,8 +132,10 @@ def _strip_bracket_tags(text: str) -> str:
     return "".join(out)
 
 
-def _fraction_ms(frac: str) -> int:
-    """'9' -> 900 ms, '22' -> 220 ms, '225' -> 225 ms."""
+def _fraction_ms(frac: str | None) -> int:
+    """'9' -> 900 ms, '22' -> 220 ms, '225' -> 225 ms, None -> 0 ms."""
+    if not frac:
+        return 0
     if len(frac) == 1:
         return int(frac) * 100
     if len(frac) == 2:
@@ -138,8 +143,8 @@ def _fraction_ms(frac: str) -> int:
     return int(frac)
 
 
-def _tag_ms(minutes: str, seconds: str, frac: str) -> int:
-    """'12', '00', '50' -> 720050 ms (12:00.50)."""
+def _tag_ms(minutes: str, seconds: str, frac: str | None = None) -> int:
+    """'12', '00', '50' -> 720050 ms (12:00.50); a missing fraction is 0 ms."""
     return int(minutes) * 60_000 + int(seconds) * 1000 + _fraction_ms(frac)
 
 
@@ -187,6 +192,26 @@ def _collect_line_timestamps(rest: str) -> tuple[list[int], str]:
         timestamps.append(_tag_ms(line_match.group(1), line_match.group(2), line_match.group(3)))
         rest = line_match.group(4)
     return timestamps, rest
+
+
+def _unparsed_warning(stripped: str, file_line: int) -> dict | None:
+    """Warning for a line that looks timed but produced no lyric, else None.
+
+    Covers the shapes a broken timestamp takes in the wild (`[00:6x.00]text`,
+    `[0x:12]text`) while leaving ordinary untimed text, comments, blank lines
+    and bare clear-line markers (`[00:05.00]` with no text) unreported.
+    """
+    if not stripped.startswith("["):
+        return None
+    close = stripped.find("]")
+    if close == -1:
+        return None
+    inner = stripped[1:close]
+    if ":" not in inner or not any(ch.isdigit() for ch in inner):
+        return None
+    if not _strip_bracket_tags(stripped[close + 1 :]).strip():
+        return None
+    return {"kind": "skipped-line", "line": file_line, "text": stripped}
 
 
 def _parse_timed_entry(stripped: str) -> tuple[list[int], str | None, str] | None:
@@ -315,10 +340,11 @@ def parse_lrc(text: str) -> dict | None:
 
     meta: dict[str, str] = {}
     syllables: list[tuple[int, str, int, str | None]] = []  # (ms, text, line, part)
+    warnings: list[dict] = []
     max_ms = 0
     line_number = 0
 
-    for line in text.splitlines():
+    for file_line, line in enumerate(text.splitlines(), start=1):
         stripped = line.strip()
         if _consume_meta(stripped, meta):
             continue
@@ -327,7 +353,11 @@ def parse_lrc(text: str) -> dict | None:
         # the text occurs at both times (a repeated line).
         entry = _parse_timed_entry(stripped)
         if entry is None:
-            # Untimed, blank, malformed and comment lines are ignored.
+            # Untimed, blank and comment lines are ignored; a line that does
+            # look timed is reported instead of disappearing silently.
+            warning = _unparsed_warning(stripped, file_line)
+            if warning is not None:
+                warnings.append(warning)
             continue
         timestamps, part, lyric_text = entry
 
@@ -354,6 +384,8 @@ def parse_lrc(text: str) -> dict | None:
         "meta": meta,
         "duration_ms": duration_ms,
     }
+    if warnings:
+        result["warnings"] = warnings
     song_parts = parse_parts(meta)
     if song_parts:
         result["parts"] = song_parts
@@ -481,16 +513,18 @@ def _apply_entry_to_tokens(
 
 def _align_entry_times(
     bounds: list[tuple[int, int]], flat: str, entries: list[tuple[int, str]]
-) -> list:
+) -> tuple[list, int]:
     """Match .elrc entries to token slots, walking a cursor over letters.
 
     An entry counts only when its letters really are the next letters of
     the line, which skips the line header and stray entries without
-    shifting timings onto the wrong word.
+    shifting timings onto the wrong word.  Returns ``(times, unmatched)``:
+    the per-token times and how many entries found no home in this line.
     """
     times: list[int | None] = [None] * len(bounds)
     cursor = 0
     header_skipped = False
+    unmatched = 0
     for ms, text in entries:
         word = _normalize_letters(text)
         if not word:
@@ -499,33 +533,42 @@ def _align_entry_times(
             header_skipped = True  # the first whole-line entry is the header
             continue
         if not flat.startswith(word, cursor):
-            continue  # not the letters the cursor expects: skip, don't shift
+            unmatched += 1  # not the letters the cursor expects: skip it
+            continue
         _apply_entry_to_tokens(times, bounds, cursor, word, ms)
         cursor += len(word)
         if cursor >= len(flat):
             break
-    return times
+    return times, unmatched
 
 
-def _match_line_words(group: dict, entries: list[tuple[int, str]]) -> tuple[list[dict], int]:
+def _match_line_words(
+    group: dict, entries: list[tuple[int, str]]
+) -> tuple[list[dict], int, int]:
     """Time *group*'s tokens against the .elrc *entries* assigned to it.
 
-    Returns ``(words, timed)``: every token of the line (so no word is
-    ever dropped from the display) and how many carry an .elrc time.
+    Returns ``(words, timed, unmatched)``: every token of the line (so no
+    word is ever dropped from the display), how many carry an .elrc time,
+    and how many entries could not be matched anywhere in the line.
     """
     tokens = group["text"].split()
     if not tokens:
-        return [], 0
+        return [], 0, len(entries)
     bounds, flat = _token_letter_bounds(tokens)
     if not flat:
-        return [], 0
+        return [], 0, len(entries)
 
-    times = _align_entry_times(bounds, flat, entries)
+    times, unmatched = _align_entry_times(bounds, flat, entries)
     timed = sum(1 for ms in times if ms is not None)
-    return _fill_missing_times(group, tokens, times), timed
+    return _fill_missing_times(group, tokens, times), timed, unmatched
 
 
-def parse_elrc(elrc_text: str, lyrics: list[dict], offset_ms: int = 0) -> list[dict] | None:
+def parse_elrc(
+    elrc_text: str,
+    lyrics: list[dict],
+    offset_ms: int = 0,
+    warnings: list | None = None,
+) -> list[dict] | None:
     """Merge word-level timings from a companion ``.elrc`` into *lyrics*.
 
     *lyrics* is the ``lyrics`` list returned by :func:`parse_lrc` and
@@ -534,7 +577,10 @@ def parse_elrc(elrc_text: str, lyrics: list[dict], offset_ms: int = 0) -> list[d
 
     Returns the merged syllable list — lines the .elrc could not time keep
     their original syllables — or None when no word could be matched, in
-    which case callers keep the plain line timings.
+    which case callers keep the plain line timings.  When *warnings* is a
+    list, it receives one ``unmatched-elrc`` entry per line whose .elrc
+    timings found no word; nothing is added when the merge itself fails,
+    because the file's own timings are then unused.
     """
     if not elrc_text or not lyrics:
         return None
@@ -545,12 +591,114 @@ def parse_elrc(elrc_text: str, lyrics: list[dict], offset_ms: int = 0) -> list[d
 
     assigned = _assign_entries(groups, entries)
     merged: list[dict] = []
+    unmatched_warnings: list[dict] = []
     timed_total = 0
     for index, group in enumerate(groups):
-        words, timed = _match_line_words(group, assigned.get(index, []))
+        words, timed, unmatched = _match_line_words(group, assigned.get(index, []))
         if timed:
             timed_total += timed
             merged.extend(words)
+            if unmatched:
+                unmatched_warnings.append(
+                    {"kind": "unmatched-elrc", "line": group["line"], "count": unmatched}
+                )
         else:
             merged.extend(group["syllables"])
-    return merged if timed_total else None
+    if not timed_total:
+        return None
+    if warnings is not None:
+        warnings.extend(unmatched_warnings)
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# .elrc on its own — the chord-vault dialect
+# ---------------------------------------------------------------------------
+
+
+def _elrc_entries_with_meta(text: str) -> tuple[dict[str, str], list[tuple[int, str]]]:
+    """Metadata and timed entries of an ``.elrc``, in file order."""
+    meta: dict[str, str] = {}
+    entries: list[tuple[int, str]] = []
+    for line in str(text).lstrip("\ufeff").splitlines():
+        stripped = line.strip()
+        if _consume_meta(stripped, meta):
+            continue
+        match = _ELRC_TS_RE.match(stripped)
+        if not match:
+            continue
+        body = stripped[match.end() :].strip()
+        if body:
+            entries.append((_tag_ms(match.group(1), match.group(2), match.group(3)), body))
+    return meta, entries
+
+
+def _header_word_span(entries: list[tuple[int, str]], index: int) -> int:
+    """How many entries after *index* spell entry *index*'s letters (0 if none).
+
+    The first entry of a chord-vault line is the whole line; the entries
+    after it are its words.  A header is real only when those words spell it
+    exactly, which is the same rule :func:`_align_entry_times` applies.
+    """
+    header = _normalize_letters(entries[index][1])
+    if not header:
+        return 0
+    consumed = ""
+    cursor = index + 1
+    while cursor < len(entries):
+        word = _normalize_letters(entries[cursor][1])
+        if not word:
+            cursor += 1
+            continue
+        if not header.startswith(consumed + word):
+            return 0
+        consumed += word
+        cursor += 1
+        if consumed == header:
+            return cursor - index - 1
+    return 0
+
+
+def parse_elrc_lines(text: str) -> dict | None:
+    """Read an ``.elrc`` on its own, using its line headers for the text.
+
+    Returns the same payload shape as :func:`parse_lrc`, or None when the
+    text describes no lines.  Used when a song's ``.lrc`` carries no timed
+    lines but its companion ``.elrc`` does describe them.
+    """
+    if not text:
+        return None
+    meta, entries = _elrc_entries_with_meta(text)
+    if not entries:
+        return None
+
+    offset_ms = parse_offset(meta)
+    lyrics: list[dict] = []
+    line_number = 0
+    index = 0
+    while index < len(entries):
+        ms, line_text = entries[index]
+        span = _header_word_span(entries, index)
+        if span:
+            # A header: the line's words are the entries after it.  Each word
+            # shadows one syllable; a word holding spaces keeps them together.
+            for word_ms, word_text in entries[index + 1 : index + 1 + span]:
+                lyrics.append(
+                    _event(max(0, word_ms - offset_ms), word_text, line_number)
+                )
+            index += span + 1
+        else:
+            lyrics.append(_event(max(0, ms - offset_ms), line_text, line_number))
+            index += 1
+        line_number += 1
+
+    if not lyrics:
+        return None
+    max_ms = max(event["ms"] for event in lyrics)
+    result = {
+        "lyrics": lyrics,
+        "meta": meta,
+        "duration_ms": _resolve_duration(meta, max_ms),
+        "inferred": True,
+    }
+    return result

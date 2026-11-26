@@ -35,6 +35,10 @@
   margin-top: 8px;
   width: 100%;
   text-align: center;
+  /* At most three rows (past, current, next); the scroll container keeps the
+     transport and the CD+G canvas in place in a slim window. */
+  max-height: 90px;
+  overflow: hidden;
 }
 .lyric-line {
   font-size: 16px;
@@ -48,6 +52,17 @@
 .lyric-line.part-ab { color: var(--part-ab); }
 /* Declared after the part colours so the upcoming line always dims. */
 .lyric-line.lyric-next { color: #5a5f6e; font-size: 14px; }
+/* The line just sung stays above the current one, dimmer than the next line. */
+.lyric-line.lyric-past { color: #454a56; font-size: 13px; }
+/* Lyric size setting: one attribute on the box, three type scales. */
+.lyrics[data-size="small"] .lyric-line { font-size: 14px; }
+.lyrics[data-size="small"] .lyric-line.lyric-past,
+.lyrics[data-size="small"] .lyric-line.lyric-next { font-size: 12px; }
+.lyrics[data-size="large"] .lyric-line { font-size: 20px; }
+.lyrics[data-size="large"] .lyric-line.lyric-past,
+.lyrics[data-size="large"] .lyric-line.lyric-next { font-size: 16px; }
+/* Click-to-seek is only offered while the transport can seek. */
+.lyrics[data-seekable="true"] .lyric-line { cursor: pointer; }
 /* Part chip: "A", "B", "A+B", or the song's [pa:]/[pb:] display names. */
 .lyric-part {
   display: inline-block;

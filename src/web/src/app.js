@@ -11,7 +11,7 @@
 // which runs only when a DOM exists.  index.html loads this module and the
 // same file is served in both development and production.
 
-import { CDG_WIDTH, CDG_HEIGHT, ZOOM_SCALES, formatTime, debounce, songLabel, KIND_BADGE, ELRC_EXT, companionBaseName, companionMember, SongQueue, partClass, partLabel, buildLyricLines, highlightState, computeNoteTimeline, writeTileRgba, formatCount, BROWSE_LIMIT, describeScanReport, describeResults, describeQueue, describePlayback, describeEngine, describePlaybackError, needsRescan, queueBadgeFor, SHORTCUTS } from './helpers.js';
+import { CDG_WIDTH, CDG_HEIGHT, ZOOM_SCALES, formatTime, debounce, songLabel, KIND_BADGE, ELRC_EXT, companionBaseName, companionMember, companionPath, createPlaybackGuard, cdgHasInk, shouldWarnBlankCdg, lyricWindow, describeLyricWarnings, SongQueue, partClass, partLabel, buildLyricLines, computeNoteTimeline, writeTileRgba, formatCount, BROWSE_LIMIT, describeScanReport, describeResults, describeQueue, describePlayback, describeEngine, describePlaybackError, needsRescan, queueBadgeFor, SHORTCUTS } from './helpers.js';
 
 let __app = null;
 
@@ -60,7 +60,15 @@ if (isBrowser) {
     durationMs: 0,
     lyricLines: null,
     parts: null,           // song-level duet names {a, b} (or null)
-    lastLyricLine: -1,
+    lyricEls: null,        // syllable spans of the current lyric row
+    lyricShown: -1,        // index of the line currently rendered
+    litCount: 0,           // syllables already lit in that line
+    seekDisabled: true,    // mirrors the transport's seek availability
+    cdgErrorShown: false,  // one message per playback, not one per frame
+    cdgSawInk: false,      // the CD+G has actually painted something
+    cdgBlankWarned: false, // said once that the stage stayed blank
+    guard: createPlaybackGuard(), // identifies the current playback attempt
+    objectUrls: new Set(), // media URLs to release when playback stops
     cdgKey: null,
     audioEl: null,
     videoEl: null,
@@ -88,7 +96,26 @@ if (isBrowser) {
     if (tauriCore) return tauriCore.convertFileSrc(path);
     const file = state.files.get(path);
     if (!file) throw new Error(`file not loaded: ${path}`);
-    return URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
+    // Remembered so stopPlayback() can release it; a night's set would
+    // otherwise pin every song's bytes in the webview.
+    state.objectUrls.add(url);
+    return url;
+  }
+
+  /** Release every media URL this session handed out. */
+  function releaseMediaUrls() {
+    for (const url of state.objectUrls) URL.revokeObjectURL(url);
+    state.objectUrls.clear();
+  }
+
+  /** A loadable path for *path*, or null when this build cannot reach it. */
+  function resolveLoadablePath(path) {
+    if (!path) return null;
+    if (tauriCore) return path;
+    if (state.files.has(path)) return path;
+    const base = String(path).split(/[\\/]/).pop().toLowerCase();
+    return state.pathByBase.get(base) || null;
   }
 
   /** Decode text bytes: UTF-8 first, fall back to Windows-1252. */
@@ -104,6 +131,10 @@ if (isBrowser) {
   }
 
   function resolveAudioPath(song) {
+    // The engine pairs audio per folder and hands over its exact path, which is
+    // the only way to tell two packs' identically named files apart.
+    const paired = resolveLoadablePath(song.audio_path);
+    if (paired) return paired;
     if (song.audio_name) {
       const base = state.pathByBase.get(String(song.audio_name).toLowerCase());
       if (base) return base;
@@ -144,6 +175,8 @@ if (isBrowser) {
         if (!bytes?.length) return null;
         return decodeText(bytes);
       }
+      const direct = resolveLoadablePath(companionPath(song, ext));
+      if (direct) return decodeText(await readBytes(direct));
       const base = companionBaseName(song, ext);
       const path = base && state.pathByBase.get(base);
       if (!path) return null;
@@ -168,6 +201,7 @@ if (isBrowser) {
         return false; // engine not ready (or zip not loaded yet)
       }
     }
+    if (resolveLoadablePath(companionPath(song, ELRC_EXT))) return true;
     const base = companionBaseName(song, ELRC_EXT);
     return !!(base && state.pathByBase.has(base));
   }
@@ -241,6 +275,7 @@ if (isBrowser) {
       fileNameType: Number(s.file_name_type ?? 3),
       includePatterns: Array.isArray(s.include_patterns) ? s.include_patterns : [],
       excludePatterns: Array.isArray(s.exclude_patterns) ? s.exclude_patterns : [],
+      lyricSize: s.lyric_size || 'medium',
     };
     $('volume-slider').value = Math.round(state.settings.volume * 100);
     $('volume-value').textContent = `${Math.round(state.settings.volume * 100)}%`;
@@ -252,6 +287,8 @@ if (isBrowser) {
     $('setting-naming').value = String(state.settings.fileNameType);
     $('setting-include-patterns').value = state.settings.includePatterns.join(', ');
     $('setting-exclude-patterns').value = state.settings.excludePatterns.join(', ');
+    $('setting-lyric-size').value = state.settings.lyricSize;
+    applyLyricSize();
     applyZoom();
     renderLibraryFolders();
   }
@@ -952,6 +989,9 @@ if (isBrowser) {
     $('ff-btn').disabled = info.seekDisabled;
     $('next-btn').disabled = state.queue.length === 0;
     $('progress-slider').disabled = info.seekDisabled;
+    state.seekDisabled = info.seekDisabled;
+    // Click-to-seek is offered only when the slider could do the same thing.
+    $('lyrics').dataset.seekable = String(!info.seekDisabled);
   }
 
   function setNowPlaying(song) {
@@ -973,6 +1013,14 @@ if (isBrowser) {
   blitCanvas.height = CDG_HEIGHT;
   const blitCtx = blitCanvas.getContext('2d');
 
+  const LYRIC_SIZES = ['small', 'medium', 'large'];
+
+  /** Apply the persisted lyric text size to the stage. */
+  function applyLyricSize() {
+    const chosen = state.settings.lyricSize;
+    $('lyrics').dataset.size = LYRIC_SIZES.includes(chosen) ? chosen : 'medium';
+  }
+
   function applyZoom() {
     const scale = ZOOM_SCALES[state.settings.zoom] || 1;
     // Intrinsic size only: CSS caps the display width to the column
@@ -983,6 +1031,7 @@ if (isBrowser) {
   }
 
   function drawCdgUpdate(update) {
+    if (!state.cdgSawInk && cdgHasInk(update)) state.cdgSawInk = true;
     if (update?.border) {
       const [r, g, b] = update.border;
       stageCtx.fillStyle = `rgb(${r},${g},${b})`;
@@ -1002,88 +1051,133 @@ if (isBrowser) {
   // ── Lyrics rendering ───────────────────────────────────────────────
   function renderLyricLines() {
     const box = $('lyrics');
+    state.lyricEls = null;
+    state.lyricShown = -1;
+    state.litCount = 0;
+    box.textContent = '';
+    applyLyricSize();
     if (!state.lyricLines?.length) {
-      box.innerHTML = '';
       box.style.display = 'none';
       return;
     }
     box.style.display = '';
-    state.lastLyricLine = -1;
+  }
+
+  /** One lyric row: part chip, then one span per syllable. */
+  function buildLyricRow(line, kind) {
+    const div = document.createElement('div');
+    div.className = `lyric-line ${kind === 'past' ? 'lyric-past' : kind === 'next' ? 'lyric-next' : 'lyric-current'}`;
+    div.dataset.ms = String(line.ms);
+    const cls = partClass(line.part);
+    if (cls) {
+      div.classList.add(cls);
+      div.dataset.part = line.part;
+      // The part chip labels who sings this line (A, B or shared).
+      const chip = document.createElement('span');
+      chip.className = 'lyric-part';
+      chip.textContent = partLabel(state.parts, line.part);
+      div.appendChild(chip);
+    }
+    const spans = [];
+    for (const syl of line.syllables) {
+      const span = document.createElement('span');
+      span.className = 'lyric-syl';
+      span.dataset.ms = String(syl.ms);
+      span.textContent = syl.text.trimEnd() + '\u00A0';
+      div.appendChild(span);
+      spans.push(span);
+    }
+    return { div, spans };
+  }
+
+  /** Keep the sung row inside the fixed-height lyric box, never the page. */
+  function keepLyricInView(box) {
+    if (box.scrollHeight <= box.clientHeight) return;
+    const current = box.querySelector('.lyric-current');
+    if (current) box.scrollTop = Math.max(0, current.offsetTop - box.offsetTop);
   }
 
   function updateLyrics(ms) {
     const lines = state.lyricLines;
     if (!lines?.length) return;
-    const { lineIdx, litCount } = highlightState(lines, ms);
-    if (lineIdx !== state.lastLyricLine) {
-      state.lastLyricLine = lineIdx;
+    const { past, current, next, litCount } = lyricWindow(lines, ms);
+    if (current !== state.lyricShown) {
       const box = $('lyrics');
-      box.innerHTML = '';
-      for (const line of lines.slice(lineIdx, lineIdx + 2)) {
-        const div = document.createElement('div');
-        div.className = 'lyric-line';
-        const cls = partClass(line.part);
-        if (cls) {
-          div.classList.add(cls);
-          div.dataset.part = line.part;
-          // The part chip labels who sings this line (A, B or shared).
-          const chip = document.createElement('span');
-          chip.className = 'lyric-part';
-          chip.textContent = partLabel(state.parts, line.part);
-          div.appendChild(chip);
-        }
-        if (line !== lines[lineIdx]) div.classList.add('lyric-next');
-        line.syllables.forEach((syl) => {
-          const span = document.createElement('span');
-          span.className = 'lyric-syl';
-          span.dataset.ms = String(syl.ms);
-          span.textContent = syl.text.trimEnd() + '\u00A0';
-          div.appendChild(span);
-        });
-        box.appendChild(div);
-      }
+      state.lyricShown = current;
+      state.litCount = 0;
+      box.textContent = '';
+      const rows = [];
+      if (past >= 0) rows.push(buildLyricRow(lines[past], 'past'));
+      if (current >= 0) rows.push(buildLyricRow(lines[current], 'current'));
+      if (next >= 0) rows.push(buildLyricRow(lines[next], 'next'));
+      for (const row of rows) box.appendChild(row.div);
+      state.lyricEls = rows.find((row) => row.div.classList.contains('lyric-current'))?.spans || [];
+      keepLyricInView(box);
     }
-    // Toggle lit state per syllable, order-independent.  Syllables with
-    // ms > current are unlit, so a backward seek clears stale highlights.
-    const els = $('lyrics').querySelectorAll('.lyric-syl');
-    els.forEach((el, i) => el.classList.toggle('lit', i < litCount));
+    // Only the syllables whose state changed are touched, so a long line does
+    // not cost a DOM query per animation frame.
+    const spans = state.lyricEls || [];
+    for (let i = state.litCount; i < litCount; i++) spans[i]?.classList.add('lit');
+    for (let i = litCount; i < state.litCount; i++) spans[i]?.classList.remove('lit');
+    state.litCount = litCount;
   }
 
   // ── Transport ──────────────────────────────────────────────────────
   async function playSong(song) {
+    // Every attempt takes a token.  A superseded attempt must not touch shared
+    // state after an await, or two media elements end up playing at once and
+    // the render loop drives a song the operator has already left.
+    const token = state.guard.begin();
     stopPlayback();
     state.playing = true;
     state.playingFailed = false;
     setNowPlaying(song);
     try {
       if (song.kind === 'cdg') {
-        await playCdg(song);
+        await playCdg(song, token);
       } else if (song.kind === 'kar') {
-        await playKar(song);
+        await playKar(song, token);
       } else if (song.kind === 'lrc') {
-        await playLrc(song);
+        await playLrc(song, token);
       } else {
-        await playMpg(song);
+        await playMpg(song, token);
       }
+      if (!state.guard.isCurrent(token)) return;
       renderTransport();
     } catch (err) {
       console.error(err);
-      // Only tear down if this song is still the current one — a rapid
-      // play-next can supersede it before its (async) setup settles.
-      if (state.current === song) {
-        state.playing = false;
-        state.playingFailed = true;
-        const reason = describePlaybackError(err.message);
-        setStatus(`Playback error — ${reason}`, { kind: 'error' });
-        notify(`Could not play ${songLabel(song)}: ${reason}`, {
-          kind: 'error',
-          timeout: 0,
-          actionLabel: 'Retry',
-          onAction: () => playSong(song),
-        });
-        renderTransport();
-      }
+      if (!state.guard.isCurrent(token)) return;
+      state.playing = false;
+      state.playingFailed = true;
+      const reason = describePlaybackError(err.message);
+      setStatus(`Playback error — ${reason}`, { kind: 'error' });
+      notify(`Could not play ${songLabel(song)}: ${reason}`, {
+        kind: 'error',
+        timeout: 0,
+        actionLabel: 'Retry',
+        onAction: () => playSong(song),
+      });
+      renderTransport();
     }
+  }
+
+  /**
+   * An `ended` handler that fires at most once for the attempt that owns
+   * *token*.  A stale element from a previous song cannot advance the queue.
+   */
+  function endHandler(token) {
+    let fired = false;
+    return () => {
+      if (fired || !state.guard.isCurrent(token)) return;
+      fired = true;
+      onSongEnded();
+    };
+  }
+
+  /** Surface the engine's lyric warnings once, in plain language. */
+  function reportLyricWarnings(warnings) {
+    const text = describeLyricWarnings(warnings || []);
+    if (text) setStatus(`Lyrics — ${text}`, { kind: 'warn' });
   }
 
   /** Drive per-frame work (transport + kind-specific rendering) via rAF. */
@@ -1097,22 +1191,33 @@ if (isBrowser) {
     state.rafId = requestAnimationFrame(tick);
   }
 
-  async function playCdg(song) {
+  async function playCdg(song, token) {
     // Resolve the audio first: a .cdg without a matching audio file cannot
     // play, and opening the decoder before this check would leak it.
     const audioPath = resolveAudioPath(song);
     if (!audioPath) throw new Error('no audio file found for this CDG');
     const cdgBytes = await readSongBytes(song);
-    state.cdgKey = callApi('cdg_open', song.id, cdgBytes);
+    if (!state.guard.isCurrent(token)) return;
+    const key = callApi('cdg_open', song.id, cdgBytes);
+    if (!state.guard.isCurrent(token)) {
+      callApi('cdg_close', key);
+      return;
+    }
+    state.cdgKey = key;
     const audio = new Audio(mediaUrl(audioPath));
     audio.volume = state.settings.volume;
-    audio.addEventListener('ended', onSongEnded);
+    audio.addEventListener('ended', endHandler(token));
     audio.addEventListener('loadedmetadata', () => {
       state.durationMs = audio.duration * 1000;
       $('time-total').textContent = formatTime(state.durationMs);
     });
     state.audioEl = audio;
     await audio.play();
+    if (!state.guard.isCurrent(token)) {
+      // A newer song took over while this one was buffering.
+      audio.pause();
+      return;
+    }
     drawCdgUpdate(callApi('cdg_update', state.cdgKey, 0));
     startCdgLoop();
   }
@@ -1126,26 +1231,56 @@ if (isBrowser) {
         const update = callApi('cdg_update', state.cdgKey, ms);
         if (update) drawCdgUpdate(update);
       } catch (err) {
-        console.warn('cdg update failed', err);
+        // Once per song: a broken stream would otherwise log sixty times a
+        // second and leave the operator guessing why the stage froze.
+        if (!state.cdgErrorShown) {
+          state.cdgErrorShown = true;
+          console.warn('cdg update failed', err);
+          setStatus(
+            'CD+G graphics stopped updating — the .cdg file may be damaged or incomplete',
+            { kind: 'error' },
+          );
+        }
+      }
+      // A stream the decoder tolerates but that never paints (every packet
+      // ignored, or all-black tiles) would otherwise leave a silent blank
+      // stage: say it once, the same way a decode error is said once.
+      if (
+        shouldWarnBlankCdg({
+          elapsedMs: ms,
+          sawInk: state.cdgSawInk,
+          warned: state.cdgBlankWarned,
+        })
+      ) {
+        state.cdgBlankWarned = true;
+        setStatus('CD+G graphics never appeared — the .cdg file may be damaged or empty', {
+          kind: 'warn',
+        });
       }
     };
     startLoop(state.frameFn);
   }
 
-  async function playKar(song) {
+  async function playKar(song, token) {
     const bytes = await readSongBytes(song);
     const parsed = callApi('parse_midi', bytes);
     if (!parsed || parsed.error) throw new Error(parsed?.error || 'could not parse MIDI');
+    if (!state.guard.isCurrent(token)) return;
     state.durationMs = parsed.duration_ms || 0;
     $('time-total').textContent = formatTime(state.durationMs);
     // MIDI/KAR lyrics carry no duet parts, so nothing to label.
     state.parts = null;
     state.lyricLines = buildLyricLines(parsed.lyrics || []);
     renderLyricLines();
-    state.synth = new MidiSynth(parsed);
-    state.synth.onEnded = onSongEnded;
-    state.synth.setVolume(state.settings.volume);
-    state.synth.start();
+    const synth = new MidiSynth(parsed);
+    synth.onEnded = endHandler(token);
+    synth.setVolume(state.settings.volume);
+    await synth.start();
+    if (!state.guard.isCurrent(token)) {
+      synth.stop();
+      return;
+    }
+    state.synth = synth;
     startSynthLoop();
   }
 
@@ -1159,7 +1294,7 @@ if (isBrowser) {
     startLoop(state.frameFn);
   }
 
-  async function playLrc(song) {
+  async function playLrc(song, token) {
     const bytes = await readSongBytes(song);
     // Word-level timing lives in a companion .elrc next to the .lrc.
     const elrcText = await readCompanionText(song, ELRC_EXT);
@@ -1167,19 +1302,25 @@ if (isBrowser) {
     if (!parsed || parsed.error) throw new Error(parsed?.error || 'could not parse LRC lyrics');
     const audioPath = resolveAudioPath(song);
     if (!audioPath) throw new Error('no audio file found for this LRC');
+    if (!state.guard.isCurrent(token)) return;
     // Song-level duet singers ([pa:]/[pb:]) label the per-line part chips.
     state.parts = parsed.parts || null;
     state.lyricLines = buildLyricLines(parsed.lyrics || []);
     renderLyricLines();
+    reportLyricWarnings(parsed.warnings);
     const audio = new Audio(mediaUrl(audioPath));
     audio.volume = state.settings.volume;
-    audio.addEventListener('ended', onSongEnded);
+    audio.addEventListener('ended', endHandler(token));
     audio.addEventListener('loadedmetadata', () => {
       state.durationMs = audio.duration * 1000;
       $('time-total').textContent = formatTime(state.durationMs);
     });
     state.audioEl = audio;
     await audio.play();
+    if (!state.guard.isCurrent(token)) {
+      audio.pause();
+      return;
+    }
     state.frameFn = () => {
       if (!state.audioEl) return;
       const ms = state.audioEl.currentTime * 1000;
@@ -1189,13 +1330,13 @@ if (isBrowser) {
     startLoop(state.frameFn);
   }
 
-  async function playMpg(song) {
+  async function playMpg(song, token) {
     if (song.zip_name) throw new Error('video inside zip is not supported');
     const video = document.createElement('video');
     video.src = mediaUrl(resolveSongPath(song));
     video.volume = state.settings.volume;
     video.style.width = '100%';
-    video.addEventListener('ended', onSongEnded);
+    video.addEventListener('ended', endHandler(token));
     video.addEventListener('loadedmetadata', () => {
       state.durationMs = video.duration * 1000;
       $('time-total').textContent = formatTime(state.durationMs);
@@ -1204,6 +1345,10 @@ if (isBrowser) {
     $('video-slot').innerHTML = '';
     $('video-slot').appendChild(video);
     await video.play();
+    if (!state.guard.isCurrent(token)) {
+      video.pause();
+      return;
+    }
     startVideoLoop();
   }
 
@@ -1250,6 +1395,8 @@ if (isBrowser) {
 
   /** Stop button: unload the song and clear any previous error. */
   function stopNow() {
+    // Abandon any attempt still loading: it must not start after Stop.
+    state.guard.invalidate();
     stopPlayback();
     state.playingFailed = false;
     setNowPlaying(null);
@@ -1259,10 +1406,12 @@ if (isBrowser) {
   function stopPlayback() {
     state.playing = false;
     cancelAnimationFrame(state.rafId);
+    state.rafId = null;
     state.frameFn = null;
     if (state.audioEl) {
       state.audioEl.pause();
-      state.audioEl.src = '';
+      state.audioEl.removeAttribute('src');
+      state.audioEl.load?.();
       state.audioEl = null;
     }
     if (state.synth) {
@@ -1271,7 +1420,7 @@ if (isBrowser) {
     }
     if (state.videoEl) {
       state.videoEl.pause();
-      state.videoEl.src = '';
+      state.videoEl.removeAttribute('src');
       state.videoEl = null;
       $('video-slot').innerHTML = '';
     }
@@ -1279,10 +1428,21 @@ if (isBrowser) {
       callApi('cdg_close', state.cdgKey);
       state.cdgKey = null;
     }
+    // Media elements are unloaded before their object URLs go away, so the
+    // webview does not keep every song's bytes alive for the whole session.
+    releaseMediaUrls();
     state.lyricLines = null;
+    state.lyricEls = null;
+    state.lyricShown = -1;
+    state.litCount = 0;
     state.parts = null;
-    $('lyrics').innerHTML = '';
-    $('lyrics').style.display = 'none';
+    state.cdgErrorShown = false;
+    state.cdgSawInk = false;
+    state.cdgBlankWarned = false;
+    state.songClock = 0;
+    const box = $('lyrics');
+    box.textContent = '';
+    box.style.display = 'none';
     state.durationMs = 0;
     $('time-current').textContent = '0:00';
     $('time-total').textContent = '0:00';
@@ -1383,6 +1543,10 @@ if (isBrowser) {
       // the local settings so the canvas resizes immediately.
       state.settings.zoom = patch.cdg_zoom;
       applyZoom();
+    }
+    if (patch.lyric_size !== undefined) {
+      state.settings.lyricSize = patch.lyric_size;
+      applyLyricSize();
     }
     if (patch.zoom !== undefined) applyZoom();
     if (patch.sort !== undefined) {
@@ -1607,6 +1771,17 @@ if (isBrowser) {
     $('setting-exclude').addEventListener('change', (e) => updateSettings({ exclude_non_matching: e.target.checked }));
     $('setting-derive').addEventListener('change', (e) => updateSettings({ derive_song_info: e.target.checked }));
     $('setting-naming').addEventListener('change', (e) => updateSettings({ file_name_type: Number(e.target.value) }));
+    $('setting-lyric-size').addEventListener('change', (e) => updateSettings({ lyric_size: e.target.value }));
+
+    // Click a lyric line to jump to it; the delegated handler covers the rows
+    // as they are rebuilt, so no listener is attached per song.
+    $('lyrics').addEventListener('click', (e) => {
+      if (state.seekDisabled) return;
+      const row = e.target?.closest?.('.lyric-line');
+      const ms = Number(row?.dataset.ms);
+      if (!Number.isFinite(ms)) return;
+      seekTo(ms);
+    });
     $('setting-include-patterns').addEventListener('change', (e) => updateSettings({ include_patterns: parsePatternList(e.target.value) }));
     $('setting-exclude-patterns').addEventListener('change', (e) => updateSettings({ exclude_patterns: parsePatternList(e.target.value) }));
 
@@ -1812,17 +1987,25 @@ if (isBrowser) {
       this.t0 = 0;
       this.nextIndex = 0;
       this.paused = false;
+      this.ended = false;
       this.timer = null;
       this.onEnded = null;
     }
 
-    start() {
-      // Resuming is best-effort; a rejection here must not surface as an
-      // unhandledrejection (mirrors the close() handling below).
-      this.ctx.resume().catch(() => {});
+    async start() {
+      // The clock starts only once the context is actually running; starting
+      // before resume() settles would place t0 ahead of the first sample.
+      // A rejection must not surface as an unhandledrejection (mirrors the
+      // close() handling below).
+      try {
+        await this.ctx.resume();
+      } catch {
+        // Some browsers refuse resume() until a gesture; the clock still works.
+      }
       this.t0 = this.ctx.currentTime;
       this.nextIndex = 0;
       this.paused = false;
+      this.ended = false;
       this._schedule();
     }
 
@@ -1840,6 +2023,8 @@ if (isBrowser) {
     }
 
     stop() {
+      // `ended` is set first so a queued timer cannot fire onEnded after Stop.
+      this.ended = true;
       this.paused = true;
       clearTimeout(this.timer);
       this.timer = null;
@@ -1851,6 +2036,7 @@ if (isBrowser) {
       this.nextIndex = this.timeline.findIndex((n) => n.startMs >= ms);
       if (this.nextIndex < 0) this.nextIndex = this.timeline.length;
       this.t0 = this.ctx.currentTime - ms / 1000;
+      this.ended = false;
       if (!this.paused) this._schedule();
     }
 
@@ -1862,9 +2048,16 @@ if (isBrowser) {
       this.master.gain.value = v;
     }
 
+    /** End of the last note, used when the file declares no duration. */
+    _timelineEnd() {
+      const last = this.timeline[this.timeline.length - 1];
+      return last ? last.endMs : 0;
+    }
+
     _schedule() {
       clearTimeout(this.timer);
       this.timer = null;
+      if (this.paused || this.ended) return;
       const lookaheadMs = 200;
       const now = this.currentMs();
       while (
@@ -1874,13 +2067,15 @@ if (isBrowser) {
         this._play(this.timeline[this.nextIndex], now);
         this.nextIndex++;
       }
-      if (this.nextIndex < this.timeline.length) {
-        this.timer = setTimeout(() => this._schedule(), 40);
-      } else if (now >= this.durationMs && this.durationMs > 0) {
+      const endMs = this.durationMs > 0 ? this.durationMs : this._timelineEnd();
+      if (this.nextIndex >= this.timeline.length && endMs > 0 && now >= endMs) {
+        // Fires once: `ended` stops the reschedule below, so a song with no
+        // declared duration cannot spin a timer for the rest of the night.
+        this.ended = true;
         if (this.onEnded) this.onEnded();
-      } else {
-        this.timer = setTimeout(() => this._schedule(), 40);
+        return;
       }
+      this.timer = setTimeout(() => this._schedule(), 40);
     }
 
     _play(note, now) {

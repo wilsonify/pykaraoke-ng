@@ -106,6 +106,33 @@ playback clocks. Two `localStorage` keys persist across restarts:
 `restoreState()` and `persist()` are the only writers; the queue is stored by
 id so a re-scan does not duplicate entries.
 
+## Playback lifecycle
+
+One song at a time, with an explicit contract that the tests pin down:
+
+1. **One attempt, one token.** `playSong()` takes a token from
+   `createPlaybackGuard()` before it touches anything. Every step that follows
+   an `await` (reading bytes, opening the CD+G decoder, `audio.play()`) checks
+   `isCurrent(token)` first. A song superseded while it was still loading
+   therefore cannot start a second media element, start a render loop, or
+   replace the newer song's state; it pauses what it created and returns.
+2. **`ended` fires once per attempt.** Media handlers are built by
+   `endHandler(token)`, which ignores a second event and any event from a
+   superseded attempt, so the queue advances exactly once per song.
+3. **`stopPlayback()` is the single teardown.** It stops the animation frame,
+   unloads (and `load()`s) the audio/video element, closes the MIDI synth and
+   the CD+G decoder, revokes the object URLs it handed out, and clears the
+   lyric rows and clocks (including the transport position, so Rewind cannot
+   seek the next song to the previous one's time). Stop also invalidates the
+   attempt token, so a load still in flight never starts after Stop.
+4. **Lyrics are a three-line window.** `lyricWindow(lines, ms)` returns the
+   past/current/next line indices and the lit syllable count. Rows are rebuilt
+   only when the current line changes; each frame then toggles `lit` on the
+   syllables that changed, instead of re-querying the DOM.
+5. **Failures are said once.** A CD+G stream that stops decoding produces one
+   status message per song, not one per frame; playback errors map through
+   `describePlaybackError()` to the fix the operator should apply.
+
 ## The tested surface
 
 Everything the module `export`s is pure and unit-tested; the browser wiring
@@ -116,10 +143,12 @@ below it only runs when a document exists.
 | `formatTime`, `debounce` | Time formatting; input debouncing (150 ms) |
 | `escapeHtml`, `songLabel` | Safe rendering and "Title — Artist" labels |
 | `CDG_WIDTH`, `CDG_HEIGHT`, `ZOOM_SCALES`, `KIND_BADGE`, `ELRC_EXT` | Constants |
-| `companionBaseName`, `companionMember` | Locating companion audio / `.elrc` files |
+| `companionBaseName`, `companionMember`, `companionPath` | Locating companion audio / `.elrc` files |
+| `createPlaybackGuard` | `begin()` / `isCurrent()` / `invalidate()` for one playback attempt |
 | `SongQueue` | Ordered queue: `push`, `removeAt`, `move`, `clear`, `next` |
 | `PART_IDS`, `partClass`, `partLabel` | Duet part styling and singer chips |
-| `buildLyricLines`, `highlightState`, `findSyllableAt` | Lyric grouping and highlighting |
+| `buildLyricLines`, `highlightState`, `lyricWindow`, `findSyllableAt` | Lyric grouping, the three-line window, and highlighting |
+| `describeLyricWarnings` | Plain-language summary of skipped lyric lines / unmatched word timings |
 | `noteToFrequency`, `voiceFor`, `computeNoteTimeline` | MIDI note → Web Audio scheduling |
 | `writeTileRgba` | Painting a decoded CD+G tile into a canvas `ImageData` |
 

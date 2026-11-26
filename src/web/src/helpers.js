@@ -577,6 +577,118 @@ export const SHORTCUTS = [
   { keys: 'Esc', description: 'Clear the search box, or leave the queue' },
 ];
 
+/**
+ * A generation counter for one playback attempt.
+ *
+ * Every attempt takes a token with `begin()`.  Anything that happens after
+ * an `await` (assigning an audio element, starting a render loop, advancing
+ * the queue) must ask `isCurrent(token)` first, because a newer attempt may
+ * have superseded this one while its file was still loading.
+ */
+export function createPlaybackGuard() {
+  let current = 0;
+  return {
+    begin() {
+      current += 1;
+      return current;
+    },
+    isCurrent(token) {
+      return token === current;
+    },
+    /** Abandon the running attempt (used by Stop, which has no successor). */
+    invalidate() {
+      current += 1;
+    },
+  };
+}
+
+/**
+ * Path of *song*'s companion file with *ext* (`Song.lrc` -> `Song.elrc`).
+ *
+ * Derived from the song's own path so the lookup cannot cross into another
+ * folder that happens to hold a file with the same base name; null when the
+ * song has no path.
+ */
+export function companionPath(song, ext) {
+  const path = String(song?.path || '');
+  if (!path) return null;
+  const stem = path.replace(/\.[^./\\]+$/, '');
+  if (stem === path) return null;
+  return `${stem}${ext}`;
+}
+
+/**
+ * Which lyric rows to show at *ms*: the line just sung, the line being sung
+ * and the line coming up (-1 when there is no such line), plus how many of
+ * the current line's syllables are lit.
+ */
+export function lyricWindow(lines, ms) {
+  if (!lines?.length) return { past: -1, current: -1, next: -1, litCount: 0 };
+  const { lineIdx, litCount } = highlightState(lines, ms);
+  return {
+    past: lineIdx > 0 ? lineIdx - 1 : -1,
+    current: lineIdx,
+    next: lineIdx + 1 < lines.length ? lineIdx + 1 : -1,
+    litCount,
+  };
+}
+
+/**
+ * Plain-language summary of the engine's lyric warnings, or '' when clean.
+ *
+ * A skipped line and an unmatched word timing are different repairs, so they
+ * are counted and named separately instead of being summed into one number.
+ */
+export function describeLyricWarnings(warnings = []) {
+  let skipped = 0;
+  let unmatched = 0;
+  for (const warning of warnings || []) {
+    if (warning?.kind === 'skipped-line') skipped += 1;
+    else if (warning?.kind === 'unmatched-elrc') unmatched += Number(warning.count) || 0;
+  }
+  const parts = [];
+  if (skipped) {
+    parts.push(`${skipped} lyric line${skipped === 1 ? '' : 's'} could not be read`);
+  }
+  if (unmatched) {
+    parts.push(`${unmatched} word timing${unmatched === 1 ? '' : 's'} did not match the lyrics`);
+  }
+  return parts.join('; ');
+}
+
+/**
+ * Whether a CD+G update paints anything at all: a coloured border or any
+ * non-black pixel in the changed tiles.  A damaged or empty `.cdg` decodes to
+ * black frames, which used to leave a frozen stage with no explanation.
+ */
+export function cdgHasInk(update) {
+  if (!update) return false;
+  const border = update.border;
+  if (Array.isArray(border) && border.some((c) => Number(c) > 0)) return true;
+  for (const tile of update.tiles || []) {
+    const data = tile?.data;
+    if (!data) continue;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i]) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a CD+G that has drawn nothing for a while deserves one warning.
+ * Karaoke CD+G files paint within the first second or two; a stream that is
+ * still blank after *thresholdMs* is damaged or has no graphics at all.
+ */
+export function shouldWarnBlankCdg({
+  elapsedMs = 0,
+  sawInk = false,
+  warned = false,
+  thresholdMs = 5000,
+} = {}) {
+  return !warned && !sawInk && elapsedMs >= thresholdMs;
+}
+
 export function writeTileRgba(tileData, rgba, width, x, y) {
   const TILE = 48;
   for (let row = 0; row < TILE; row++) {
